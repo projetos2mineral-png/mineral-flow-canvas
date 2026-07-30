@@ -290,8 +290,8 @@ function DashboardPage() {
           onValueChange={setActiveAssignee}
           className="flex-1 flex flex-col min-h-0"
         >
-          <div className="px-6 pt-3 border-b border-border bg-card/30">
-            <TabsList className="flex flex-wrap h-auto gap-1 bg-transparent p-0">
+          <div className="px-6 py-2 border-b border-border bg-card/30">
+            <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {assignees.map((a) => {
                 const count = new Set(
                   projects
@@ -302,10 +302,11 @@ function DashboardPage() {
                   <TabsTrigger
                     key={a}
                     value={a}
-                    className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    title={a}
+                    className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-border px-2.5 py-0 text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                   >
-                    {a}
-                    <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                    <span className="min-w-0 flex-1 truncate text-left">{a}</span>
+                    <Badge variant="secondary" className="h-5 shrink-0 px-1.5">
                       {count}
                     </Badge>
                   </TabsTrigger>
@@ -313,6 +314,7 @@ function DashboardPage() {
               })}
             </TabsList>
           </div>
+
 
           {assignees.map((a) => (
             <TabsContent
