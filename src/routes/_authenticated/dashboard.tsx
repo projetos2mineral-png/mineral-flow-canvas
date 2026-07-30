@@ -290,30 +290,38 @@ function DashboardPage() {
           onValueChange={setActiveAssignee}
           className="flex-1 flex flex-col min-h-0"
         >
-          <div className="px-6 py-2 border-b border-border bg-card/30">
-            <TabsList className="grid h-auto w-full grid-cols-1 gap-2 bg-transparent p-0 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {assignees.map((a) => {
-                const count = new Set(
-                  projects
-                    .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
-                    .map((p) => p.runrunit_project_id)
-                ).size;
-                return (
-                  <TabsTrigger
-                    key={a}
-                    value={a}
-                    title={a}
-                    className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-border px-2.5 py-0 text-sm data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-left">{a}</span>
-                    <Badge variant="secondary" className="h-5 shrink-0 px-1.5">
-                      {count}
-                    </Badge>
-                  </TabsTrigger>
-                );
-              })}
-            </TabsList>
+          <div className="relative border-b border-border bg-card/30">
+            <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-card to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-card to-transparent" />
+            <div className="overflow-x-auto overflow-y-hidden px-6 py-2 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="flex h-auto w-max items-center gap-2 bg-transparent p-0">
+                {assignees.map((a) => {
+                  const count = new Set(
+                    projects
+                      .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
+                      .map((p) => p.runrunit_project_id)
+                  ).size;
+                  return (
+                    <TabsTrigger
+                      key={a}
+                      value={a}
+                      title={a}
+                      className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-border px-3 py-0 text-[13px] data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+                    >
+                      <span className="max-w-[160px] truncate">{a}</span>
+                      <Badge
+                        variant="secondary"
+                        className="h-4 shrink-0 px-1.5 text-[11px] font-medium"
+                      >
+                        {count}
+                      </Badge>
+                    </TabsTrigger>
+                  );
+                })}
+              </TabsList>
+            </div>
           </div>
+
 
 
           {assignees.map((a) => (
