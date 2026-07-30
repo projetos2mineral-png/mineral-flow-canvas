@@ -265,7 +265,6 @@ function DashboardPage() {
           </div>
         </div>
       )}
-      </div>
 
       {error && (
         <div className="p-6 text-sm text-destructive">
