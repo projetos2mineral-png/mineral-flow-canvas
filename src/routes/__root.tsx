@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import logoAsset from "@/assets/logo.png.asset.json";
+
 import { Toaster } from "@/components/ui/sonner";
 import { LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
