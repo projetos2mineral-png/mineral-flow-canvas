@@ -1480,7 +1480,7 @@ function ReviewItemView({
           Revisão recebida
         </span>
       </div>
-      <div className="font-semibold text-sm leading-snug line-clamp-2 text-foreground">
+      <div className="font-semibold text-sm leading-snug line-clamp-3 text-foreground">
         {projectName}
       </div>
       <div className="mt-2 space-y-1 text-xs text-foreground/80">
