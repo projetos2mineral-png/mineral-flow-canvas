@@ -70,6 +70,8 @@ import {
 } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AssigneeFilterBar } from "@/components/dashboard/AssigneeFilterBar";
+import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
+
 
 import { useCurrentDashboardUser } from "@/lib/auth";
 import { ensureDefaultMonthlyLanes, dedupeMonthlyLanes, isMonthlyLaneTitle } from "@/lib/dashboard";
@@ -836,9 +838,15 @@ function AssigneeBoard({
     }
   };
 
+  const { density, setDensity, vars: densityVars } = useKanbanDensity();
+
+
   return (
     <>
-      <div className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}>
+      <div
+        className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}
+        style={densityVars}
+      >
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -851,11 +859,15 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
+        {/* Controle de densidade — afeta somente o Kanban */}
+        <div className="flex justify-end px-4 pt-2">
+          <DensityControl value={density} onChange={setDensity} />
+        </div>
         {/* Top proxy scrollbar synced with the main Kanban scroll */}
         <div
           ref={topScrollRef}
           onScroll={onTopScroll}
-          className="overflow-x-auto overflow-y-hidden px-6 pt-2"
+          className="overflow-x-auto overflow-y-hidden px-4 pt-2"
           aria-hidden="true"
         >
           <div style={{ width: contentWidth, height: 1 }} />
@@ -865,7 +877,12 @@ function AssigneeBoard({
           onScroll={onMainScroll}
           className={`flex-1 min-h-0 overflow-x-auto ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
         >
-          <div ref={innerRef} className="flex gap-4 p-6 h-full min-w-max">
+          <div
+            ref={innerRef}
+            className="flex h-full min-w-max"
+            style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
+          >
+
             <LaneColumn
               key="__unassigned__"
               laneId="__unassigned__"
@@ -920,7 +937,9 @@ function AssigneeBoard({
             {!readOnly && (
               <button
                 onClick={handleAddLane}
-                className="shrink-0 w-72 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+                style={{ width: "var(--kb-col)" }}
+                className="shrink-0 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+
               >
                 <Plus className="h-4 w-4" /> Adicionar fila
               </button>
@@ -1014,13 +1033,17 @@ function LaneColumn({
   return (
     <div
       ref={laneSetNodeRef}
-      style={laneStyle}
+      style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "shrink-0 w-80 flex flex-col rounded-lg bg-muted/40 border border-border max-h-full",
+        "shrink-0 flex flex-col rounded-lg bg-muted/40 border border-border max-h-full",
         isLaneDragging && "opacity-50"
       )}
     >
-      <div className="px-3 py-2.5 flex items-center gap-2 border-b border-border bg-card rounded-t-lg">
+      <div
+        style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
+        className="px-2.5 flex items-center gap-1.5 border-b border-border bg-card rounded-t-lg"
+      >
+
         {dragHandleProps && !editing && (
           <button
             type="button"
@@ -1192,11 +1215,13 @@ function DroppableLaneBody({
   return (
     <div
       ref={setNodeRef}
+      style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
       className={cn(
-        "flex-1 overflow-y-auto p-2 space-y-2 min-h-[100px] transition-colors",
+        "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
         isOver && "bg-primary/5"
       )}
     >
+
       {reviews.map((r) => (
         <ReviewItemView
           key={`rev:${r.id}`}
@@ -1263,8 +1288,9 @@ function ProjectCardView({
   const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
   return (
     <div
+      style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-lg border p-3 shadow-sm transition-shadow text-foreground",
+        "rounded-lg border shadow-sm transition-shadow text-foreground",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-lg" : "hover:shadow"
       )}
@@ -1272,7 +1298,8 @@ function ProjectCardView({
       <div className="flex items-start gap-2">
         <GripVertical className="h-4 w-4 mt-0.5 text-muted-foreground/60 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm leading-snug line-clamp-2">{p.project_name}</div>
+          <div className="font-semibold text-sm leading-snug line-clamp-3">{p.project_name}</div>
+
           <div className="mt-2 space-y-1 text-xs">
             <Row icon={<Building2 className="h-3.5 w-3.5" />}>{p.client_name ?? "Sem cliente"}</Row>
             <Row icon={<FolderTree className="h-3.5 w-3.5" />}>{p.project_group_name ?? "Sem grupo"}</Row>
@@ -1453,7 +1480,7 @@ function ReviewItemView({
           Revisão recebida
         </span>
       </div>
-      <div className="font-semibold text-sm leading-snug line-clamp-2 text-foreground">
+      <div className="font-semibold text-sm leading-snug line-clamp-3 text-foreground">
         {projectName}
       </div>
       <div className="mt-2 space-y-1 text-xs text-foreground/80">
