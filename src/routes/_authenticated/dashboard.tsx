@@ -70,6 +70,8 @@ import {
 } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AssigneeFilterBar } from "@/components/dashboard/AssigneeFilterBar";
+import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
+
 
 import { useCurrentDashboardUser } from "@/lib/auth";
 import { ensureDefaultMonthlyLanes, dedupeMonthlyLanes, isMonthlyLaneTitle } from "@/lib/dashboard";
