@@ -836,6 +836,9 @@ function AssigneeBoard({
     }
   };
 
+  const { density, setDensity, vars: densityVars } = useKanbanDensity();
+
+
   return (
     <>
       <div
