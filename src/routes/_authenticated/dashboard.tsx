@@ -69,6 +69,8 @@ import {
   type ReviewRow,
 } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { AssigneeFilterBar } from "@/components/dashboard/AssigneeFilterBar";
+
 import { useCurrentDashboardUser } from "@/lib/auth";
 import { ensureDefaultMonthlyLanes, dedupeMonthlyLanes, isMonthlyLaneTitle } from "@/lib/dashboard";
 import { Eye } from "lucide-react";
