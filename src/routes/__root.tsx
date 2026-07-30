@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import logoAsset from "@/assets/logo.png.asset.json";
+
 import { Toaster } from "@/components/ui/sonner";
 import { LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -244,15 +244,6 @@ function AppShell() {
     <div className="min-h-screen flex flex-col bg-background">
       <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
         <div className="flex items-center gap-6 px-6 h-14">
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <img
-              src={logoAsset.url}
-              alt="Mineral Geologia"
-              width={40}
-              height={40}
-              className="h-10 w-auto object-contain"
-            />
-          </Link>
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
               const active =
