@@ -1215,11 +1215,13 @@ function DroppableLaneBody({
   return (
     <div
       ref={setNodeRef}
+      style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
       className={cn(
-        "flex-1 overflow-y-auto p-2 space-y-2 min-h-[100px] transition-colors",
+        "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
         isOver && "bg-primary/5"
       )}
     >
+
       {reviews.map((r) => (
         <ReviewItemView
           key={`rev:${r.id}`}
