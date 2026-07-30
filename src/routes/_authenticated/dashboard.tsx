@@ -838,7 +838,10 @@ function AssigneeBoard({
 
   return (
     <>
-      <div className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}>
+      <div
+        className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}
+        style={densityVars}
+      >
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -851,11 +854,15 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
+        {/* Controle de densidade — afeta somente o Kanban */}
+        <div className="flex justify-end px-4 pt-2">
+          <DensityControl value={density} onChange={setDensity} />
+        </div>
         {/* Top proxy scrollbar synced with the main Kanban scroll */}
         <div
           ref={topScrollRef}
           onScroll={onTopScroll}
-          className="overflow-x-auto overflow-y-hidden px-6 pt-2"
+          className="overflow-x-auto overflow-y-hidden px-4 pt-2"
           aria-hidden="true"
         >
           <div style={{ width: contentWidth, height: 1 }} />
@@ -865,7 +872,12 @@ function AssigneeBoard({
           onScroll={onMainScroll}
           className={`flex-1 min-h-0 overflow-x-auto ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
         >
-          <div ref={innerRef} className="flex gap-4 p-6 h-full min-w-max">
+          <div
+            ref={innerRef}
+            className="flex h-full min-w-max"
+            style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
+          >
+
             <LaneColumn
               key="__unassigned__"
               laneId="__unassigned__"
