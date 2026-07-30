@@ -251,10 +251,6 @@ function AppShell() {
               height={40}
               className="h-10 w-auto object-contain"
             />
-            <div className="leading-tight">
-              <div className="text-sm font-semibold">DB Projetos</div>
-              <div className="text-[11px] text-muted-foreground">Mineral Geologia</div>
-            </div>
           </Link>
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
