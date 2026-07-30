@@ -1,0 +1,7 @@
+project_id = "vfndvrpetfusbiehaies"
+
+[auth]
+enable_signup = true
+
+[auth.email]
+enable_confirmations = false

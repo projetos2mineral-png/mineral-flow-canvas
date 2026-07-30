@@ -1,0 +1,748 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download } from "lucide-react";
+import { toast } from "sonner";
+import {
+  fetchAllRunrunitProjects,
+  setProjectTracking,
+  setProjectsTrackingBulk,
+  ignoreNewCandidate,
+  invokeSyncSingleProject,
+  invokeDiscoverProjects,
+  invokeSyncVisibleProjects,
+  allocateProjectToMonthlyLanes,
+  reallocateAllTrackedProjects,
+  type RunrunitProject,
+} from "@/lib/projects";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { RequireLevel } from "@/components/RequireLevel";
+
+export const Route = createFileRoute("/_authenticated/selecionar-projetos")({
+  head: () => ({
+    meta: [
+      { title: "Selecionar Projetos · Runrun.it" },
+      {
+        name: "description",
+        content: "Escolha quais projetos importados do Runrun.it aparecem no dashboard interno.",
+      },
+    ],
+  }),
+  component: () => (
+    <RequireLevel allow={["administrador"]}>
+      <SelecionarProjetosPage />
+    </RequireLevel>
+  ),
+});
+
+const ALL = "__all__";
+
+type Situation = "all" | "tracked" | "untracked" | "new";
+
+const SITUATION_LABEL: Record<Situation, string> = {
+  all: "Todos disponíveis",
+  tracked: "Apenas exibidos no dashboard",
+  untracked: "Apenas não exibidos",
+  new: "Novos projetos encontrados",
+};
+
+function SelecionarProjetosPage() {
+  const qc = useQueryClient();
+  const [sortAsc, setSortAsc] = useState(true);
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"],
+    queryFn: () => fetchAllRunrunitProjects({ ascending: sortAsc }),
+    staleTime: 60_000,
+  });
+
+  const [search, setSearch] = useState("");
+  const [client, setClient] = useState<string>(ALL);
+  const [group, setGroup] = useState<string>(ALL);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [situation, setSituation] = useState<Situation>("all");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
+  const [newOpen, setNewOpen] = useState(false);
+  const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
+  const [importId, setImportId] = useState("");
+  const [importLoading, setImportLoading] = useState(false);
+
+  const handleImportSingle = async () => {
+    const idNum = Number(importId.trim());
+    if (!Number.isFinite(idNum) || idNum <= 0) {
+      toast.error("Informe um ID numérico válido do projeto no Runrun.it");
+      return;
+    }
+    setImportLoading(true);
+    try {
+      await invokeSyncSingleProject(idNum);
+      toast.success(`Projeto ${idNum} sincronizado`);
+      setImportId("");
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    } catch (e) {
+      console.error("handleImportSingle error:", e);
+      toast.error("Falha ao importar projeto: " + (e as Error).message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  // Regra base da tela: somente projetos abertos no Runrun.it e com data
+  // desejada preenchida. A consulta já filtra no Supabase; mantemos a
+  // defesa em JS por segurança.
+  const rows = (data ?? []).filter(
+    (r) => r.is_open === true && !!r.desired_delivery_date
+  );
+
+  const uniqueSorted = (key: keyof RunrunitProject) =>
+    Array.from(
+      new Set(rows.map((r) => (r[key] as string | null) ?? "").filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const clients = useMemo(() => uniqueSorted("client_name"), [rows]);
+  const groups = useMemo(() => uniqueSorted("project_group_name"), [rows]);
+
+  const newCandidates = useMemo(
+    () => rows.filter((r) => r.is_new_candidate === true && !r.is_tracking_enabled),
+    [rows]
+  );
+
+  const newCandidatesFiltered = useMemo(() => {
+    const base = newCandidates;
+    let cutoff: number | null = null;
+    if (newPeriod === "7") cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    else if (newPeriod === "30") cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const filteredList = base.filter((r) => {
+      if (cutoff === null) return true;
+      const t = r.created_at_runrunit ? new Date(r.created_at_runrunit).getTime() : 0;
+      return t >= cutoff;
+    });
+    return filteredList.sort((a, b) => {
+      const ta = a.created_at_runrunit ? new Date(a.created_at_runrunit).getTime() : 0;
+      const tb = b.created_at_runrunit ? new Date(b.created_at_runrunit).getTime() : 0;
+      return tb - ta;
+    });
+  }, [newCandidates, newPeriod]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const fromTs = dateFrom ? new Date(dateFrom).getTime() : null;
+    const toTs = dateTo ? new Date(dateTo + "T23:59:59").getTime() : null;
+    return rows.filter((r) => {
+      if (situation === "tracked" && !r.is_tracking_enabled) return false;
+      if (situation === "untracked" && r.is_tracking_enabled) return false;
+      if (situation === "new") {
+        if (r.is_tracking_enabled) return false;
+        if (!r.is_new_candidate) return false;
+      }
+      if (client !== ALL && r.client_name !== client) return false;
+      if (group !== ALL && r.project_group_name !== group) return false;
+      if (q && !r.name.toLowerCase().includes(q)) return false;
+      if (fromTs || toTs) {
+        const t = r.created_at_runrunit ? new Date(r.created_at_runrunit).getTime() : null;
+        if (!t) return false;
+        if (fromTs && t < fromTs) return false;
+        if (toTs && t > toTs) return false;
+      }
+      return true;
+    });
+  }, [rows, search, client, group, dateFrom, dateTo, situation]);
+
+  const trackedCount = useMemo(
+    () => rows.filter((r) => r.is_tracking_enabled).length,
+    [rows]
+  );
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((p) => selected.has(p.runrunit_project_id));
+
+  const toggleSelectAllVisible = (checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const p of filtered) {
+        if (checked) next.add(p.runrunit_project_id);
+        else next.delete(p.runrunit_project_id);
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (id: number, checked: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const markBusy = (id: number, busy: boolean) =>
+    setBusyIds((prev) => {
+      const next = new Set(prev);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+
+  const toggle = async (project: RunrunitProject, next: boolean) => {
+    qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+      (prev ?? []).map((p) =>
+        p.runrunit_project_id === project.runrunit_project_id
+          ? { ...p, is_tracking_enabled: next, is_new_candidate: next ? false : p.is_new_candidate }
+          : p
+      )
+    );
+    markBusy(project.runrunit_project_id, true);
+    try {
+      await setProjectTracking(project.runrunit_project_id, next);
+      if (next) {
+        try {
+          await invokeSyncSingleProject(project.runrunit_project_id);
+          await allocateProjectToMonthlyLanes(project.runrunit_project_id);
+        } catch (e) {
+          console.error("invokeSyncSingleProject (toggle) error:", e);
+          toast.error("Sincronização do projeto falhou: " + (e as Error).message);
+        }
+        toast.success("Projeto exibido no dashboard");
+      } else {
+        toast.success("Projeto removido do dashboard");
+      }
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+    } catch (e) {
+      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+        (prev ?? []).map((p) =>
+          p.runrunit_project_id === project.runrunit_project_id
+            ? { ...p, is_tracking_enabled: !next }
+            : p
+        )
+      );
+      toast.error("Falha ao atualizar: " + (e as Error).message);
+    } finally {
+      markBusy(project.runrunit_project_id, false);
+    }
+  };
+
+  const bulkSet = async (value: boolean) => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    try {
+      await setProjectsTrackingBulk(ids, value);
+      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+        (prev ?? []).map((p) =>
+          ids.includes(p.runrunit_project_id)
+            ? { ...p, is_tracking_enabled: value, is_new_candidate: value ? false : p.is_new_candidate }
+            : p
+        )
+      );
+      if (value) {
+        // Trigger per-project sync for each one enabled
+        for (const id of ids) {
+          try {
+            await invokeSyncSingleProject(id);
+            await allocateProjectToMonthlyLanes(id);
+          } catch (e) {
+            console.error(`invokeSyncSingleProject (bulk ${id}) error:`, e);
+            toast.error(`Sincronização do projeto ${id} falhou: ` + (e as Error).message);
+          }
+        }
+      }
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      toast.success(
+        value
+          ? `${ids.length} projeto(s) exibido(s) no dashboard`
+          : `${ids.length} projeto(s) removido(s) do dashboard`
+      );
+      setSelected(new Set());
+    } catch (e) {
+      toast.error("Falha na ação em massa: " + (e as Error).message);
+    }
+  };
+
+  const handleEnableFromCandidate = async (project: RunrunitProject) => {
+    markBusy(project.runrunit_project_id, true);
+    try {
+      await setProjectTracking(project.runrunit_project_id, true);
+      try {
+        await invokeSyncSingleProject(project.runrunit_project_id);
+        await allocateProjectToMonthlyLanes(project.runrunit_project_id);
+      } catch (e) {
+        console.error("invokeSyncSingleProject (candidate) error:", e);
+        toast.error("Sincronização do projeto falhou: " + (e as Error).message);
+      }
+      toast.success("Projeto exibido no dashboard");
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+    } catch (e) {
+      toast.error("Falha ao exibir projeto: " + (e as Error).message);
+    } finally {
+      markBusy(project.runrunit_project_id, false);
+    }
+  };
+
+  const handleIgnoreCandidate = async (project: RunrunitProject) => {
+    markBusy(project.runrunit_project_id, true);
+    try {
+      await ignoreNewCandidate(project.runrunit_project_id);
+      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+        (prev ?? []).map((p) =>
+          p.runrunit_project_id === project.runrunit_project_id
+            ? { ...p, is_new_candidate: false, is_tracking_enabled: false }
+            : p
+        )
+      );
+      toast.success("Projeto ignorado");
+    } catch (e) {
+      toast.error("Falha ao ignorar: " + (e as Error).message);
+    } finally {
+      markBusy(project.runrunit_project_id, false);
+    }
+  };
+
+  const handleDiscover = async () => {
+    setDiscoverLoading(true);
+    try {
+      await invokeDiscoverProjects();
+      toast.success("Verificação de novos projetos concluída");
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+    } catch (e) {
+      console.error("handleDiscover error:", e);
+      toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
+    } finally {
+      setDiscoverLoading(false);
+    }
+  };
+
+  const handleSyncTracked = async () => {
+    if (tasksLoading) return;
+    setTasksLoading(true);
+    try {
+      await invokeSyncVisibleProjects(100);
+      try {
+        await reallocateAllTrackedProjects();
+      } catch (e) {
+        console.error("reallocateAllTrackedProjects error:", e);
+      }
+      toast.success("Projetos exibidos atualizados com sucesso.");
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["planning"] });
+    } catch (e) {
+      console.error("handleSyncTracked error:", e);
+      toast.error("Falha ao atualizar projetos: " + (e as Error).message);
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
+  const limparFiltros = () => {
+    setClient(ALL);
+    setGroup(ALL);
+    setSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setSituation("all");
+  };
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-end justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Selecionar Projetos</h1>
+          <p className="text-sm text-muted-foreground">
+            {rows.length} projeto(s) disponíveis · {trackedCount} exibidos no dashboard
+            {newCandidates.length > 0 && ` · ${newCandidates.length} novo(s) encontrado(s)`}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleDiscover}
+            disabled={discoverLoading}
+          >
+            {discoverLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            Verificar novos projetos
+          </Button>
+          <Button onClick={handleSyncTracked} disabled={tasksLoading}>
+            {tasksLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Atualizar projetos exibidos
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] text-muted-foreground">
+              Importar ou atualizar projeto específico (ID do Runrun.it)
+            </label>
+            <Input
+              value={importId}
+              onChange={(e) => setImportId(e.target.value.replace(/\D/g, ""))}
+              placeholder="Ex.: 123456"
+              className="h-9 w-[220px]"
+              inputMode="numeric"
+            />
+          </div>
+          <Button
+            onClick={handleImportSingle}
+            disabled={importLoading || !importId}
+            size="icon"
+            variant="outline"
+            title="Importar/atualizar projeto"
+            aria-label="Importar/atualizar projeto"
+          >
+            {importLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {newCandidates.length > 0 && (
+        <div className="rounded-lg border border-border bg-card">
+          <button
+            type="button"
+            onClick={() => setNewOpen((v) => !v)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-accent/40 transition-colors rounded-lg"
+          >
+            {newOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">Novos projetos encontrados</span>
+            <Badge variant="secondary" className="ml-1">{newCandidates.length}</Badge>
+          </button>
+          {newOpen && (
+            <div className="border-t border-border p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-[11px] text-muted-foreground">Período:</label>
+                <Select value={newPeriod} onValueChange={(v) => setNewPeriod(v as "7" | "30" | "all")}>
+                  <SelectTrigger className="w-[180px] h-8">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">Últimos 7 dias</SelectItem>
+                    <SelectItem value="30">Últimos 30 dias</SelectItem>
+                    <SelectItem value="all">Todos os novos</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">
+                  {newCandidatesFiltered.length} exibido(s)
+                </span>
+              </div>
+              {newCandidatesFiltered.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Nenhum projeto novo no período selecionado.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border rounded-md border border-border bg-background">
+                  {newCandidatesFiltered.map((p) => (
+                    <li
+                      key={p.runrunit_project_id}
+                      className="flex items-center gap-3 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{p.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {(p.client_name ?? "—")} · {(p.project_group_name ?? "—")} ·{" "}
+                          {p.created_at_runrunit
+                            ? new Date(p.created_at_runrunit).toLocaleDateString("pt-BR")
+                            : "—"}
+                        </div>
+                      </div>
+                      <div className="inline-flex gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          disabled={busyIds.has(p.runrunit_project_id)}
+                          onClick={() => handleEnableFromCandidate(p)}
+                        >
+                          {busyIds.has(p.runrunit_project_id) && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          Exibir no Dashboard
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busyIds.has(p.runrunit_project_id)}
+                          onClick={() => handleIgnoreCandidate(p)}
+                        >
+                          Ignorar
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="relative w-full sm:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar pelo nome do projeto…"
+            className="pl-9"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-muted-foreground">Situação</label>
+          <Select value={situation} onValueChange={(v) => setSituation(v as Situation)}>
+            <SelectTrigger className="w-[240px] h-9">
+              <SelectValue>{SITUATION_LABEL[situation]}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(SITUATION_LABEL) as Situation[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {SITUATION_LABEL[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <FilterSelect label="Cliente" value={client} onChange={setClient} options={clients} />
+        <FilterSelect label="Grupo" value={group} onChange={setGroup} options={groups} />
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-muted-foreground">Criado de</label>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-9 w-[160px]"
+          />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-muted-foreground">até</label>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-9 w-[160px]"
+          />
+        </div>
+        {(client !== ALL || group !== ALL || search || dateFrom || dateTo || situation !== "all") && (
+          <button
+            onClick={limparFiltros}
+            className="text-sm px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
+      {selected.size > 0 && (
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-accent/50 p-3">
+          <span className="text-sm font-medium">
+            {selected.size} projeto(s) selecionado(s)
+          </span>
+          <div className="ml-auto flex gap-2">
+            <Button size="sm" onClick={() => bulkSet(true)}>
+              Exibir selecionados no Dashboard
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => bulkSet(false)}>
+              Remover selecionados do Dashboard
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="text-sm text-destructive">
+          Erro ao carregar projetos: {(error as Error).message}
+        </div>
+      )}
+
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allVisibleSelected}
+                  onCheckedChange={(v) => toggleSelectAllVisible(!!v)}
+                  aria-label="Selecionar todos visíveis"
+                />
+              </TableHead>
+              <TableHead>Nome do Projeto</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead>Grupo</TableHead>
+              <TableHead>Situação</TableHead>
+              <TableHead>Criado em</TableHead>
+              <TableHead>
+                <button
+                  type="button"
+                  onClick={() => setSortAsc((v) => !v)}
+                  className="inline-flex items-center gap-1 hover:text-foreground"
+                  title={sortAsc ? "Mais antiga primeiro" : "Mais recente primeiro"}
+                >
+                  Data desejada
+                  {sortAsc ? (
+                    <ArrowUp className="h-3 w-3" />
+                  ) : (
+                    <ArrowDown className="h-3 w-3" />
+                  )}
+                </button>
+              </TableHead>
+              <TableHead>Última Sincronização</TableHead>
+              <TableHead className="text-right">Exibir no Dashboard</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading && (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
+                  Carregando projetos…
+                </TableCell>
+              </TableRow>
+            )}
+            {!isLoading && filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
+                  Nenhum projeto encontrado.
+                </TableCell>
+              </TableRow>
+            )}
+            {filtered.map((p) => (
+              <TableRow key={p.runrunit_project_id}>
+                <TableCell>
+                  <Checkbox
+                    checked={selected.has(p.runrunit_project_id)}
+                    onCheckedChange={(v) => toggleOne(p.runrunit_project_id, !!v)}
+                    aria-label={`Selecionar ${p.name}`}
+                  />
+                </TableCell>
+                <TableCell className="font-medium">{p.name}</TableCell>
+                <TableCell>{p.client_name ?? "—"}</TableCell>
+                <TableCell>{p.project_group_name ?? "—"}</TableCell>
+                <TableCell>
+                  {p.is_tracking_enabled ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">
+                      Exibido
+                    </Badge>
+                  ) : p.is_new_candidate ? (
+                    <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
+                      Novo
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Não exibido
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {p.created_at_runrunit
+                    ? new Date(p.created_at_runrunit).toLocaleDateString("pt-BR")
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-sm">
+                  {p.desired_delivery_date
+                    ? new Date(
+                        (p.desired_delivery_date as string).length <= 10
+                          ? `${p.desired_delivery_date}T00:00:00Z`
+                          : (p.desired_delivery_date as string)
+                      ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {p.last_synced_at
+                    ? new Date(p.last_synced_at).toLocaleString("pt-BR")
+                    : "—"}
+                </TableCell>
+                <TableCell className="text-right">
+                  <div className="inline-flex items-center gap-2 justify-end">
+                    {busyIds.has(p.runrunit_project_id) && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={!!p.is_tracking_enabled}
+                      onCheckedChange={(v) => toggle(p, v)}
+                      disabled={busyIds.has(p.runrunit_project_id)}
+                      aria-label="Exibir no Dashboard"
+                    />
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] text-muted-foreground">{label}</label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-[200px] h-9">
+          <SelectValue placeholder={label}>
+            <span className="truncate">{value === ALL ? "Todos" : value}</span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-80">
+          <SelectItem value={ALL}>Todos</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o} value={o}>
+              {o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
