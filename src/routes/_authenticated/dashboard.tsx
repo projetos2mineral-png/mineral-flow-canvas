@@ -257,15 +257,14 @@ function DashboardPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      <div className="px-6 py-4 border-b border-border bg-card/40">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Kanban por responsável</p>
-        {readOnly && (
-          <div className="mt-2 inline-flex items-center gap-2 text-xs rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground">
+      {readOnly && (
+        <div className="px-6 py-3 border-b border-border bg-card/40">
+          <div className="inline-flex items-center gap-2 text-xs rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground">
             <Eye className="h-3.5 w-3.5" />
             Modo somente leitura — você não tem permissão para editar filas ou cards.
           </div>
-        )}
+        </div>
+      )}
       </div>
 
       {error && (
