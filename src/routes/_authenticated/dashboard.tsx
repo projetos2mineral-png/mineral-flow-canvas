@@ -1033,13 +1033,17 @@ function LaneColumn({
   return (
     <div
       ref={laneSetNodeRef}
-      style={laneStyle}
+      style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "shrink-0 w-80 flex flex-col rounded-lg bg-muted/40 border border-border max-h-full",
+        "shrink-0 flex flex-col rounded-lg bg-muted/40 border border-border max-h-full",
         isLaneDragging && "opacity-50"
       )}
     >
-      <div className="px-3 py-2.5 flex items-center gap-2 border-b border-border bg-card rounded-t-lg">
+      <div
+        style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
+        className="px-2.5 flex items-center gap-1.5 border-b border-border bg-card rounded-t-lg"
+      >
+
         {dragHandleProps && !editing && (
           <button
             type="button"
