@@ -1288,8 +1288,9 @@ function ProjectCardView({
   const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
   return (
     <div
+      style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-lg border p-3 shadow-sm transition-shadow text-foreground",
+        "rounded-lg border shadow-sm transition-shadow text-foreground",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-lg" : "hover:shadow"
       )}
@@ -1297,7 +1298,8 @@ function ProjectCardView({
       <div className="flex items-start gap-2">
         <GripVertical className="h-4 w-4 mt-0.5 text-muted-foreground/60 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm leading-snug line-clamp-2">{p.project_name}</div>
+          <div className="font-semibold text-sm leading-snug line-clamp-3">{p.project_name}</div>
+
           <div className="mt-2 space-y-1 text-xs">
             <Row icon={<Building2 className="h-3.5 w-3.5" />}>{p.client_name ?? "Sem cliente"}</Row>
             <Row icon={<FolderTree className="h-3.5 w-3.5" />}>{p.project_group_name ?? "Sem grupo"}</Row>
