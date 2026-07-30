@@ -137,6 +137,11 @@ function AppShell() {
   const { user } = useAuthSession();
   const { level, canUseCalendar, canSelectProjects, canManageUsers } = useCurrentDashboardUser();
 
+  // Avoid any server/client branch until hydration is complete so the first
+  // client render always matches the SSR output.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   // Badge de novos usuários (só faz sentido para administradores).
   const { data: latestUserAt } = useQuery({
     queryKey: ["dashboard", "users", "latest_created_at"],
@@ -194,7 +199,7 @@ function AppShell() {
   }, [router]);
 
   const isAuthRoute = path.startsWith("/auth") || path.startsWith("/reset-password");
-  if (isAuthRoute) {
+  if (mounted && isAuthRoute) {
     return (
       <>
         <div className="fixed top-3 right-3 z-30">
