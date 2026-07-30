@@ -937,7 +937,9 @@ function AssigneeBoard({
             {!readOnly && (
               <button
                 onClick={handleAddLane}
-                className="shrink-0 w-72 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+                style={{ width: "var(--kb-col)" }}
+                className="shrink-0 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+
               >
                 <Plus className="h-4 w-4" /> Adicionar fila
               </button>
