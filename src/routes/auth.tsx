@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
-import logoAsset from "@/assets/logo.png.asset.json";
+
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -84,18 +84,9 @@ function AuthPage() {
   return (
     <div className="min-h-screen grid place-items-center bg-background p-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <img
-            src={logoAsset.url}
-            alt="Mineral Geologia"
-            width={72}
-            height={72}
-            className="h-16 w-auto object-contain"
-          />
-          <div>
-            <h1 className="text-lg font-semibold">DB Projetos</h1>
-            <p className="text-xs text-muted-foreground">Mineral Geologia</p>
-          </div>
+        <div className="mb-6">
+          <h1 className="text-lg font-semibold">Central de Projetos</h1>
+          <p className="text-xs text-muted-foreground">Mineral Geologia</p>
         </div>
 
         {mode === "forgot" ? (
