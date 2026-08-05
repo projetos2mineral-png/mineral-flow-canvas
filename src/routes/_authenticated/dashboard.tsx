@@ -1193,41 +1193,6 @@ function LaneColumn({
             )}
             <span className="flex-1" />
 
-            <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
-              <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                  <DialogTitle>Capacidade Mensal</DialogTitle>
-                  <DialogDescription>
-                    Configure a capacidade de horas para {assigneeName} em {title}.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm">Responsável</label>
-                    <Input value={assigneeName} readOnly className="col-span-3 bg-muted" />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm">Mês</label>
-                    <Input value={title} readOnly className="col-span-3 bg-muted" />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm">Capacidade (h)</label>
-                    <Input 
-                      type="number"
-                      step="0.5"
-                      value={capacityDraft} 
-                      onChange={(e) => setCapacityDraft(e.target.value)}
-                      className="col-span-3" 
-                      autoFocus
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleSaveCapacity}>Salvar</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
 
 
             <Badge variant="outline" className="h-5">
