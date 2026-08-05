@@ -670,7 +670,7 @@ function AssigneeBoard({
       reordered = arrayMove(inLane, fromIdx, toIdx);
     }
 
-    const updates: { id: string | null; runrunit_project_id: number; lane_id: string | null; position: number }[] = [];
+    const updates: { id: string | null; runrunit_project_id: number; lane_id: string | null; position: number; updated_by?: string | null }[] = [];
     reordered.forEach((it, idx) => {
       const lane_id = toLane === UNASSIGNED_LANE ? null : toLane;
       if (it.position !== idx || it.lane_id !== lane_id || it.card == null) {
@@ -679,6 +679,7 @@ function AssigneeBoard({
           runrunit_project_id: it.runrunit_project_id,
           lane_id,
           position: idx,
+          updated_by: currentUserName,
         });
       }
     });
@@ -696,6 +697,7 @@ function AssigneeBoard({
         id: string;
         lane_id: string | null;
         position: number;
+        updated_by?: string | null;
       }[];
       if (existing.length) await bulkUpdateCardPositions(existing);
       const newOnes = updates.filter((u) => !u.id);

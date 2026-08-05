@@ -495,16 +495,17 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
 
 export async function updateCard(
   id: string,
-  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position">>
+  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at">>
 ) {
+  const fullPatch = { ...patch, updated_at: patch.updated_at || new Date().toISOString() };
   const { error } = await (supabase as any)
     .from("dashboard_project_cards")
-    .update(patch)
+    .update(fullPatch)
     .eq("id", id);
   if (error) throw error;
 }
 
-export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number }[]) {
+export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {
   // Sequential updates to keep RLS happy without RPC
   for (const u of updates) {
     const { error } = await (supabase as any)
