@@ -1454,7 +1454,12 @@ function ProjectCardView({
       <div className="flex items-start gap-1.5">
         <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-[13px] leading-tight line-clamp-2 mb-1">{p.project_name}</div>
+          <button
+            onClick={() => onOpenCard(card)}
+            className="w-full text-left font-semibold text-[12px] leading-snug line-clamp-2 mb-1 hover:text-primary transition-colors cursor-pointer"
+          >
+            {p.project_name}
+          </button>
 
           <div className="space-y-0.5 text-[11px]">
             <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
@@ -1465,7 +1470,6 @@ function ProjectCardView({
                 {totalTasks != null && <span>📌 {totalTasks}</span>}
                 {estimatedHours != null && <span>⏱ {estimatedHours}h</span>}
               </div>
-              {sourceLabel && <div className="italic text-[10px] text-foreground/50 truncate">{sourceLabel}</div>}
             </div>
           )}
           {card.review_status && card.review_status !== "não enviado" && (
