@@ -74,7 +74,12 @@ import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanD
 
 
 import { useCurrentDashboardUser } from "@/lib/auth";
-import { ensureDefaultMonthlyLanes, dedupeMonthlyLanes, isMonthlyLaneTitle } from "@/lib/dashboard";
+import {
+  ensureDefaultMonthlyLanes,
+  dedupeMonthlyLanes,
+  isMonthlyLaneTitle,
+  estimateSourceLabel,
+} from "@/lib/dashboard";
 import { Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -1284,6 +1289,11 @@ function ProjectCardView({
 }) {
   const p = card.project;
   const hasNote = !!(card.internal_note && card.internal_note.trim());
+  const totalTasks = card.card?.total_tasks ?? null;
+  const rawHours = card.card?.total_estimated_hours ?? null;
+  const estimatedHours =
+    rawHours == null ? null : Number(rawHours) % 1 === 0 ? Number(rawHours) : Number(rawHours).toFixed(1);
+  const sourceLabel = estimateSourceLabel(card.card?.calculation_details ?? null);
   // Selectable statuses exclude "em revisão" (only set by send-for-review action)
   const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
   return (
@@ -1309,6 +1319,15 @@ function ProjectCardView({
               {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
             </Row>
           </div>
+          {(totalTasks != null || estimatedHours != null) && (
+            <div className="mt-2 space-y-0.5 text-[11px] text-foreground/80">
+              <div className="flex flex-wrap items-center gap-x-2">
+                {totalTasks != null && <span>📌 {totalTasks} tarefas</span>}
+                {estimatedHours != null && <span>⏱ {estimatedHours}h estimadas</span>}
+              </div>
+              {sourceLabel && <div className="italic text-foreground/60">{sourceLabel}</div>}
+            </div>
+          )}
           {card.review_status && card.review_status !== "não enviado" && (
             <div className="mt-2 text-[11px] text-foreground/80 italic">
               {card.review_status === "aguardando revisão" &&

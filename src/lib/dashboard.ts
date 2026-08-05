@@ -74,6 +74,8 @@ export type Lane = {
   position: number;
 };
 
+export type CalculationDetails = unknown;
+
 export type ProjectCardRow = {
   id: string;
   runrunit_project_id: number;
@@ -87,7 +89,47 @@ export type ProjectCardRow = {
   review_requested_to: string | null;
   correction_note: string | null;
   manually_positioned: boolean | null;
+  total_tasks?: number | null;
+  total_estimated_hours?: number | null;
+  calculation_details?: CalculationDetails | null;
 };
+
+/**
+ * Deriva a origem predominante da estimativa a partir de `calculation_details`.
+ * Aceita array de itens ou objeto com contagens; retorna null quando indeterminado.
+ */
+export function estimateSourceLabel(details: unknown): string | null {
+  if (!details) return null;
+  let resp = 0;
+  let geral = 0;
+  const bump = (v: unknown, weight = 1) => {
+    const s = String(v ?? "").toLowerCase();
+    if (s.includes("responsavel_tipo") || s.includes("responsável_tipo")) resp += weight;
+    else if (s.includes("tipo_geral")) geral += weight;
+  };
+  if (Array.isArray(details)) {
+    for (const item of details) {
+      if (item && typeof item === "object") {
+        const o = item as Record<string, unknown>;
+        bump(o.source ?? o.origem ?? o.fonte ?? o.basis ?? o.tipo);
+      } else bump(item);
+    }
+  } else if (typeof details === "object") {
+    const o = details as Record<string, unknown>;
+    if (Array.isArray(o.tasks)) return estimateSourceLabel(o.tasks);
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === "number") bump(k, v);
+      else bump(v);
+    }
+  } else {
+    bump(details);
+  }
+  if (resp === 0 && geral === 0) return null;
+  return resp >= geral
+    ? "Baseado no histórico do responsável"
+    : "Baseado no histórico geral";
+}
+
 
 export async function fetchDashboardProjects(): Promise<DashboardProject[]> {
   const pageSize = 1000;
@@ -166,11 +208,12 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
   for (let i = 0; i < 50; i++) {
     const to = from + pageSize - 1;
     const { data, error } = await (supabase as any)
-      .from("dashboard_project_cards")
+      .from("dashboard_cards_with_estimates")
       .select(
-        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned"
+        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned,total_tasks,total_estimated_hours,calculation_details"
       )
       .range(from, to);
+
     if (error) throw error;
     const rows = (data ?? []) as ProjectCardRow[];
     all.push(...rows);
