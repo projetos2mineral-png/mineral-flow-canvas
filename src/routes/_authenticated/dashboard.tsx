@@ -1169,7 +1169,7 @@ function LaneColumn({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div 
-                  className="flex flex-col flex-1 min-w-0 cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 transition-colors group relative"
+                  className="flex items-baseline justify-between w-full cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 transition-colors group relative"
                   onClick={() => {
                     if (isMonthly) {
                       setCapacityDraft(capacity?.toString() ?? "0");
@@ -1179,11 +1179,11 @@ function LaneColumn({
                     }
                   }}
                 >
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0 max-w-[60%]">
                     {dragHandleProps && (
                       <button 
                         type="button"
-                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
+                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
                         {...dragHandleProps}
                       >
                         <GripHorizontal className="h-3.5 w-3.5" />
@@ -1195,14 +1195,15 @@ function LaneColumn({
                   </div>
                   
                   <div 
-                    className={cn(
-                      "text-[11px] font-medium tabular-nums",
-                      overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
-                    )}
+                    className="text-[11px] font-medium tabular-nums text-right shrink-0"
                   >
-                    {formatHoursCompact(plannedHours)}
+                    <span className={cn(
+                      overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
+                    )}>
+                      {formatHoursCompact(plannedHours)}
+                    </span>
                     {isMonthly && capacity !== null && (
-                      <span className="opacity-70 font-normal"> / {formatHoursCompact(capacity)}</span>
+                      <span className="text-muted-foreground opacity-70 font-normal"> / {formatHoursCompact(capacity)}</span>
                     )}
                   </div>
                 </div>
