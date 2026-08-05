@@ -1280,7 +1280,6 @@ function LaneColumn({
           </TooltipProvider>
         )}
       </div>
-      </div>
 
 
       <SortableContext
