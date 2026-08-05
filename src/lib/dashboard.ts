@@ -208,11 +208,12 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
   for (let i = 0; i < 50; i++) {
     const to = from + pageSize - 1;
     const { data, error } = await (supabase as any)
-      .from("dashboard_project_cards")
+      .from("dashboard_cards_with_estimates")
       .select(
-        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned"
+        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned,total_tasks,total_estimated_hours,calculation_details"
       )
       .range(from, to);
+
     if (error) throw error;
     const rows = (data ?? []) as ProjectCardRow[];
     all.push(...rows);
