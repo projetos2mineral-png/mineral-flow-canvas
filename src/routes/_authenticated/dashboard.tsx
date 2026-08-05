@@ -1125,22 +1125,10 @@ function LaneColumn({
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="px-2.5 flex items-center gap-1.5 border-b border-border bg-card rounded-t-lg"
+        className="px-2.5 flex items-center border-b border-border bg-card rounded-t-lg min-h-[44px]"
       >
-
-        {dragHandleProps && !editing && (
-          <button
-            type="button"
-            className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded cursor-grab active:cursor-grabbing"
-            title="Mover fila"
-            aria-label="Mover fila"
-            {...dragHandleProps}
-          >
-            <GripHorizontal className="h-4 w-4" />
-          </button>
-        )}
         {editing && onRename ? (
-          <>
+          <div className="flex items-center gap-1.5 w-full">
             <Input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -1175,107 +1163,123 @@ function LaneColumn({
             >
               <X className="h-4 w-4" />
             </button>
-          </>
+          </div>
         ) : (
-          <>
-            <h3 
-              className={cn(
-                "text-sm font-semibold truncate",
-                isMonthly && "cursor-pointer hover:underline"
-              )}
-              onClick={() => {
-                if (isMonthly) {
-                  setCapacityDraft(capacity?.toString() ?? "0");
-                  setIsCapacityDialogOpen(true);
-                }
-              }}
-            >
-              {title}
-            </h3>
-            {plannedHours > 0 && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className={cn(
-                        "shrink-0 text-[11px] font-medium tabular-nums",
-                        overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
-                      )}
-                    >
-                      {formatHoursCompact(plannedHours)}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs space-y-1 bg-neutral-900 text-white border-neutral-800">
-                    <p>Capacidade mensal: {capacity !== null ? formatHoursCompact(capacity) : "Não definida"}</p>
-                    <p>Planejado: {formatHoursCompact(plannedHours)}</p>
-                    {overCapacity && <p className="font-semibold text-white">Excesso: +{formatHoursCompact(excess)}</p>}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            )}
-            <span className="flex-1" />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div 
+                  className="flex flex-col flex-1 min-w-0 cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 transition-colors group relative"
+                  onClick={() => {
+                    if (isMonthly) {
+                      setCapacityDraft(capacity?.toString() ?? "0");
+                      setIsCapacityDialogOpen(true);
+                    } else if (onRename) {
+                      setEditing(true);
+                    }
+                  }}
+                >
+                  <div className="flex items-center gap-1.5">
+                    {dragHandleProps && (
+                      <div 
+                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors"
+                        {...dragHandleProps}
+                      >
+                        <GripHorizontal className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                    <h3 className="text-sm font-semibold truncate">
+                      {title}
+                    </h3>
+                  </div>
+                  
+                  <div 
+                    className={cn(
+                      "text-[11px] font-medium tabular-nums",
+                      overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
+                    )}
+                  >
+                    {formatHoursCompact(plannedHours)}
+                    {isMonthly && capacity !== null && (
+                      <span className="opacity-70 font-normal"> / {formatHoursCompact(capacity)}</span>
+                    )}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs space-y-1 bg-neutral-900 text-white border-neutral-800">
+                <p>Cartões: {cards.length}</p>
+                {isMonthly && (
+                  <p>Capacidade mensal: {capacity !== null ? formatHoursCompact(capacity) : "Não definida"}</p>
+                )}
+                <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                {overCapacity && <p className="font-semibold text-white">Excesso: +{formatHoursCompact(excess)}</p>}
+                {!isMonthly && !isUnassigned && <p className="text-[10px] text-muted-foreground italic mt-1">Clique para renomear</p>}
+              </TooltipContent>
+            </Tooltip>
 
-
-
-            <Badge variant="outline" className="h-5">
-              {cards.length}
-            </Badge>
-            {!isUnassigned && onRename && (
-              <button
-                className="p-1 text-muted-foreground hover:text-foreground hover:bg-accent rounded"
-                onClick={() => setEditing(true)}
-                title="Renomear"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {!isUnassigned && onDelete && (
-              <button
-                className="p-1 text-muted-foreground hover:text-destructive hover:bg-accent rounded"
-                onClick={onDelete}
-                title="Excluir fila"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
             <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Capacidade Mensal</DialogTitle>
+                  <DialogTitle>Configurações da Fila</DialogTitle>
                   <DialogDescription>
-                    Configure a capacidade de horas para {assigneeName} em {title}.
+                    Ajuste o título ou a capacidade para {assigneeName}.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm font-medium">Responsável</label>
-                    <Input value={assigneeName} readOnly className="col-span-3 bg-muted" />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm font-medium">Mês</label>
-                    <Input value={title} readOnly className="col-span-3 bg-muted" />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
-                    <label className="text-right text-sm font-medium">Capacidade (h)</label>
+                    <label className="text-right text-sm font-medium">Título</label>
                     <Input 
-                      type="number"
-                      step="0.5"
-                      value={capacityDraft} 
-                      onChange={(e) => setCapacityDraft(e.target.value)}
-                      className="col-span-3" 
-                      autoFocus
+                      value={draft} 
+                      onChange={(e) => setDraft(e.target.value)}
+                      className="col-span-3"
                     />
                   </div>
+                  {isMonthly && (
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <label className="text-right text-sm font-medium">Capacidade (h)</label>
+                      <Input 
+                        type="number"
+                        step="0.5"
+                        value={capacityDraft} 
+                        onChange={(e) => setCapacityDraft(e.target.value)}
+                        className="col-span-3" 
+                      />
+                    </div>
+                  )}
                 </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>Cancelar</Button>
-                  <Button onClick={handleSaveCapacity}>Salvar</Button>
+                <DialogFooter className="flex justify-between sm:justify-between items-center w-full">
+                  {!isUnassigned && onDelete && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => {
+                        onDelete();
+                        setIsCapacityDialogOpen(false);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" /> Excluir Fila
+                    </Button>
+                  )}
+                  <div className="flex gap-2 ml-auto">
+                    <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>Cancelar</Button>
+                    <Button onClick={async () => {
+                      if (draft.trim() !== title && onRename) {
+                        await onRename(draft.trim());
+                      }
+                      if (isMonthly) {
+                        await handleSaveCapacity();
+                      } else {
+                        setIsCapacityDialogOpen(false);
+                      }
+                    }}>Salvar</Button>
+                  </div>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
-
-          </>
+          </TooltipProvider>
         )}
+      </div>
       </div>
 
 
