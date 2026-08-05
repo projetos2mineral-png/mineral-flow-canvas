@@ -101,6 +101,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { sumLaneEstimatedHours, formatHoursCompact } from "@/lib/kanban-capacity";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
