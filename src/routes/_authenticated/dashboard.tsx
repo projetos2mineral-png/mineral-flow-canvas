@@ -1289,6 +1289,11 @@ function ProjectCardView({
 }) {
   const p = card.project;
   const hasNote = !!(card.internal_note && card.internal_note.trim());
+  const totalTasks = card.card?.total_tasks ?? null;
+  const rawHours = card.card?.total_estimated_hours ?? null;
+  const estimatedHours =
+    rawHours == null ? null : Number(rawHours) % 1 === 0 ? Number(rawHours) : Number(rawHours).toFixed(1);
+  const sourceLabel = estimateSourceLabel(card.card?.calculation_details ?? null);
   // Selectable statuses exclude "em revisão" (only set by send-for-review action)
   const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
   return (
