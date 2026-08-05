@@ -1035,6 +1035,11 @@ function LaneColumn({
   useEffect(() => setDraft(title), [title]);
   void lane;
 
+  // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
+  // portanto atualizam em tempo real ao mover cards entre colunas.
+  const plannedHours = useMemo(() => sumLaneEstimatedHours(cards), [cards]);
+
+
   return (
     <div
       ref={laneSetNodeRef}
