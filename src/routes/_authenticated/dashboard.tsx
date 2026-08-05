@@ -1457,7 +1457,7 @@ function ProjectCardView({
           <div className="font-semibold text-sm leading-snug line-clamp-3">{p.project_name}</div>
 
           <div className="mt-2 space-y-1 text-xs">
-            {/* Removido Cliente, Grupo, Responsável, Time e Última Sincronização da frente do card */}
+            <Row icon={<Building2 className="h-3.5 w-3.5" />}>{p.client_name ?? "Sem cliente"}</Row>
           </div>
           {(totalTasks != null || estimatedHours != null) && (
             <div className="mt-2 space-y-0.5 text-[11px] text-foreground/80">
