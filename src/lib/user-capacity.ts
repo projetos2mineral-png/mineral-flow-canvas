@@ -12,7 +12,7 @@ export interface UserCapacity {
  * Busca a capacidade de um responsável para um mês específico.
  */
 export async function fetchUserCapacity(userName: string, referenceMonth: string): Promise<UserCapacity | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("dashboard_user_capacity")
     .select("*")
     .eq("user_name", userName)
@@ -30,7 +30,7 @@ export async function fetchUserCapacity(userName: string, referenceMonth: string
  * Salva ou atualiza a capacidade de um responsável.
  */
 export async function upsertUserCapacity(userName: string, referenceMonth: string, hours: number) {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("dashboard_user_capacity")
     .upsert(
       { 
@@ -49,7 +49,7 @@ export async function upsertUserCapacity(userName: string, referenceMonth: strin
  * Busca todas as capacidades de um responsável.
  */
 export async function fetchAllUserCapacities(userName: string): Promise<UserCapacity[]> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("dashboard_user_capacity")
     .select("*")
     .eq("user_name", userName);
@@ -58,5 +58,6 @@ export async function fetchAllUserCapacities(userName: string): Promise<UserCapa
     console.error("Error fetching all capacities:", error);
     return [];
   }
-  return data as UserCapacity[];
+  return (data as any[])?.map(d => d as UserCapacity) ?? [];
 }
+
