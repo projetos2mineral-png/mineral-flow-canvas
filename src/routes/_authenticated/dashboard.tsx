@@ -1554,6 +1554,9 @@ function CardDetailsDialog({
           <ReadRow label="Grupo" value={p.project_group_name ?? "—"} />
           <ReadRow label="Responsável" value={p.assignee_name ?? "—"} />
           <ReadRow label="Time" value={p.team_name ?? "—"} />
+          {card.card?.calculation_details && (
+            <ReadRow label="Origem da estimativa" value={estimateSourceLabel(card.card.calculation_details)} />
+          )}
           <ReadRow
             label="Última sincronização"
             value={p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
