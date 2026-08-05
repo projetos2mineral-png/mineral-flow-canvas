@@ -79,7 +79,9 @@ import {
   dedupeMonthlyLanes,
   isMonthlyLaneTitle,
   estimateSourceLabel,
+  monthlyTitleToDateISO,
 } from "@/lib/dashboard";
+
 import { Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -103,6 +105,8 @@ import {
 import { cn } from "@/lib/utils";
 import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
+
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
@@ -1068,10 +1072,12 @@ function LaneColumn({
       setCapacity(null);
       return;
     }
-    fetchUserCapacity(assigneeName, title).then((data) => {
+    const isoMonth = monthlyTitleToDateISO(title) || title;
+    fetchUserCapacity(assigneeName, isoMonth).then((data) => {
       setCapacity(data?.capacity_hours ?? null);
     });
   }, [isMonthly, assigneeName, title]);
+
 
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
@@ -1092,14 +1098,16 @@ function LaneColumn({
       return;
     }
     try {
-      await upsertUserCapacity(assigneeName, title, hours);
+      const isoMonth = monthlyTitleToDateISO(title) || title;
+      await upsertUserCapacity(assigneeName, isoMonth, hours);
       setCapacity(hours);
       setIsCapacityDialogOpen(false);
       toast.success("Capacidade atualizada!");
-      qc.invalidateQueries({ queryKey: ["dashboard", "user_capacity", assigneeName, title] });
+      qc.invalidateQueries({ queryKey: ["dashboard", "user_capacity", assigneeName, isoMonth] });
     } catch (err) {
       toast.error("Erro ao salvar capacidade.");
     }
+
   };
 
 
