@@ -137,6 +137,8 @@ type DashboardCard = {
   review_requested_by: string | null;
   review_requested_to: string | null;
   correction_note: string | null;
+  updated_by: string | null;
+  updated_at: string | null;
 };
 
 function DashboardPage() {
@@ -436,6 +438,8 @@ function AssigneeBoard({
         review_requested_by: c?.review_requested_by ?? null,
         review_requested_to: c?.review_requested_to ?? null,
         correction_note: c?.correction_note ?? null,
+        updated_by: c?.updated_by ?? null,
+        updated_at: c?.updated_at ?? null,
       });
     }
     return out;
@@ -701,6 +705,7 @@ function AssigneeBoard({
           assignee_name: assignee,
           lane_id: u.lane_id,
           position: u.position,
+          updated_by: currentUserName,
         });
       }
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
@@ -742,6 +747,7 @@ function AssigneeBoard({
         runrunit_project_id: it.runrunit_project_id,
         assignee_name: assignee,
         status,
+        updated_by: currentUserName,
         ...(targetLaneId !== undefined ? { lane_id: targetLaneId } : {}),
       });
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
@@ -756,6 +762,7 @@ function AssigneeBoard({
         runrunit_project_id: it.runrunit_project_id,
         assignee_name: assignee,
         internal_note: note,
+        updated_by: currentUserName,
       });
       toast.success("Observação salva");
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
@@ -779,6 +786,7 @@ function AssigneeBoard({
         review_requested_to: reviewer,
         review_requested_by: currentUserName || assignee,
         correction_note: null,
+        updated_by: currentUserName,
       });
       // Place review demand in reviewer's "Para revisar" lane if it exists
       const targetLane = findLaneByTitle(reviewer, ["Para revisar", "Para Revisar"]);
@@ -814,6 +822,7 @@ function AssigneeBoard({
         review_requested_to: null,
         correction_note: null,
         lane_id: concluidoLane?.id ?? undefined,
+        updated_by: currentUserName,
       });
       toast.success("Card aprovado");
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
@@ -839,6 +848,7 @@ function AssigneeBoard({
         review_requested_to: null,
         correction_note: note,
         lane_id: corrigirLane?.id ?? undefined,
+        updated_by: currentUserName,
       });
       toast.success("Correção solicitada");
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
@@ -1552,14 +1562,18 @@ function CardDetailsDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <ReadRow label="Cliente" value={p.client_name ?? "—"} />
-          <ReadRow label="Grupo" value={p.project_group_name ?? "—"} />
-          <ReadRow label="Responsável" value={p.assignee_name ?? "—"} />
-          <ReadRow label="Time" value={p.team_name ?? "—"} />
-          <ReadRow
-            label="Última sincronização"
-            value={p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
-          />
           <ReadRow label="Status" value={STATUS_LABEL[card.status]} />
+          {card.updated_at && (
+            <div className="pt-2 mt-2 border-t border-border/50">
+              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Última alteração</label>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-xs text-foreground/80">{card.updated_by || "Sistema"}</span>
+                <span className="text-xs text-muted-foreground">
+                  {new Date(card.updated_at).toLocaleString("pt-BR")}
+                </span>
+              </div>
+            </div>
+          )}
           {p.desired_delivery_date && (
             <ReadRow
               label="Entrega desejada (Runrun.it)"
