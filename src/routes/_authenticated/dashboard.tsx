@@ -101,7 +101,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { sumLaneEstimatedHours, formatHoursCompact } from "@/lib/kanban-capacity";
+import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
+import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -902,7 +905,9 @@ function AssigneeBoard({
               onStatusChange={handleStatusChange}
               onOpenCard={setOpenCard}
               isUnassigned
+              assigneeName={assignee}
             />
+
             <SortableContext
               id="lanes-horizontal"
               items={localLanes.map((l) => `laneItem:${l.id}`)}
@@ -1013,6 +1018,7 @@ function LaneColumn({
   laneSetNodeRef,
   laneStyle,
   isLaneDragging,
+  assigneeName,
 }: {
   lane?: Lane;
   laneId: string;
@@ -1031,15 +1037,59 @@ function LaneColumn({
   laneSetNodeRef?: (el: HTMLElement | null) => void;
   laneStyle?: React.CSSProperties;
   isLaneDragging?: boolean;
+  assigneeName: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   useEffect(() => setDraft(title), [title]);
   void lane;
 
+  const qc = useQueryClient();
+
+  const isMonthly = isMonthlyLaneTitle(title);
+  const [capacity, setCapacity] = useState<number | null>(null);
+  const [isCapacityDialogOpen, setIsCapacityDialogOpen] = useState(false);
+  const [capacityDraft, setCapacityDraft] = useState("");
+
+  useEffect(() => {
+    if (!isMonthly || !assigneeName) {
+      setCapacity(null);
+      return;
+    }
+    fetchUserCapacity(assigneeName, title).then((data) => {
+      setCapacity(data?.capacity_hours ?? null);
+    });
+  }, [isMonthly, assigneeName, title]);
+
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
   const plannedHours = useMemo(() => sumLaneEstimatedHours(cards), [cards]);
+
+  const capacitySummary = useMemo(() => ({
+    plannedHours,
+    capacityHours: capacity
+  }), [plannedHours, capacity]);
+
+  const overCapacity = isOverCapacity(capacitySummary);
+  const excess = getCapacityExcess(capacitySummary);
+
+  const handleSaveCapacity = async () => {
+    const hours = parseFloat(capacityDraft);
+    if (isNaN(hours)) {
+      toast.error("Por favor, insira um número válido.");
+      return;
+    }
+    try {
+      await upsertUserCapacity(assigneeName, title, hours);
+      setCapacity(hours);
+      setIsCapacityDialogOpen(false);
+      toast.success("Capacidade atualizada!");
+      qc.invalidateQueries({ queryKey: ["dashboard", "user_capacity", assigneeName, title] });
+    } catch (err) {
+      toast.error("Erro ao salvar capacidade.");
+    }
+  };
+
 
 
   return (
@@ -1106,16 +1156,44 @@ function LaneColumn({
           </>
         ) : (
           <>
-            <h3 className="text-sm font-semibold truncate">{title}</h3>
+            <h3 
+              className={cn(
+                "text-sm font-semibold truncate",
+                isMonthly && "cursor-pointer hover:underline"
+              )}
+              onClick={() => {
+                if (isMonthly) {
+                  setCapacityDraft(capacity?.toString() ?? "0");
+                  setIsCapacityDialogOpen(true);
+                }
+              }}
+            >
+              {title}
+            </h3>
             {plannedHours > 0 && (
-              <span
-                className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground"
-                title="Horas planejadas nesta fila"
-              >
-                {formatHoursCompact(plannedHours)}
-              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "shrink-0 text-[11px] font-medium tabular-nums",
+                        overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
+                      )}
+                    >
+                      {formatHoursCompact(plannedHours)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs space-y-1">
+                    <p>Capacidade mensal: {capacity !== null ? formatHoursCompact(capacity) : "Não definida"}</p>
+                    <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                    {overCapacity && <p className="text-red-500 font-semibold">Excesso: +{formatHoursCompact(excess)}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             <span className="flex-1" />
+
+
 
             <Badge variant="outline" className="h-5">
               {cards.length}
@@ -1138,9 +1216,46 @@ function LaneColumn({
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             )}
+            <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Capacidade Mensal</DialogTitle>
+                  <DialogDescription>
+                    Configure a capacidade de horas para {assigneeName} em {title}.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right text-sm font-medium">Responsável</label>
+                    <Input value={assigneeName} readOnly className="col-span-3 bg-muted" />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right text-sm font-medium">Mês</label>
+                    <Input value={title} readOnly className="col-span-3 bg-muted" />
+                  </div>
+                  <div className="grid grid-cols-4 items-center gap-4">
+                    <label className="text-right text-sm font-medium">Capacidade (h)</label>
+                    <Input 
+                      type="number"
+                      step="0.5"
+                      value={capacityDraft} 
+                      onChange={(e) => setCapacityDraft(e.target.value)}
+                      className="col-span-3" 
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>Cancelar</Button>
+                  <Button onClick={handleSaveCapacity}>Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
           </>
         )}
       </div>
+
 
       <SortableContext
         id={`lane:${laneId}`}
@@ -1205,6 +1320,7 @@ function SortableLaneColumn(props: {
       laneSetNodeRef={setNodeRef}
       laneStyle={style}
       isLaneDragging={isDragging}
+      assigneeName={lane.assignee_name}
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
@@ -1213,6 +1329,7 @@ function SortableLaneColumn(props: {
     />
   );
 }
+
 
 function DroppableLaneBody({
   laneId,

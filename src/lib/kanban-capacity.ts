@@ -12,7 +12,7 @@ export interface LaneHoursSource {
 }
 
 /**
- * Soma `total_estimated_hours` dos cards da lane, ignorando valores
+ * Soma total_estimated_hours dos cards da lane, ignorando valores
  * ausentes ou não numéricos. Retorna 0 quando não há nada a somar.
  */
 export function sumLaneEstimatedHours(cards: readonly LaneHoursSource[]): number {
@@ -27,14 +27,6 @@ export function sumLaneEstimatedHours(cards: readonly LaneHoursSource[]): number
 
 /**
  * Formata horas decimais para exibição amigável no cabeçalho das lanes.
- *
- * Regras visuais:
- * - valores menores que 1 hora → minutos (ex: 0,8h → 48min)
- * - valores maiores ou iguais a 1 hora → horas e minutos (ex: 2,5h → 2h30)
- * - minutos são sempre arredondados para número inteiro
- *
- * O valor numérico de entrada permanece inalterado; apenas a string de
- * exibição é transformada.
  */
 export function formatHoursCompact(hours: number): string {
   if (!Number.isFinite(hours) || hours <= 0) return "0min";
@@ -53,12 +45,28 @@ export function formatHoursCompact(hours: number): string {
 }
 
 /**
- * Reservado para a futura comparação com a capacidade mensal do responsável.
- * Ainda não utilizado na UI.
+ * Estrutura para comparação entre planejado e capacidade.
  */
 export interface LaneCapacitySummary {
   /** Horas planejadas somadas dos cards da lane. */
   plannedHours: number;
-  /** Capacidade mensal do responsável (horas). Indefinida enquanto não houver fonte. */
-  capacityHours?: number;
+  /** Capacidade mensal do responsável (horas). */
+  capacityHours: number | null;
 }
+
+/**
+ * Determina se houve excesso de carga.
+ */
+export function isOverCapacity(summary: LaneCapacitySummary): boolean {
+  if (summary.capacityHours === null || summary.capacityHours === 0) return false;
+  return summary.plannedHours > summary.capacityHours;
+}
+
+/**
+ * Calcula o excesso de horas se houver.
+ */
+export function getCapacityExcess(summary: LaneCapacitySummary): number {
+  if (summary.capacityHours === null) return 0;
+  return Math.max(0, summary.plannedHours - summary.capacityHours);
+}
+
