@@ -1205,10 +1205,10 @@ function LaneColumn({
                       {formatHoursCompact(plannedHours)}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs space-y-1">
+                  <TooltipContent side="top" className="text-xs space-y-1 bg-neutral-900 text-white border-neutral-800">
                     <p>Capacidade mensal: {capacity !== null ? formatHoursCompact(capacity) : "Não definida"}</p>
                     <p>Planejado: {formatHoursCompact(plannedHours)}</p>
-                    {overCapacity && <p className="text-red-500 font-semibold">Excesso: +{formatHoursCompact(excess)}</p>}
+                    {overCapacity && <p className="font-semibold text-white">Excesso: +{formatHoursCompact(excess)}</p>}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
