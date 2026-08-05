@@ -25,13 +25,31 @@ export function sumLaneEstimatedHours(cards: readonly LaneHoursSource[]): number
   return total;
 }
 
-/** Formata horas em formato compacto pt-BR: 18,5h / 20h. */
+/**
+ * Formata horas decimais para exibição amigável no cabeçalho das lanes.
+ *
+ * Regras visuais:
+ * - valores menores que 1 hora → minutos (ex: 0,8h → 48min)
+ * - valores maiores ou iguais a 1 hora → horas e minutos (ex: 2,5h → 2h30)
+ * - minutos são sempre arredondados para número inteiro
+ *
+ * O valor numérico de entrada permanece inalterado; apenas a string de
+ * exibição é transformada.
+ */
 export function formatHoursCompact(hours: number): string {
-  const rounded = Math.round(hours * 10) / 10;
-  const text = Number.isInteger(rounded)
-    ? String(rounded)
-    : rounded.toFixed(1).replace(".", ",");
-  return `${text}h`;
+  if (!Number.isFinite(hours) || hours <= 0) return "0min";
+
+  const totalMinutes = Math.round(hours * 60);
+
+  if (hours < 1) {
+    return `${totalMinutes}min`;
+  }
+
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (minutes === 0) return `${wholeHours}h`;
+  return `${wholeHours}h${minutes}`;
 }
 
 /**
