@@ -1119,7 +1119,7 @@ function LaneColumn({
       ref={laneSetNodeRef}
       style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "shrink-0 flex flex-col rounded-lg bg-muted/40 border border-border max-h-full",
+        "shrink-0 flex flex-col rounded-[10px] bg-muted/40 border border-border max-h-full",
         isLaneDragging && "opacity-50"
       )}
     >
@@ -1189,16 +1189,16 @@ function LaneColumn({
                         <GripHorizontal className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    <h3 className="text-sm font-semibold truncate">
+                    <h3 className="text-[14px] font-semibold truncate">
                       {title}
                     </h3>
                   </div>
                   
                   <div 
-                    className="text-[11px] font-medium tabular-nums text-right shrink-0"
+                    className="text-[13px] font-medium tabular-nums text-right shrink-0"
                   >
                     <span className={cn(
-                      overCapacity ? "text-red-500 font-bold" : "text-muted-foreground"
+                      overCapacity ? "text-[#DC2626] font-bold" : "text-muted-foreground"
                     )}>
                       {formatHoursCompact(plannedHours)}
                     </span>
@@ -1461,7 +1461,7 @@ function ProjectCardView({
     <div
       style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-lg border shadow-sm transition-shadow text-foreground",
+        "rounded-[8px] border border-[#E5E7EB] shadow-sm transition-shadow text-foreground bg-white",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-lg" : "hover:shadow"
       )}
@@ -1471,16 +1471,16 @@ function ProjectCardView({
         <div className="min-w-0 flex-1">
           <button
             onClick={() => onOpenCard(card)}
-            className="w-full text-left font-semibold text-[12px] leading-snug line-clamp-2 mb-1 hover:text-primary transition-colors cursor-pointer"
+            className="w-full text-left font-semibold text-[14px] leading-snug line-clamp-2 mb-1 hover:text-primary transition-colors cursor-pointer"
           >
             {p.project_name}
           </button>
 
-          <div className="space-y-0.5 text-[11px]">
+          <div className="space-y-0.5 text-[12px] text-[#6B7280]">
             <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
           </div>
           {(totalTasks != null || estimatedHours != null) && (
-            <div className="mt-1 space-y-0 text-[10px] text-foreground/70">
+            <div className="mt-1 space-y-0 text-[12px] text-[#6B7280]">
               <div className="flex flex-wrap items-center gap-x-2">
                 {totalTasks != null && <span>📌 {totalTasks}</span>}
                 {estimatedHours != null && <span>⏱ {estimatedHours}h</span>}
