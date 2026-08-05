@@ -101,6 +101,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { sumLaneEstimatedHours, formatHoursCompact } from "@/lib/kanban-capacity";
+
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -1035,6 +1037,11 @@ function LaneColumn({
   useEffect(() => setDraft(title), [title]);
   void lane;
 
+  // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
+  // portanto atualizam em tempo real ao mover cards entre colunas.
+  const plannedHours = useMemo(() => sumLaneEstimatedHours(cards), [cards]);
+
+
   return (
     <div
       ref={laneSetNodeRef}
@@ -1099,7 +1106,17 @@ function LaneColumn({
           </>
         ) : (
           <>
-            <h3 className="text-sm font-semibold flex-1 truncate">{title}</h3>
+            <h3 className="text-sm font-semibold truncate">{title}</h3>
+            {plannedHours > 0 && (
+              <span
+                className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground"
+                title="Horas planejadas nesta fila"
+              >
+                {formatHoursCompact(plannedHours)}
+              </span>
+            )}
+            <span className="flex-1" />
+
             <Badge variant="outline" className="h-5">
               {cards.length}
             </Badge>
