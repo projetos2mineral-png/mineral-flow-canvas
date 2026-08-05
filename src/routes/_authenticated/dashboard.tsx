@@ -1451,68 +1451,66 @@ function ProjectCardView({
         dragging ? "shadow-lg" : "hover:shadow"
       )}
     >
-      <div className="flex items-start gap-2">
-        <GripVertical className="h-4 w-4 mt-0.5 text-muted-foreground/60 shrink-0" />
+      <div className="flex items-start gap-1.5">
+        <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 shrink-0" />
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-sm leading-snug line-clamp-3">{p.project_name}</div>
+          <div className="font-semibold text-[13px] leading-tight line-clamp-2 mb-1">{p.project_name}</div>
 
-          <div className="mt-2 space-y-1 text-xs">
-            <Row icon={<Building2 className="h-3.5 w-3.5" />}>{p.client_name ?? "Sem cliente"}</Row>
+          <div className="space-y-0.5 text-[11px]">
+            <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
           </div>
           {(totalTasks != null || estimatedHours != null) && (
-            <div className="mt-2 space-y-0.5 text-[11px] text-foreground/80">
+            <div className="mt-1 space-y-0 text-[10px] text-foreground/70">
               <div className="flex flex-wrap items-center gap-x-2">
-                {totalTasks != null && <span>📌 {totalTasks} tarefas</span>}
-                {estimatedHours != null && <span>⏱ {estimatedHours}h estimadas</span>}
+                {totalTasks != null && <span>📌 {totalTasks}</span>}
+                {estimatedHours != null && <span>⏱ {estimatedHours}h</span>}
               </div>
-              {sourceLabel && <div className="italic text-foreground/60">{sourceLabel}</div>}
+              {sourceLabel && <div className="italic text-[10px] text-foreground/50 truncate">{sourceLabel}</div>}
             </div>
           )}
           {card.review_status && card.review_status !== "não enviado" && (
-            <div className="mt-2 text-[11px] text-foreground/80 italic">
+            <div className="mt-1 text-[10px] text-foreground/70 italic truncate">
               {card.review_status === "aguardando revisão" &&
-                `Em revisão com ${card.review_requested_to ?? "—"}`}
+                `Revisão: ${card.review_requested_to ?? "—"}`}
               {card.review_status === "correção solicitada" && "Correção solicitada"}
-              {card.review_status === "aprovado" && "Aprovado pelo revisor"}
+              {card.review_status === "aprovado" && "Aprovado"}
             </div>
           )}
         </div>
       </div>
       <div
-        className="mt-3 pt-2 border-t border-black/10 dark:border-white/15 space-y-2"
+        className="mt-2 pt-1.5 border-t border-black/5 dark:border-white/10 flex flex-col gap-1.5"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <Select value={card.status} onValueChange={(v) => onStatusChange(card, v as CardStatus)}>
-          <SelectTrigger className="h-8 text-xs bg-white/70 dark:bg-black/30 dark:border-white/15 dark:text-neutral-100">
+          <SelectTrigger className="h-7 text-[11px] px-2 bg-white/50 dark:bg-black/20 dark:border-white/10 dark:text-neutral-200">
             <SelectValue>
-              <span className="inline-flex items-center gap-2">
-                <span className={cn("h-2 w-2 rounded-full", STATUS_DOT_CLASS[card.status])} />
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
                 {STATUS_LABEL[card.status]}
               </span>
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {selectableStatuses.map((s) => (
-              <SelectItem key={s} value={s}>
-                <span className="inline-flex items-center gap-2">
-                  <span className={cn("h-2 w-2 rounded-full", STATUS_DOT_CLASS[s])} />
+              <SelectItem key={s} value={s} className="text-[11px]">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[s])} />
                   {STATUS_LABEL[s]}
                 </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs flex-1 bg-white/70 dark:bg-black/30 dark:border-white/15 dark:text-neutral-100 dark:hover:bg-black/50"
-            onClick={() => onOpenCard(card)}
-          >
-            <MessageSquare className="h-3 w-3 mr-1" />
-            {hasNote ? "Ver detalhes" : "Detalhes"}
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 text-[10px] w-full justify-start px-2 text-muted-foreground hover:text-foreground"
+          onClick={() => onOpenCard(card)}
+        >
+          <MessageSquare className="h-3 w-3 mr-1.5" />
+          {hasNote ? "Ver detalhes" : "Detalhes"}
+        </Button>
       </div>
     </div>
   );
