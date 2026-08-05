@@ -1506,15 +1506,6 @@ function ProjectCardView({
             ))}
           </SelectContent>
         </Select>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 text-[10px] w-full justify-start px-2 text-muted-foreground hover:text-foreground"
-          onClick={() => onOpenCard(card)}
-        >
-          <MessageSquare className="h-3 w-3 mr-1.5" />
-          {hasNote ? "Ver detalhes" : "Detalhes"}
-        </Button>
       </div>
     </div>
   );
