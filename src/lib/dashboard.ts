@@ -507,6 +507,7 @@ export async function updateCard(
 
 export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {
   // Sequential updates to keep RLS happy without RPC
+  const now = new Date().toISOString();
   for (const u of updates) {
     const { error } = await (supabase as any)
       .from("dashboard_project_cards")
@@ -514,7 +515,9 @@ export async function bulkUpdateCardPositions(updates: { id: string; lane_id: st
         lane_id: u.lane_id,
         position: u.position,
         manually_positioned: true,
-        manually_positioned_at: new Date().toISOString(),
+        manually_positioned_at: now,
+        updated_by: u.updated_by,
+        updated_at: now,
       })
       .eq("id", u.id);
     if (error) throw error;
