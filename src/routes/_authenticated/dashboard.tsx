@@ -905,7 +905,9 @@ function AssigneeBoard({
               onStatusChange={handleStatusChange}
               onOpenCard={setOpenCard}
               isUnassigned
+              assigneeName={assignee}
             />
+
             <SortableContext
               id="lanes-horizontal"
               items={localLanes.map((l) => `laneItem:${l.id}`)}
