@@ -1072,7 +1072,8 @@ function LaneColumn({
       setCapacity(null);
       return;
     }
-    const isoMonth = monthlyTitleToDateISO(title) || title;
+    const isoMonth = monthlyTitleToDateISO(title);
+    if (!isoMonth) return;
     fetchUserCapacity(assigneeName, isoMonth).then((data) => {
       setCapacity(data?.capacity_hours ?? null);
     });
@@ -1098,7 +1099,8 @@ function LaneColumn({
       return;
     }
     try {
-      const isoMonth = monthlyTitleToDateISO(title) || title;
+      const isoMonth = monthlyTitleToDateISO(title);
+      if (!isoMonth) throw new Error("Título de fila inválido para capacidade");
       await upsertUserCapacity(assigneeName, isoMonth, hours);
       setCapacity(hours);
       setIsCapacityDialogOpen(false);
