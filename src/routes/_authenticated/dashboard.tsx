@@ -103,6 +103,8 @@ import {
 import { cn } from "@/lib/utils";
 import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
+import { monthlyTitleToDateISO } from "@/lib/dashboard";
+
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 

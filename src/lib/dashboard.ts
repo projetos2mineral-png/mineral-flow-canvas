@@ -171,6 +171,28 @@ const MONTH_NAMES_PT = [
 ] as const;
 
 /**
+ * Converte o título de uma fila (ex: "Agosto/2026") para o primeiro dia do mês em ISO (2026-08-01).
+ * Útil para salvar na coluna reference_month (tipo date).
+ */
+export function monthlyTitleToDateISO(title: string): string | null {
+  const parts = title.split("/");
+  if (parts.length !== 2) return null;
+  const monthName = parts[0].trim();
+  const year = parseInt(parts[1].trim(), 10);
+  if (isNaN(year)) return null;
+
+  const monthIndex = MONTH_NAMES_PT.findIndex(
+    (m) => m.toLowerCase() === monthName.toLowerCase()
+  );
+  if (monthIndex === -1) return null;
+
+  // monthIndex is 0-based, ISO month should be 1-based and padded
+  const monthStr = String(monthIndex + 1).padStart(2, "0");
+  return `${year}-${monthStr}-01`;
+}
+
+
+/**
  * Converte uma data ISO (YYYY-MM-DD) no padrão "Mês/AAAA" em pt-BR.
  * Ex.: 2026-06-19 → "Junho/2026".
  */
