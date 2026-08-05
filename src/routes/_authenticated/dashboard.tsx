@@ -1555,7 +1555,7 @@ function CardDetailsDialog({
           <ReadRow label="Responsável" value={p.assignee_name ?? "—"} />
           <ReadRow label="Time" value={p.team_name ?? "—"} />
           {card.card?.calculation_details && (
-            <ReadRow label="Origem da estimativa" value={estimateSourceLabel(card.card.calculation_details)} />
+            <ReadRow label="Origem da estimativa" value={estimateSourceLabel(card.card.calculation_details as any) || "—"} />
           )}
           <ReadRow
             label="Última sincronização"
