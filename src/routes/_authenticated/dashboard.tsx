@@ -1457,13 +1457,7 @@ function ProjectCardView({
           <div className="font-semibold text-sm leading-snug line-clamp-3">{p.project_name}</div>
 
           <div className="mt-2 space-y-1 text-xs">
-            <Row icon={<Building2 className="h-3.5 w-3.5" />}>{p.client_name ?? "Sem cliente"}</Row>
-            <Row icon={<FolderTree className="h-3.5 w-3.5" />}>{p.project_group_name ?? "Sem grupo"}</Row>
-            <Row icon={<UserCircle2 className="h-3.5 w-3.5" />}>{p.assignee_name ?? "Sem responsável"}</Row>
-            <Row icon={<Users className="h-3.5 w-3.5" />}>{p.team_name ?? "Sem time"}</Row>
-            <Row icon={<Clock className="h-3.5 w-3.5" />}>
-              {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
-            </Row>
+            {/* Removido Cliente, Grupo, Responsável, Time e Última Sincronização da frente do card */}
           </div>
           {(totalTasks != null || estimatedHours != null) && (
             <div className="mt-2 space-y-0.5 text-[11px] text-foreground/80">
@@ -1564,6 +1558,13 @@ function CardDetailsDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm">
           <ReadRow label="Cliente" value={p.client_name ?? "—"} />
+          <ReadRow label="Grupo" value={p.project_group_name ?? "—"} />
+          <ReadRow label="Responsável" value={p.assignee_name ?? "—"} />
+          <ReadRow label="Time" value={p.team_name ?? "—"} />
+          <ReadRow
+            label="Última sincronização"
+            value={p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
+          />
           <ReadRow label="Status" value={STATUS_LABEL[card.status]} />
           {card.updated_at && (
             <div className="pt-2 mt-2 border-t border-border/50">
