@@ -74,7 +74,12 @@ import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanD
 
 
 import { useCurrentDashboardUser } from "@/lib/auth";
-import { ensureDefaultMonthlyLanes, dedupeMonthlyLanes, isMonthlyLaneTitle } from "@/lib/dashboard";
+import {
+  ensureDefaultMonthlyLanes,
+  dedupeMonthlyLanes,
+  isMonthlyLaneTitle,
+  estimateSourceLabel,
+} from "@/lib/dashboard";
 import { Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
