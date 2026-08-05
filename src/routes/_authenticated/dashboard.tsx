@@ -1106,7 +1106,17 @@ function LaneColumn({
           </>
         ) : (
           <>
-            <h3 className="text-sm font-semibold flex-1 truncate">{title}</h3>
+            <h3 className="text-sm font-semibold truncate">{title}</h3>
+            {plannedHours > 0 && (
+              <span
+                className="shrink-0 text-[11px] font-medium tabular-nums text-muted-foreground"
+                title="Horas planejadas nesta fila"
+              >
+                {formatHoursCompact(plannedHours)}
+              </span>
+            )}
+            <span className="flex-1" />
+
             <Badge variant="outline" className="h-5">
               {cards.length}
             </Badge>
