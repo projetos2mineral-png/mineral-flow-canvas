@@ -92,6 +92,8 @@ export type ProjectCardRow = {
   total_tasks?: number | null;
   total_estimated_hours?: number | null;
   calculation_details?: CalculationDetails | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
 };
 
 /**
@@ -210,7 +212,7 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
     const { data, error } = await (supabase as any)
       .from("dashboard_cards_with_estimates")
       .select(
-        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned,total_tasks,total_estimated_hours,calculation_details"
+        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned,total_tasks,total_estimated_hours,calculation_details,updated_by,updated_at"
       )
       .range(from, to);
 
@@ -266,12 +268,14 @@ export async function upsertCard(input: {
   review_requested_to?: string | null;
   correction_note?: string | null;
   manually_positioned?: boolean;
+  updated_by?: string | null;
+  updated_at?: string | null;
 }): Promise<ProjectCardRow> {
   // Try to find existing
   const { data: existing, error: e1 } = await (supabase as any)
     .from("dashboard_project_cards")
     .select(
-      "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note"
+      "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,updated_by,updated_at"
     )
     .eq("runrunit_project_id", input.runrunit_project_id)
     .eq("assignee_name", input.assignee_name)
@@ -288,18 +292,19 @@ export async function upsertCard(input: {
     if (input.review_requested_by !== undefined) patch.review_requested_by = input.review_requested_by;
     if (input.review_requested_to !== undefined) patch.review_requested_to = input.review_requested_to;
     if (input.correction_note !== undefined) patch.correction_note = input.correction_note;
+    if (input.updated_by !== undefined) patch.updated_by = input.updated_by;
     if (input.manually_positioned !== undefined) {
       patch.manually_positioned = input.manually_positioned;
       patch.manually_positioned_at = input.manually_positioned ? new Date().toISOString() : null;
     }
     if (Object.keys(patch).length === 0) return existing as ProjectCardRow;
-    patch.updated_at = new Date().toISOString();
+    patch.updated_at = input.updated_at || new Date().toISOString();
     const { data, error } = await (supabase as any)
       .from("dashboard_project_cards")
       .update(patch)
       .eq("id", (existing as any).id)
       .select(
-        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note"
+        "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,updated_by,updated_at"
       )
       .single();
     if (error) throw error;
@@ -321,9 +326,11 @@ export async function upsertCard(input: {
       correction_note: input.correction_note ?? null,
       manually_positioned: input.manually_positioned ?? false,
       manually_positioned_at: input.manually_positioned ? new Date().toISOString() : null,
+      updated_by: input.updated_by ?? null,
+      updated_at: input.updated_at ?? new Date().toISOString(),
     })
     .select(
-      "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note"
+      "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,updated_by,updated_at"
     )
     .single();
   if (error) throw error;
@@ -488,17 +495,19 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
 
 export async function updateCard(
   id: string,
-  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position">>
+  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at">>
 ) {
+  const fullPatch = { ...patch, updated_at: patch.updated_at || new Date().toISOString() };
   const { error } = await (supabase as any)
     .from("dashboard_project_cards")
-    .update(patch)
+    .update(fullPatch)
     .eq("id", id);
   if (error) throw error;
 }
 
-export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number }[]) {
+export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {
   // Sequential updates to keep RLS happy without RPC
+  const now = new Date().toISOString();
   for (const u of updates) {
     const { error } = await (supabase as any)
       .from("dashboard_project_cards")
@@ -506,7 +515,9 @@ export async function bulkUpdateCardPositions(updates: { id: string; lane_id: st
         lane_id: u.lane_id,
         position: u.position,
         manually_positioned: true,
-        manually_positioned_at: new Date().toISOString(),
+        manually_positioned_at: now,
+        updated_by: u.updated_by,
+        updated_at: now,
       })
       .eq("id", u.id);
     if (error) throw error;
