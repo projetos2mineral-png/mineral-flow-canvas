@@ -1181,12 +1181,13 @@ function LaneColumn({
                 >
                   <div className="flex items-center gap-1.5">
                     {dragHandleProps && (
-                      <div 
-                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors"
+                      <button 
+                        type="button"
+                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
                         {...dragHandleProps}
                       >
                         <GripHorizontal className="h-3.5 w-3.5" />
-                      </div>
+                      </button>
                     )}
                     <h3 className="text-sm font-semibold truncate">
                       {title}
