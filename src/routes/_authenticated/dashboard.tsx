@@ -1314,6 +1314,15 @@ function ProjectCardView({
               {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
             </Row>
           </div>
+          {(totalTasks != null || estimatedHours != null) && (
+            <div className="mt-2 space-y-0.5 text-[11px] text-foreground/80">
+              <div className="flex flex-wrap items-center gap-x-2">
+                {totalTasks != null && <span>📌 {totalTasks} tarefas</span>}
+                {estimatedHours != null && <span>⏱ {estimatedHours}h estimadas</span>}
+              </div>
+              {sourceLabel && <div className="italic text-foreground/60">{sourceLabel}</div>}
+            </div>
+          )}
           {card.review_status && card.review_status !== "não enviado" && (
             <div className="mt-2 text-[11px] text-foreground/80 italic">
               {card.review_status === "aguardando revisão" &&
