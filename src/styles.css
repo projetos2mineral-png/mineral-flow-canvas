@@ -145,3 +145,11 @@
     color: var(--color-foreground);
   }
 }
+
+@layer utilities {
+  #lovable-badge, 
+  .lovable-badge,
+  [data-lovable-badge] {
+    display: none !important;
+  }
+}
