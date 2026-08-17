@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download } from "lucide-react";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAllRunrunitProjects,
+  fetchAllProjectPeople,
   setProjectTracking,
   setProjectsTrackingBulk,
   ignoreNewCandidate,
@@ -15,6 +16,7 @@ import {
   reallocateAllTrackedProjects,
   type RunrunitProject,
 } from "@/lib/projects";
+import { exportProjectsToExcel } from "@/lib/export-projects";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -71,6 +73,11 @@ function SelecionarProjetosPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"],
     queryFn: () => fetchAllRunrunitProjects({ ascending: sortAsc }),
+    staleTime: 60_000,
+  });
+  const { data: peopleData } = useQuery({
+    queryKey: ["runrunit_project_people"],
+    queryFn: fetchAllProjectPeople,
     staleTime: 60_000,
   });
 
@@ -188,6 +195,20 @@ function SelecionarProjetosPage() {
       }
       return next;
     });
+  };
+
+  const handleExportExcel = () => {
+    try {
+      if (filtered.length === 0) {
+        toast.info("Nenhum projeto para exportar com os filtros atuais");
+        return;
+      }
+      exportProjectsToExcel(filtered, peopleData ?? []);
+      toast.success(`${filtered.length} projeto(s) exportado(s)`);
+    } catch (e) {
+      console.error("handleExportExcel error:", e);
+      toast.error("Falha ao exportar Excel: " + (e as Error).message);
+    }
   };
 
   const toggleOne = (id: number, checked: boolean) => {
@@ -379,6 +400,15 @@ function SelecionarProjetosPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportExcel}
+            disabled={filtered.length === 0}
+            title="Exportar projetos filtrados para Excel"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Exportar Excel
+          </Button>
           <Button
             variant="outline"
             onClick={handleDiscover}
