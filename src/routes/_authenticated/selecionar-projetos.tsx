@@ -296,7 +296,7 @@ function SelecionarProjetosPage() {
         toast.success("Projeto removido do dashboard");
       }
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
     } catch (e) {
       qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
         (prev ?? []).map((p) =>
