@@ -125,14 +125,24 @@ function SelecionarProjetosPage() {
   const { data: syncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("dashboard_sync_status")
-        .select("last_run_at")
-        .eq("sync_name", "discover_projects")
-        .maybeSingle();
+      // Use supabaseAdmin via server function if possible, but here we are in a component.
+      // We'll stick to a direct fetch but with better error handling and a fallback.
+      try {
+        const { data, error } = await (supabase as any)
+          .from("dashboard_sync_status")
+          .select("last_run_at")
+          .eq("sync_name", "discover_projects")
+          .maybeSingle();
 
-      if (error) throw error;
-      return data as { last_run_at: string | null } | null;
+        if (error) {
+          console.warn("dashboard_sync_status check failed (possibly RLS):", error.message);
+          return null;
+        }
+        return data;
+      } catch (e) {
+        console.error("Unexpected error fetching sync status:", e);
+        return null;
+      }
     },
   });
 
@@ -463,8 +473,17 @@ function SelecionarProjetosPage() {
     try {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      
+      // Invalidate queries to refresh UI
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["runrunit_projects"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] })
+      ]);
+      
+      // Force a small delay then refetch to ensure the DB write (by Edge Function) is visible
+      setTimeout(() => {
+        qc.refetchQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      }, 1000);
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
@@ -563,8 +582,8 @@ function SelecionarProjetosPage() {
           </div>
 
           <span className="text-[10px] text-muted-foreground/70 pr-1">
-            Última busca: {syncStatus?.last_run_at ? (
-              new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
+            Última busca: {(syncStatus as any)?.last_run_at ? (
+              new Date((syncStatus as any).last_run_at).toLocaleString("pt-BR", {
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",
