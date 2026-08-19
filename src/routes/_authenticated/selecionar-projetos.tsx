@@ -473,7 +473,7 @@ function SelecionarProjetosPage() {
         </div>
 
         <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -514,7 +514,7 @@ function SelecionarProjetosPage() {
             </DropdownMenu>
           </div>
 
-          <span className="text-[10px] text-muted-foreground/70">
+          <span className="text-[10px] text-muted-foreground/70 pr-1">
             Última busca geral: {syncStatus?.last_run_at 
               ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
                   day: '2-digit',
