@@ -557,6 +557,35 @@ function SelecionarProjetosPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isIgnoreAllModalOpen} onOpenChange={setIsIgnoreAllModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Ignorar todos os novos projetos?</DialogTitle>
+            <DialogDescription>
+              Isso marcará todos os projetos atualmente identificados como novos como ignorados. 
+              Eles continuarão disponíveis na lista e poderão ser ativados posteriormente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsIgnoreAllModalOpen(false)}
+              disabled={ignoreAllLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleIgnoreAllNew}
+              disabled={ignoreAllLoading}
+            >
+              {ignoreAllLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Ignorar todos
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {newCandidates.length > 0 && (
         <div className="rounded-lg border border-border bg-card">
           <button
