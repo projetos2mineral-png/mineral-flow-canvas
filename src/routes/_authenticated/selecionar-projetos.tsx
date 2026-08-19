@@ -125,14 +125,17 @@ function SelecionarProjetosPage() {
   const { data: syncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("dashboard_sync_status")
         .select("last_run_at")
         .eq("sync_name", "discover_projects")
         .maybeSingle();
 
-      if (error) throw error;
-      return data as { last_run_at: string | null } | null;
+      if (error) {
+        console.error("Erro ao buscar dashboard_sync_status:", error);
+        throw error;
+      }
+      return data;
     },
   });
 
