@@ -126,7 +126,7 @@ function SelecionarProjetosPage() {
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from("dashboard_sync_status")
           .select("last_run_at")
           .eq("sync_name", "discover_projects")
@@ -480,8 +480,8 @@ function SelecionarProjetosPage() {
       // 2. Refetch explícito e aguarda o resultado real do banco
       const { data: updatedStatus } = await refetchSyncStatus();
       
-      if (updatedStatus?.last_run_at) {
-        console.log("Status atualizado após busca:", updatedStatus.last_run_at);
+      if ((updatedStatus as any)?.last_run_at) {
+        console.log("Status atualizado após busca:", (updatedStatus as any).last_run_at);
       }
     } catch (e) {
       console.error("handleDiscover error:", e);
