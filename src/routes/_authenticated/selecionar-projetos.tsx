@@ -127,11 +127,11 @@ function SelecionarProjetosPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("dashboard_sync_status")
-        .select("last_run_at")
+        .select("last_run_at, sync_source")
         .eq("sync_name", "discover_projects")
         .maybeSingle();
       if (error) throw error;
-      return data as { last_run_at: string | null } | null;
+      return data as { last_run_at: string | null; sync_source: string | null } | null;
     },
   });
 
@@ -460,7 +460,7 @@ function SelecionarProjetosPage() {
   const handleDiscover = async () => {
     setDiscoverLoading(true);
     try {
-      await invokeDiscoverProjects();
+      await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
@@ -563,13 +563,13 @@ function SelecionarProjetosPage() {
 
           <span className="text-[10px] text-muted-foreground/70 pr-1">
             Última busca geral: {syncStatus?.last_run_at 
-              ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
+              ? `${new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
                   day: '2-digit',
                   month: '2-digit',
                   year: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit'
-                }).replace(',', ' às') 
+                }).replace(',', ' às')} · ${syncStatus.sync_source || "Automática"}`
               : "ainda não realizada"}
           </span>
         </div>
