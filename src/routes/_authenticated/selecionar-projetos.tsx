@@ -9,6 +9,7 @@ import {
   setProjectTracking,
   setProjectsTrackingBulk,
   ignoreNewCandidate,
+  ignoreAllNewCandidates,
   invokeSyncSingleProject,
   invokeDiscoverProjects,
   invokeSyncVisibleProjects,
@@ -43,6 +44,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -115,6 +118,8 @@ function SelecionarProjetosPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isIgnoreAllModalOpen, setIsIgnoreAllModalOpen] = useState(false);
+  const [ignoreAllLoading, setIgnoreAllLoading] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
 
