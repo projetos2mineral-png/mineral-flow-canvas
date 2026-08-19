@@ -462,7 +462,7 @@ function SelecionarProjetosPage() {
     try {
       await invokeDiscoverProjects();
       toast.success("Verificação de novos projetos concluída");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
     } catch (e) {
       console.error("handleDiscover error:", e);
