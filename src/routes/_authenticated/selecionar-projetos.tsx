@@ -473,8 +473,17 @@ function SelecionarProjetosPage() {
     try {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      
+      // Invalidate queries to refresh UI
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["runrunit_projects"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] })
+      ]);
+      
+      // Force a small delay then refetch to ensure the DB write (by Edge Function) is visible
+      setTimeout(() => {
+        qc.refetchQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      }, 1000);
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
