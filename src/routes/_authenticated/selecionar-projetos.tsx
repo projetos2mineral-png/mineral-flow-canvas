@@ -358,27 +358,25 @@ function SelecionarProjetosPage() {
     }
   };
 
-  const handleSyncTracked = async () => {
-    if (tasksLoading) return;
-    setTasksLoading(true);
+  const handleSyncSingleRow = async (project: RunrunitProject) => {
+    markBusy(project.runrunit_project_id, true);
     try {
-      await invokeSyncVisibleProjects(100);
-      try {
-        await reallocateAllTrackedProjects();
-      } catch (e) {
-        console.error("reallocateAllTrackedProjects error:", e);
-      }
-      toast.success("Projetos exibidos atualizados com sucesso.");
+      await invokeSyncSingleProject(project.runrunit_project_id);
+      await allocateProjectToMonthlyLanes(project.runrunit_project_id);
+      
+      toast.success(`Projeto "${project.name}" sincronizado`);
+      
+      // Atualiza o estado local para refletir a nova data de sincronização e outros dados
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["planning"] });
     } catch (e) {
-      console.error("handleSyncTracked error:", e);
-      toast.error("Falha ao atualizar projetos: " + (e as Error).message);
+      console.error("handleSyncSingleRow error:", e);
+      toast.error(`Falha ao sincronizar projeto: ${(e as Error).message}`);
     } finally {
-      setTasksLoading(false);
+      markBusy(project.runrunit_project_id, false);
     }
   };
+
 
   const limparFiltros = () => {
     setClient(ALL);
@@ -420,14 +418,6 @@ function SelecionarProjetosPage() {
               <Sparkles className="h-4 w-4" />
             )}
             Verificar novos projetos
-          </Button>
-          <Button onClick={handleSyncTracked} disabled={tasksLoading}>
-            {tasksLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Atualizar projetos exibidos
           </Button>
         </div>
       </div>
@@ -723,10 +713,21 @@ function SelecionarProjetosPage() {
                     : "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="inline-flex items-center gap-2 justify-end">
-                    {busyIds.has(p.runrunit_project_id) && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    )}
+                  <div className="inline-flex items-center gap-3 justify-end">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      disabled={busyIds.has(p.runrunit_project_id)}
+                      onClick={() => handleSyncSingleRow(p)}
+                      title="Sincronizar este projeto"
+                    >
+                      {busyIds.has(p.runrunit_project_id) ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      ) : (
+                        <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
                     <Switch
                       checked={!!p.is_tracking_enabled}
                       onCheckedChange={(v) => toggle(p, v)}
