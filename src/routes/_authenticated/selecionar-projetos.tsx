@@ -298,7 +298,7 @@ function SelecionarProjetosPage() {
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
     } catch (e) {
-      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+      qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
         (prev ?? []).map((p) =>
           p.runrunit_project_id === project.runrunit_project_id
             ? { ...p, is_tracking_enabled: !next }
