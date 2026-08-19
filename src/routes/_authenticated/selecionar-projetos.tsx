@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar } from "lucide-react";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar, MoreVertical, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAllRunrunitProjects,
@@ -28,6 +28,24 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -96,6 +114,7 @@ function SelecionarProjetosPage() {
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
 
@@ -125,6 +144,7 @@ function SelecionarProjetosPage() {
       setImportId("");
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      setIsImportModalOpen(false);
     } catch (e) {
       console.error("handleImportSingle error:", e);
       toast.error("Falha ao importar projeto: " + (e as Error).message);
@@ -410,66 +430,115 @@ function SelecionarProjetosPage() {
   };
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-end justify-between flex-wrap gap-3">
-        <div>
+    <div className="p-6 space-y-6">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Selecionar Projetos</h1>
-          <p className="text-sm text-muted-foreground">
-            {rows.length} projeto(s) disponíveis · {trackedCount} exibidos no dashboard
-            {newCandidates.length > 0 && ` · ${newCandidates.length} novo(s) encontrado(s)`}
-          </p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Última busca de projetos: {syncStatus?.last_run_at 
-              ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR") 
-              : "ainda não realizada"}
-          </p>
+          <div className="flex flex-col space-y-0.5">
+            <span className="text-sm font-medium">
+              {rows.length} {rows.length === 1 ? "projeto disponível" : "projetos disponíveis"}
+            </span>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{newCandidates.length} novos</span>
+              <span className="text-[10px] opacity-30">•</span>
+              <span>{trackedCount} no dashboard</span>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleDiscover}
-            disabled={discoverLoading}
-          >
-            {discoverLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Buscar novos projetos
-          </Button>
+
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="default"
+                    onClick={handleDiscover}
+                    disabled={discoverLoading}
+                    className="h-9 px-4 shadow-sm"
+                  >
+                    {discoverLoading ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 mr-2" />
+                    )}
+                    Buscar novos projetos
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    Última busca geral: {syncStatus?.last_run_at 
+                      ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR") 
+                      : "ainda não realizada"}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-1.5 text-muted-foreground hover:text-foreground cursor-help transition-colors">
+                    <Info className="h-4 w-4" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">
+                    Busca projetos abertos e com data desejada no Runrun.it.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
+                <Download className="mr-2 h-4 w-4" />
+                <span>Importar projeto por ID</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-3">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] text-muted-foreground">
-              Importar ou atualizar projeto específico (ID do Runrun.it)
-            </label>
-            <Input
-              value={importId}
-              onChange={(e) => setImportId(e.target.value.replace(/\D/g, ""))}
-              placeholder="Ex.: 123456"
-              className="h-9 w-[220px]"
-              inputMode="numeric"
-            />
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Importar projeto por ID</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                ID do projeto no Runrun.it
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  value={importId}
+                  onChange={(e) => setImportId(e.target.value.replace(/\D/g, ""))}
+                  placeholder="Ex.: 123456"
+                  className="flex-1"
+                  inputMode="numeric"
+                  autoFocus
+                  onKeyDown={(e) => e.key === "Enter" && importId && !importLoading && handleImportSingle()}
+                />
+                <Button 
+                  onClick={handleImportSingle} 
+                  disabled={importLoading || !importId}
+                >
+                  {importLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Importar"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Útil para projetos específicos que não foram encontrados na busca automática.
+              </p>
+            </div>
           </div>
-          <Button
-            onClick={handleImportSingle}
-            disabled={importLoading || !importId}
-            size="icon"
-            variant="outline"
-            title="Importar/atualizar projeto"
-            aria-label="Importar/atualizar projeto"
-          >
-            {importLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-          </Button>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
 
       {newCandidates.length > 0 && (
         <div className="rounded-lg border border-border bg-card">
