@@ -314,36 +314,62 @@ function SelecionarProjetosPage() {
   const bulkSet = async (value: boolean) => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
+
+    // 1. Atualização imediata do cache visual (Optimistic)
+    qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
+      (prev ?? []).map((p) =>
+        ids.includes(p.runrunit_project_id)
+          ? { ...p, is_tracking_enabled: value, is_new_candidate: value ? false : p.is_new_candidate }
+          : p
+      )
+    );
+
     try {
+      // 2. Persistência no banco (Bulk Update)
       await setProjectsTrackingBulk(ids, value);
-      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
-        (prev ?? []).map((p) =>
-          ids.includes(p.runrunit_project_id)
-            ? { ...p, is_tracking_enabled: value, is_new_candidate: value ? false : p.is_new_candidate }
-            : p
-        )
-      );
+      
+      // Se for ativação, processa sincronização
       if (value) {
-        // Trigger per-project sync for each one enabled
-        for (const id of ids) {
-          try {
-            await invokeSyncSingleProject(id);
-            await allocateProjectToMonthlyLanes(id);
-          } catch (e) {
-            console.error(`invokeSyncSingleProject (bulk ${id}) error:`, e);
-            toast.error(`Sincronização do projeto ${id} falhou: ` + (e as Error).message);
+        // Marcamos como ocupados para feedback visual individual se necessário
+        // Mas a ação em massa segue em background para não travar a UI
+        ids.forEach(id => markBusy(id, true));
+
+        // Processamento assíncrono das sincronizações para não bloquear
+        const processSync = async () => {
+          let failures = 0;
+          for (const id of ids) {
+            try {
+              await invokeSyncSingleProject(id);
+              await allocateProjectToMonthlyLanes(id);
+            } catch (e) {
+              console.error(`Falha na sincronização do projeto ${id}:`, e);
+              failures++;
+            } finally {
+              markBusy(id, false);
+            }
           }
-        }
+          
+          // Invalidação final para garantir consistência
+          qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+          qc.invalidateQueries({ queryKey: ["dashboard"] });
+          
+          if (failures > 0) {
+            toast.error(`${failures} projeto(s) tiveram problemas na sincronização, mas foram ativados.`);
+          }
+        };
+
+        processSync(); // Executa em background
+        toast.success(`${ids.length} projeto(s) sendo ativados e sincronizados...`);
+      } else {
+        toast.success(`${ids.length} projeto(s) removido(s) do dashboard`);
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       }
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
-      toast.success(
-        value
-          ? `${ids.length} projeto(s) exibido(s) no dashboard`
-          : `${ids.length} projeto(s) removido(s) do dashboard`
-      );
+      
       setSelected(new Set());
     } catch (e) {
+      // Reverter cache em caso de erro crítico no bulk update
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       toast.error("Falha na ação em massa: " + (e as Error).message);
     }
   };
