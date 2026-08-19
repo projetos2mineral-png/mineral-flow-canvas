@@ -1,29 +1,37 @@
-# Plano de Correção: Registro e Exibição da Última Busca Geral
+# Plano de Correção: Registro e Exibição da Última Busca Geral (Revisado)
 
-O objetivo deste plano é garantir que a busca manual de novos projetos atualize corretamente o registro de status e exiba a origem (Manual/Automática) na interface.
+O objetivo deste plano é garantir que a busca de novos projetos registre corretamente a data/hora e a origem (Manual/Automática) na tabela `dashboard_sync_status`.
 
-## 1. Banco de Dados
-Garantir que a tabela `dashboard_sync_status` possua a coluna `sync_source`. Como não identifiquei a migração que a criou, criarei uma nova migração defensiva.
+## 1. Investigação e Diagnóstico
+- **Estrutura Atual:** A tabela `dashboard_sync_status` existe, mas não possui a coluna `sync_source`. Ela contém as colunas `sync_name` (PK) e `last_run_at`.
+- **Edge Function:** Como o código da Edge Function `sync-runrunit-discover-projects` não está disponível no sistema de arquivos local para inspeção direta, e o usuário indicou que a busca manual **não** está atualizando a interface, a causa mais provável é que a função não esteja realizando o `upsert` no banco ou não esteja recebendo a permissão necessária.
+- **RLS:** Verifiquei que a tabela tem RLS ativo e não permite escrita pela role `anon`. O frontend não deve realizar o registro; a Edge Function (via `service_role`) deve ser a responsável.
 
-- **Arquivo:** `supabase/migrations/20260819000000_sync_status_source.sql`
-- **Conteúdo:**
-    - Criar a tabela `dashboard_sync_status` se não existir.
-    - Adicionar a coluna `sync_source` (TEXT) se não existir.
-    - Configurar RLS e permissões para permitir que usuários autenticados leiam e a Edge Function (service_role) atualize.
+## 2. Implementação do Banco de Dados
+Adicionaremos a coluna necessária via SQL Editor no Supabase (já que a ferramenta de migration direta não está disponível ou a tabela é gerenciada externamente).
+- **Ação:** Solicitar ao usuário ou executar via SQL Editor (se disponível no ambiente Lovable Cloud) o seguinte comando:
+  ```sql
+  ALTER TABLE public.dashboard_sync_status ADD COLUMN IF NOT EXISTS sync_source TEXT;
+  ```
 
-## 2. Backend (Edge Function / Lógica)
-Embora a Edge Function `sync-runrunit-discover-projects` seja opaca, o frontend já está enviando o parâmetro `{ source: "Manual" }`. Se a Edge Function não estiver atualizando o registro, adicionaremos um passo explícito no frontend após a conclusão da busca para garantir o registro correto.
+## 3. Lógica da Edge Function
+A Edge Function `sync-runrunit-discover-projects` deve ser atualizada para:
+1. Receber o parâmetro `source` (o frontend já envia "Manual").
+2. Ao concluir a descoberta com sucesso, executar:
+   ```sql
+   INSERT INTO public.dashboard_sync_status (sync_name, last_run_at, sync_source)
+   VALUES ('discover_projects', now(), source_parameter)
+   ON CONFLICT (sync_name) DO UPDATE 
+   SET last_run_at = EXCLUDED.last_run_at, 
+       sync_source = EXCLUDED.sync_source;
+   ```
 
-## 3. Frontend (Integração e UI)
-Corrigir a interface para atualizar imediatamente após a busca e exibir os dados corretamente.
-
+## 4. Frontend (Ajustes de UI)
 - **Arquivo:** `src/routes/_authenticated/selecionar-projetos.tsx`
-    - Adicionar uma chamada explícita para atualizar o `dashboard_sync_status` no banco após a execução bem-sucedida de `invokeDiscoverProjects` no `handleDiscover`.
-    - Garantir que a query do React Query seja invalidada e atualizada.
-    - Ajustar a formatação da exibição conforme solicitado.
+- **Alterações:**
+    - Atualizar a exibição para incluir a origem: `Última busca geral: {data} às {hora} · {sync_source}`.
+    - Manter a invalidação da query `dashboard_sync_status` após o sucesso da chamada da função no `handleDiscover`.
 
-## Detalhes Técnicos
-- **Tabela:** `public.dashboard_sync_status`
-- **Colunas:** `sync_name` (PK), `last_run_at`, `sync_source`.
-- **Valores Origem:** `"Manual"` e `"Automática"`.
-- **Fluxo Manual:** Clique → `invokeDiscoverProjects("Manual")` → Update `dashboard_sync_status` → Toast Sucesso → UI Refresh.
+## Resumo das Alterações
+- **Backend:** Adição de coluna e lógica de registro na Edge Function.
+- **Frontend:** Atualização da exibição de texto e gestão de cache.
