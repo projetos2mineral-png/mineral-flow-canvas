@@ -377,7 +377,7 @@ function SelecionarProjetosPage() {
       qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
         (prev ?? []).map((p) =>
           p.runrunit_project_id === project.runrunit_project_id
-            ? { ...p, is_new_candidate: false, is_tracking_enabled: false }
+            ? { ...p, is_new_candidate: false }
             : p
         )
       );
@@ -386,6 +386,21 @@ function SelecionarProjetosPage() {
       toast.error("Falha ao ignorar: " + (e as Error).message);
     } finally {
       markBusy(project.runrunit_project_id, false);
+    }
+  };
+
+  const handleIgnoreAllNew = async () => {
+    setIgnoreAllLoading(true);
+    try {
+      const count = newCandidates.length;
+      await ignoreAllNewCandidates();
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      toast.success(`${count} projetos marcados como ignorados.`);
+      setIsIgnoreAllModalOpen(false);
+    } catch (e) {
+      toast.error("Falha ao ignorar todos: " + (e as Error).message);
+    } finally {
+      setIgnoreAllLoading(false);
     }
   };
 
