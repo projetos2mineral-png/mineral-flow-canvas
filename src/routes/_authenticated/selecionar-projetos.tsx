@@ -569,7 +569,11 @@ function SelecionarProjetosPage() {
                   year: 'numeric',
                   hour: '2-digit',
                   minute: '2-digit'
-                }).replace(',', ' às')} · ${syncStatus.sync_source || "Automática"}`
+                }).replace(',', ' às')} · ${
+                  syncStatus.sync_source 
+                    ? (syncStatus.sync_source.toLowerCase() === 'manual' ? 'Manual' : 'Automática') 
+                    : "Automática"
+                }`
               : "ainda não realizada"}
           </span>
         </div>
