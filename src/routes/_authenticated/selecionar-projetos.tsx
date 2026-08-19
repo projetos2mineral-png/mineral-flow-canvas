@@ -448,7 +448,7 @@ function SelecionarProjetosPage() {
     try {
       const count = newCandidates.length;
       await ignoreAllNewCandidates();
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       toast.success(`${count} projetos marcados como vistos.`);
     } catch (e) {
       toast.error("Falha ao marcar como vistos: " + (e as Error).message);
