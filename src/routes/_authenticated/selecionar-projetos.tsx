@@ -464,7 +464,7 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
+      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
