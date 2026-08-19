@@ -146,7 +146,7 @@ function SelecionarProjetosPage() {
       await invokeSyncSingleProject(idNum);
       toast.success(`Projeto ${idNum} sincronizado`);
       setImportId("");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       setIsImportModalOpen(false);
     } catch (e) {
@@ -296,7 +296,7 @@ function SelecionarProjetosPage() {
         toast.success("Projeto removido do dashboard");
       }
       qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
     } catch (e) {
       qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
         (prev ?? []).map((p) =>
@@ -336,25 +336,46 @@ function SelecionarProjetosPage() {
 
         // Processamento assíncrono das sincronizações para não bloquear
         const processSync = async () => {
-          let failures = 0;
-          for (const id of ids) {
-            try {
-              await invokeSyncSingleProject(id);
-              await allocateProjectToMonthlyLanes(id);
-            } catch (e) {
-              console.error(`Falha na sincronização do projeto ${id}:`, e);
-              failures++;
-            } finally {
-              markBusy(id, false);
-            }
+          let failures: number[] = [];
+          
+          // Controle de concorrência: 3 por vez para não sobrecarregar
+          const concurrency = 3;
+          const chunks: number[][] = [];
+          for (let i = 0; i < ids.length; i += concurrency) {
+            chunks.push(ids.slice(i, i + concurrency));
+          }
+
+          for (const chunk of chunks) {
+            await Promise.all(
+              chunk.map(async (id) => {
+                try {
+                  await invokeSyncSingleProject(id);
+                  await allocateProjectToMonthlyLanes(id);
+                } catch (e) {
+                  console.error(`Falha na sincronização do projeto ${id}:`, e);
+                  failures.push(id);
+                } finally {
+                  markBusy(id, false);
+                }
+              })
+            );
           }
           
           // Invalidação final para garantir consistência
-          qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+          qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
           qc.invalidateQueries({ queryKey: ["dashboard"] });
           
-          if (failures > 0) {
-            toast.error(`${failures} projeto(s) tiveram problemas na sincronização, mas foram ativados.`);
+          const successCount = ids.length - failures.length;
+          if (failures.length > 0) {
+            toast.error(
+              `${successCount} projetos exibidos com sucesso. ${failures.length} apresentaram erro na sincronização.`,
+              {
+                description: `IDs com erro: ${failures.join(", ")}`,
+                duration: 6000,
+              }
+            );
+          } else {
+            toast.success(`${ids.length} projetos exibidos e sincronizados com sucesso.`);
           }
         };
 
@@ -363,13 +384,13 @@ function SelecionarProjetosPage() {
       } else {
         toast.success(`${ids.length} projeto(s) removido(s) do dashboard`);
         qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       }
       
       setSelected(new Set());
     } catch (e) {
       // Reverter cache em caso de erro crítico no bulk update
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       toast.error("Falha na ação em massa: " + (e as Error).message);
     }
   };
@@ -386,7 +407,7 @@ function SelecionarProjetosPage() {
         toast.error("Sincronização do projeto falhou: " + (e as Error).message);
       }
       toast.success("Projeto exibido no dashboard");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (e) {
       toast.error("Falha ao exibir projeto: " + (e as Error).message);
@@ -427,7 +448,7 @@ function SelecionarProjetosPage() {
     try {
       const count = newCandidates.length;
       await ignoreAllNewCandidates();
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       toast.success(`${count} projetos marcados como vistos.`);
     } catch (e) {
       toast.error("Falha ao marcar como vistos: " + (e as Error).message);
@@ -441,7 +462,7 @@ function SelecionarProjetosPage() {
     try {
       await invokeDiscoverProjects();
       toast.success("Verificação de novos projetos concluída");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
     } catch (e) {
       console.error("handleDiscover error:", e);
@@ -460,7 +481,7 @@ function SelecionarProjetosPage() {
       toast.success(`Projeto "${project.name}" sincronizado`);
       
       // Atualiza o estado local para refletir a nova data de sincronização e outros dados
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (e) {
       console.error("handleSyncSingleRow error:", e);
