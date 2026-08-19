@@ -162,9 +162,9 @@ export async function invokeSyncSingleProject(runrunit_project_id: number) {
   return data;
 }
 
-export async function invokeDiscoverProjects() {
+export async function invokeDiscoverProjects(source: "Manual" | "Automática" = "Automática") {
   const { data, error } = await supabase.functions.invoke("sync-runrunit-discover-projects", {
-    body: {},
+    body: { source },
   });
   if (error) throw await extractFunctionError(error, "sync-runrunit-discover-projects");
   return data;
