@@ -146,7 +146,7 @@ function SelecionarProjetosPage() {
       await invokeSyncSingleProject(idNum);
       toast.success(`Projeto ${idNum} sincronizado`);
       setImportId("");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       setIsImportModalOpen(false);
     } catch (e) {
