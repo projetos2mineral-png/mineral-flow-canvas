@@ -118,7 +118,6 @@ function SelecionarProjetosPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isIgnoreAllModalOpen, setIsIgnoreAllModalOpen] = useState(false);
   const [ignoreAllLoading, setIgnoreAllLoading] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
@@ -390,15 +389,22 @@ function SelecionarProjetosPage() {
   };
 
   const handleIgnoreAllNew = async () => {
+    if (newCandidates.length === 0) return;
+    
+    const confirmed = window.confirm(
+      `Marcar todos os ${newCandidates.length} novos projetos como vistos?\n\nOs projetos continuarão disponíveis na lista, mas deixarão de aparecer como novos.`
+    );
+    
+    if (!confirmed) return;
+
     setIgnoreAllLoading(true);
     try {
       const count = newCandidates.length;
       await ignoreAllNewCandidates();
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
-      toast.success(`${count} projetos marcados como ignorados.`);
-      setIsIgnoreAllModalOpen(false);
+      toast.success(`${count} projetos marcados como vistos.`);
     } catch (e) {
-      toast.error("Falha ao ignorar todos: " + (e as Error).message);
+      toast.error("Falha ao marcar como vistos: " + (e as Error).message);
     } finally {
       setIgnoreAllLoading(false);
     }
@@ -557,51 +563,36 @@ function SelecionarProjetosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isIgnoreAllModalOpen} onOpenChange={setIsIgnoreAllModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Ignorar todos os novos projetos?</DialogTitle>
-            <DialogDescription>
-              Isso marcará todos os projetos atualmente identificados como novos como ignorados. 
-              Eles continuarão disponíveis na lista e poderão ser ativados posteriormente.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setIsIgnoreAllModalOpen(false)}
-              disabled={ignoreAllLoading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleIgnoreAllNew}
-              disabled={ignoreAllLoading}
-            >
-              {ignoreAllLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Ignorar todos
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {newCandidates.length > 0 && (
         <div className="rounded-lg border border-border bg-card">
-          <button
-            type="button"
-            onClick={() => setNewOpen((v) => !v)}
-            className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-accent/40 transition-colors rounded-lg"
-          >
-            {newOpen ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <div className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-accent/40 transition-colors cursor-pointer group" onClick={() => setNewOpen((v) => !v)}>
+            <div className="flex items-center gap-2">
+              {newOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Novos projetos encontrados</span>
+              <Badge variant="secondary" className="ml-1">{newCandidates.length}</Badge>
+            </div>
+            {newOpen && newCandidates.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleIgnoreAllNew();
+                }}
+                disabled={ignoreAllLoading}
+                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground font-normal"
+              >
+                {ignoreAllLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                Marcar todos como vistos
+              </Button>
             )}
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Novos projetos encontrados</span>
-            <Badge variant="secondary" className="ml-1">{newCandidates.length}</Badge>
-          </button>
+          </div>
           {newOpen && (
             <div className="border-t border-border p-3 space-y-3">
               <div className="flex items-center gap-2">
