@@ -127,11 +127,11 @@ function SelecionarProjetosPage() {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("dashboard_sync_status")
-        .select("last_run_at")
+        .select("last_run_at, sync_source")
         .eq("sync_name", "discover_projects")
         .maybeSingle();
       if (error) throw error;
-      return data as { last_run_at: string | null } | null;
+      return data as { last_run_at: string | null; sync_source: string | null } | null;
     },
   });
 
