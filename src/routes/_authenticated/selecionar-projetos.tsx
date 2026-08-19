@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet } from "lucide-react";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAllRunrunitProjects,
@@ -38,6 +38,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { RequireLevel } from "@/components/RequireLevel";
+import { HierarchicalDateFilter } from "@/components/ui/hierarchical-date-filter";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/selecionar-projetos")({
   head: () => ({
@@ -87,6 +89,7 @@ function SelecionarProjetosPage() {
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [situation, setSituation] = useState<Situation>("all");
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -95,6 +98,19 @@ function SelecionarProjetosPage() {
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+
+  const { data: syncStatus } = useQuery({
+    queryKey: ["dashboard_sync_status", "discover_projects"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("dashboard_sync_status")
+        .select("last_run_at")
+        .eq("sync_name", "discover_projects")
+        .maybeSingle();
+      if (error) throw error;
+      return data as { last_run_at: string | null } | null;
+    },
+  });
 
   const handleImportSingle = async () => {
     const idNum = Number(importId.trim());
@@ -131,6 +147,7 @@ function SelecionarProjetosPage() {
 
   const clients = useMemo(() => uniqueSorted("client_name"), [rows]);
   const groups = useMemo(() => uniqueSorted("project_group_name"), [rows]);
+  const availableDates = useMemo(() => uniqueSorted("desired_delivery_date"), [rows]);
 
   const newCandidates = useMemo(
     () => rows.filter((r) => r.is_new_candidate === true && !r.is_tracking_enabled),
@@ -174,9 +191,12 @@ function SelecionarProjetosPage() {
         if (fromTs && t < fromTs) return false;
         if (toTs && t > toTs) return false;
       }
+      if (selectedDates.size > 0) {
+        if (!r.desired_delivery_date || !selectedDates.has(r.desired_delivery_date)) return false;
+      }
       return true;
     });
-  }, [rows, search, client, group, dateFrom, dateTo, situation]);
+  }, [rows, search, client, group, dateFrom, dateTo, situation, selectedDates]);
 
   const trackedCount = useMemo(
     () => rows.filter((r) => r.is_tracking_enabled).length,
@@ -350,6 +370,7 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects();
       toast.success("Verificação de novos projetos concluída");
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
@@ -385,6 +406,7 @@ function SelecionarProjetosPage() {
     setDateFrom("");
     setDateTo("");
     setSituation("all");
+    setSelectedDates(new Set());
   };
 
   return (
@@ -396,17 +418,13 @@ function SelecionarProjetosPage() {
             {rows.length} projeto(s) disponíveis · {trackedCount} exibidos no dashboard
             {newCandidates.length > 0 && ` · ${newCandidates.length} novo(s) encontrado(s)`}
           </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Última busca de projetos: {syncStatus?.last_run_at 
+              ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR") 
+              : "ainda não realizada"}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleExportExcel}
-            disabled={filtered.length === 0}
-            title="Exportar projetos filtrados para Excel"
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Exportar Excel
-          </Button>
           <Button
             variant="outline"
             onClick={handleDiscover}
@@ -417,7 +435,7 @@ function SelecionarProjetosPage() {
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Verificar novos projetos
+            Buscar novos projetos
           </Button>
         </div>
       </div>
@@ -581,7 +599,28 @@ function SelecionarProjetosPage() {
             className="h-9 w-[160px]"
           />
         </div>
-        {(client !== ALL || group !== ALL || search || dateFrom || dateTo || situation !== "all") && (
+        <div className="flex flex-col gap-1">
+          <label className="text-[11px] text-muted-foreground">Data desejada</label>
+          <HierarchicalDateFilter 
+            dates={availableDates}
+            selectedDates={selectedDates}
+            onChange={setSelectedDates}
+          />
+        </div>
+        <div className="flex items-end h-9">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportExcel}
+            disabled={filtered.length === 0}
+            title="Exportar projetos filtrados para Excel"
+            className="h-9"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Exportar Excel
+          </Button>
+        </div>
+        {(client !== ALL || group !== ALL || search || dateFrom || dateTo || situation !== "all" || selectedDates.size > 0) && (
           <button
             onClick={limparFiltros}
             className="text-sm px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
