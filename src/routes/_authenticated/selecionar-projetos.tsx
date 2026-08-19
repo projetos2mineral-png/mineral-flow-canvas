@@ -384,7 +384,7 @@ function SelecionarProjetosPage() {
       } else {
         toast.success(`${ids.length} projeto(s) removido(s) do dashboard`);
         qc.invalidateQueries({ queryKey: ["dashboard"] });
-        qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       }
       
       setSelected(new Set());
