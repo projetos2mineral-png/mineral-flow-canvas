@@ -118,7 +118,6 @@ function SelecionarProjetosPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isIgnoreAllModalOpen, setIsIgnoreAllModalOpen] = useState(false);
   const [ignoreAllLoading, setIgnoreAllLoading] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
@@ -390,15 +389,22 @@ function SelecionarProjetosPage() {
   };
 
   const handleIgnoreAllNew = async () => {
+    if (newCandidates.length === 0) return;
+    
+    const confirmed = window.confirm(
+      `Marcar todos os ${newCandidates.length} novos projetos como vistos?\n\nOs projetos continuarão disponíveis na lista, mas deixarão de aparecer como novos.`
+    );
+    
+    if (!confirmed) return;
+
     setIgnoreAllLoading(true);
     try {
       const count = newCandidates.length;
       await ignoreAllNewCandidates();
       qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
-      toast.success(`${count} projetos marcados como ignorados.`);
-      setIsIgnoreAllModalOpen(false);
+      toast.success(`${count} projetos marcados como vistos.`);
     } catch (e) {
-      toast.error("Falha ao ignorar todos: " + (e as Error).message);
+      toast.error("Falha ao marcar como vistos: " + (e as Error).message);
     } finally {
       setIgnoreAllLoading(false);
     }
