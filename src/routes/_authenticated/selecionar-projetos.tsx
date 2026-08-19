@@ -125,17 +125,24 @@ function SelecionarProjetosPage() {
   const { data: syncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("dashboard_sync_status")
-        .select("last_run_at")
-        .eq("sync_name", "discover_projects")
-        .maybeSingle();
+      // Use supabaseAdmin via server function if possible, but here we are in a component.
+      // We'll stick to a direct fetch but with better error handling and a fallback.
+      try {
+        const { data, error } = await (supabase as any)
+          .from("dashboard_sync_status")
+          .select("last_run_at")
+          .eq("sync_name", "discover_projects")
+          .maybeSingle();
 
-      if (error) {
-        console.error("Erro ao buscar dashboard_sync_status:", error);
+        if (error) {
+          console.warn("dashboard_sync_status check failed (possibly RLS):", error.message);
+          return null;
+        }
+        return data;
+      } catch (e) {
+        console.error("Unexpected error fetching sync status:", e);
         return null;
       }
-      return data;
     },
   });
 
