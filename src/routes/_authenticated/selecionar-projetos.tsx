@@ -126,7 +126,7 @@ function SelecionarProjetosPage() {
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from("dashboard_sync_status")
           .select("last_run_at")
           .eq("sync_name", "discover_projects")
