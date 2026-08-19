@@ -576,19 +576,20 @@ function SelecionarProjetosPage() {
           </div>
 
           <span className="text-[10px] text-muted-foreground/70 pr-1">
-            Última busca geral: {syncStatus?.last_run_at 
-              ? `${new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }).replace(',', ' às')}${
-                  syncStatus.sync_source 
-                    ? ` · ${syncStatus.sync_source}` 
-                    : ""
-                }`
-              : "ainda não realizada"}
+            Última busca geral: {syncStatus?.last_run_at ? (
+              <>
+                {new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }).replace(",", " às")}
+                {syncStatus.sync_source && ` · ${syncStatus.sync_source}`}
+              </>
+            ) : (
+              "ainda não realizada"
+            )}
           </span>
         </div>
       </div>
