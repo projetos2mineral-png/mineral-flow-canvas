@@ -407,7 +407,7 @@ function SelecionarProjetosPage() {
         toast.error("Sincronização do projeto falhou: " + (e as Error).message);
       }
       toast.success("Projeto exibido no dashboard");
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (e) {
       toast.error("Falha ao exibir projeto: " + (e as Error).message);
