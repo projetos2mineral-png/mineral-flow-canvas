@@ -125,27 +125,14 @@ function SelecionarProjetosPage() {
   const { data: syncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      // Tenta buscar com sync_source, mas falha graciosamente se a coluna ainda não existir
       const { data, error } = await (supabase as any)
         .from("dashboard_sync_status")
-        .select("last_run_at, sync_source")
+        .select("last_run_at")
         .eq("sync_name", "discover_projects")
         .maybeSingle();
 
-      if (error) {
-        // Se o erro for de coluna inexistente (42703), tenta buscar apenas last_run_at
-        if ((error as any).code === "42703") {
-          const { data: fallbackData, error: fallbackError } = await (supabase as any)
-            .from("dashboard_sync_status")
-            .select("last_run_at")
-            .eq("sync_name", "discover_projects")
-            .maybeSingle();
-          if (fallbackError) throw fallbackError;
-          return { ...(fallbackData || {}), sync_source: null } as { last_run_at: string | null; sync_source: string | null };
-        }
-        throw error;
-      }
-      return data as { last_run_at: string | null; sync_source: string | null } | null;
+      if (error) throw error;
+      return data as { last_run_at: string | null } | null;
     },
   });
 
@@ -477,7 +464,7 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status"] });
+      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
@@ -576,17 +563,14 @@ function SelecionarProjetosPage() {
           </div>
 
           <span className="text-[10px] text-muted-foreground/70 pr-1">
-            Última busca geral: {syncStatus?.last_run_at ? (
-              <>
-                {new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }).replace(",", " às")}
-                {syncStatus.sync_source && ` · ${syncStatus.sync_source}`}
-              </>
+            Última busca: {syncStatus?.last_run_at ? (
+              new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              }).replace(",", " às")
             ) : (
               "ainda não realizada"
             )}
