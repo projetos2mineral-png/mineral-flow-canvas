@@ -521,6 +521,20 @@ function SelecionarProjetosPage() {
 
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Importar projeto por ID</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -545,20 +559,6 @@ function SelecionarProjetosPage() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
-                  <Download className="mr-2 h-4 w-4" />
-                  <span>Importar projeto por ID</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
 
           <span className="text-[10px] text-muted-foreground/70 pr-1">
