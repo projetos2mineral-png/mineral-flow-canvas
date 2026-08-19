@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar, MoreVertical, Info } from "lucide-react";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAllRunrunitProjects,
@@ -446,9 +446,9 @@ function SelecionarProjetosPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <div className="flex items-center gap-1">
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -467,41 +467,38 @@ function SelecionarProjetosPage() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs">
-                    Última busca geral: {syncStatus?.last_run_at 
-                      ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR") 
-                      : "ainda não realizada"}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-              
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="p-1.5 text-muted-foreground hover:text-foreground cursor-help transition-colors">
-                    <Info className="h-4 w-4" />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs">
                     Busca projetos abertos e com data desejada no Runrun.it.
                   </p>
                 </TooltipContent>
               </Tooltip>
-            </div>
-          </TooltipProvider>
+            </TooltipProvider>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
-                <Download className="mr-2 h-4 w-4" />
-                <span>Importar projeto por ID</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
+                  <Download className="mr-2 h-4 w-4" />
+                  <span>Importar projeto por ID</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <span className="text-[10px] text-muted-foreground/70">
+            Última busca geral: {syncStatus?.last_run_at 
+              ? new Date(syncStatus.last_run_at).toLocaleString("pt-BR", {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }).replace(',', ' às') 
+              : "ainda não realizada"}
+          </span>
         </div>
       </div>
 
