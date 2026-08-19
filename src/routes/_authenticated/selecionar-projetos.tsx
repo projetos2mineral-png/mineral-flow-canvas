@@ -125,6 +125,7 @@ function SelecionarProjetosPage() {
   const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
+      console.log("[DEBUG] Buscando dashboard_sync_status...");
       try {
         const { data, error } = await (supabase as any)
           .from("dashboard_sync_status")
@@ -133,12 +134,13 @@ function SelecionarProjetosPage() {
           .maybeSingle();
 
         if (error) {
-          console.error("Erro ao buscar dashboard_sync_status:", error);
+          console.error("[DEBUG] Erro Supabase:", error);
           return null;
         }
+        console.log("[DEBUG] Resultado Supabase:", data);
         return data;
       } catch (e) {
-        console.error("Erro inesperado em syncStatus query:", e);
+        console.error("[DEBUG] Erro catch:", e);
         return null;
       }
     },
