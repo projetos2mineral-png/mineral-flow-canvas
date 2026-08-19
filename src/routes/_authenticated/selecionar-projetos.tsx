@@ -583,6 +583,7 @@ function SelecionarProjetosPage() {
           <span className="text-[10px] text-muted-foreground/70 pr-1">
             Última busca: {(syncStatus as any)?.last_run_at ? (
               new Date((syncStatus as any).last_run_at).toLocaleString("pt-BR", {
+                timeZone: "America/Sao_Paulo",
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",
