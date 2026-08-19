@@ -9,6 +9,7 @@ import {
   setProjectTracking,
   setProjectsTrackingBulk,
   ignoreNewCandidate,
+  ignoreAllNewCandidates,
   invokeSyncSingleProject,
   invokeDiscoverProjects,
   invokeSyncVisibleProjects,
@@ -43,6 +44,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -115,6 +118,8 @@ function SelecionarProjetosPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isIgnoreAllModalOpen, setIsIgnoreAllModalOpen] = useState(false);
+  const [ignoreAllLoading, setIgnoreAllLoading] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
 
@@ -372,7 +377,7 @@ function SelecionarProjetosPage() {
       qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
         (prev ?? []).map((p) =>
           p.runrunit_project_id === project.runrunit_project_id
-            ? { ...p, is_new_candidate: false, is_tracking_enabled: false }
+            ? { ...p, is_new_candidate: false }
             : p
         )
       );
@@ -381,6 +386,21 @@ function SelecionarProjetosPage() {
       toast.error("Falha ao ignorar: " + (e as Error).message);
     } finally {
       markBusy(project.runrunit_project_id, false);
+    }
+  };
+
+  const handleIgnoreAllNew = async () => {
+    setIgnoreAllLoading(true);
+    try {
+      const count = newCandidates.length;
+      await ignoreAllNewCandidates();
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      toast.success(`${count} projetos marcados como ignorados.`);
+      setIsIgnoreAllModalOpen(false);
+    } catch (e) {
+      toast.error("Falha ao ignorar todos: " + (e as Error).message);
+    } finally {
+      setIgnoreAllLoading(false);
     }
   };
 
@@ -534,6 +554,35 @@ function SelecionarProjetosPage() {
               </p>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isIgnoreAllModalOpen} onOpenChange={setIsIgnoreAllModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Ignorar todos os novos projetos?</DialogTitle>
+            <DialogDescription>
+              Isso marcará todos os projetos atualmente identificados como novos como ignorados. 
+              Eles continuarão disponíveis na lista e poderão ser ativados posteriormente.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setIsIgnoreAllModalOpen(false)}
+              disabled={ignoreAllLoading}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleIgnoreAllNew}
+              disabled={ignoreAllLoading}
+            >
+              {ignoreAllLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Ignorar todos
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

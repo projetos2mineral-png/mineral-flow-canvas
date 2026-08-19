@@ -110,8 +110,16 @@ export async function setProjectsTrackingBulk(
 export async function ignoreNewCandidate(runrunitProjectId: number) {
   const { error } = await (supabase as any)
     .from("runrunit_projects")
-    .update({ is_tracking_enabled: false, is_new_candidate: false })
+    .update({ is_new_candidate: false })
     .eq("runrunit_project_id", runrunitProjectId);
+  if (error) throw error;
+}
+
+export async function ignoreAllNewCandidates() {
+  const { error } = await (supabase as any)
+    .from("runrunit_projects")
+    .update({ is_new_candidate: false })
+    .eq("is_new_candidate", true);
   if (error) throw error;
 }
 
