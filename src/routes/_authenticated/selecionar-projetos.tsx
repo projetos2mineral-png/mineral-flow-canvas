@@ -474,15 +474,15 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       
-      // 1. Invalida imediatamente para limpar cache
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      // 1. Invalida as queries relacionadas
+      await qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       
-      // 2. Refetch explícito e imediato
-      await refetchSyncStatus();
+      // 2. Refetch explícito e aguarda o resultado real do banco
+      const { data: updatedStatus } = await refetchSyncStatus();
       
-      // 3. Fallback: Refetch adicional após pequeno intervalo caso o BD demore a persistir
-      setTimeout(() => refetchSyncStatus(), 2000);
+      if ((updatedStatus as any)?.last_run_at) {
+        console.log("Status atualizado após busca:", (updatedStatus as any).last_run_at);
+      }
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
