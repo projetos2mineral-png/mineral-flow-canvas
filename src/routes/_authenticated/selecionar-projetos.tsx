@@ -125,22 +125,20 @@ function SelecionarProjetosPage() {
   const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      console.log("[DEBUG] Buscando dashboard_sync_status...");
       try {
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .from("dashboard_sync_status")
           .select("last_run_at")
           .eq("sync_name", "discover_projects")
           .maybeSingle();
 
         if (error) {
-          console.error("[DEBUG] Erro Supabase:", error);
+          console.error("Erro ao buscar dashboard_sync_status:", error);
           return null;
         }
-        console.log("[DEBUG] Resultado Supabase:", data);
         return data;
       } catch (e) {
-        console.error("[DEBUG] Erro catch:", e);
+        console.error("Erro inesperado em syncStatus query:", e);
         return null;
       }
     },
@@ -476,15 +474,15 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       
-      // 1. Invalida imediatamente para limpar cache
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
-      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
+      // 1. Invalida as queries relacionadas
+      await qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
       
-      // 2. Refetch explícito e imediato
-      await refetchSyncStatus();
+      // 2. Refetch explícito e aguarda o resultado real do banco
+      const { data: updatedStatus } = await refetchSyncStatus();
       
-      // 3. Fallback: Refetch adicional após pequeno intervalo caso o BD demore a persistir
-      setTimeout(() => refetchSyncStatus(), 2000);
+      if (updatedStatus?.last_run_at) {
+        console.log("Status atualizado após busca:", updatedStatus.last_run_at);
+      }
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
