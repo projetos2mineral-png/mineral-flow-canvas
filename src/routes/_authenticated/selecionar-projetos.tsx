@@ -474,16 +474,15 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       
-      // Invalidate queries to refresh UI
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["runrunit_projects"] }),
-        qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] })
-      ]);
+      // 1. Invalida imediatamente para limpar cache
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
       
-      // Force a small delay then refetch to ensure the DB write (by Edge Function) is visible
-      setTimeout(() => {
-        qc.refetchQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
-      }, 1000);
+      // 2. Refetch explícito e imediato
+      await refetchSyncStatus();
+      
+      // 3. Fallback: Refetch adicional após pequeno intervalo caso o BD demore a persistir
+      setTimeout(() => refetchSyncStatus(), 2000);
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
