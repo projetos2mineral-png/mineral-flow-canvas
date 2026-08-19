@@ -122,11 +122,9 @@ function SelecionarProjetosPage() {
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
 
-  const { data: syncStatus } = useQuery({
+  const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
     queryFn: async () => {
-      // Use supabaseAdmin via server function if possible, but here we are in a component.
-      // We'll stick to a direct fetch but with better error handling and a fallback.
       try {
         const { data, error } = await (supabase as any)
           .from("dashboard_sync_status")
@@ -135,15 +133,17 @@ function SelecionarProjetosPage() {
           .maybeSingle();
 
         if (error) {
-          console.warn("dashboard_sync_status check failed (possibly RLS):", error.message);
+          console.error("Erro ao buscar dashboard_sync_status:", error);
           return null;
         }
         return data;
       } catch (e) {
-        console.error("Unexpected error fetching sync status:", e);
+        console.error("Erro inesperado em syncStatus query:", e);
         return null;
       }
     },
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const handleImportSingle = async () => {
@@ -474,16 +474,15 @@ function SelecionarProjetosPage() {
       await invokeDiscoverProjects("Manual");
       toast.success("Verificação de novos projetos concluída");
       
-      // Invalidate queries to refresh UI
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["runrunit_projects"] }),
-        qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] })
-      ]);
+      // 1. Invalida imediatamente para limpar cache
+      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
       
-      // Force a small delay then refetch to ensure the DB write (by Edge Function) is visible
-      setTimeout(() => {
-        qc.refetchQueries({ queryKey: ["dashboard_sync_status", "discover_projects"] });
-      }, 1000);
+      // 2. Refetch explícito e imediato
+      await refetchSyncStatus();
+      
+      // 3. Fallback: Refetch adicional após pequeno intervalo caso o BD demore a persistir
+      setTimeout(() => refetchSyncStatus(), 2000);
     } catch (e) {
       console.error("handleDiscover error:", e);
       toast.error("Falha ao verificar novos projetos: " + (e as Error).message);
@@ -584,6 +583,7 @@ function SelecionarProjetosPage() {
           <span className="text-[10px] text-muted-foreground/70 pr-1">
             Última busca: {(syncStatus as any)?.last_run_at ? (
               new Date((syncStatus as any).last_run_at).toLocaleString("pt-BR", {
+                timeZone: "America/Sao_Paulo",
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",
