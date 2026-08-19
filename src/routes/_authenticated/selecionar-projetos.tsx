@@ -481,7 +481,7 @@ function SelecionarProjetosPage() {
       toast.success(`Projeto "${project.name}" sincronizado`);
       
       // Atualiza o estado local para refletir a nova data de sincronização e outros dados
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (e) {
       console.error("handleSyncSingleRow error:", e);
