@@ -647,7 +647,7 @@ function SelecionarProjetosPage() {
                   )}
                 </button>
               </TableHead>
-              <TableHead>Última Sincronização</TableHead>
+              <TableHead>Última atualização</TableHead>
               <TableHead className="text-right">Exibir no Dashboard</TableHead>
             </TableRow>
           </TableHeader>
@@ -720,7 +720,7 @@ function SelecionarProjetosPage() {
                       className="h-8 w-8"
                       disabled={busyIds.has(p.runrunit_project_id)}
                       onClick={() => handleSyncSingleRow(p)}
-                      title="Sincronizar este projeto"
+                      title="Atualizar projeto"
                     >
                       {busyIds.has(p.runrunit_project_id) ? (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
