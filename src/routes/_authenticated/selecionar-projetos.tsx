@@ -390,7 +390,7 @@ function SelecionarProjetosPage() {
       setSelected(new Set());
     } catch (e) {
       // Reverter cache em caso de erro crítico no bulk update
-      qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       toast.error("Falha na ação em massa: " + (e as Error).message);
     }
   };
