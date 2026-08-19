@@ -399,7 +399,7 @@ function SelecionarProjetosPage() {
     markBusy(project.runrunit_project_id, true);
     try {
       await ignoreNewCandidate(project.runrunit_project_id);
-      qc.setQueryData<RunrunitProject[]>(["runrunit_projects"], (prev) =>
+      qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
         (prev ?? []).map((p) =>
           p.runrunit_project_id === project.runrunit_project_id
             ? { ...p, is_new_candidate: false }
