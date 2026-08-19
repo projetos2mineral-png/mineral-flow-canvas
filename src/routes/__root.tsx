@@ -14,9 +14,11 @@ import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthSession, signOut, useCurrentDashboardUser } from "@/lib/auth";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 function NotFoundComponent() {
   return (
@@ -136,7 +138,17 @@ function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const router = useRouter();
   const { user } = useAuthSession();
-  const { level, canUseCalendar, canSelectProjects, canManageUsers } = useCurrentDashboardUser();
+  const { me, level, canUseCalendar, canSelectProjects, canManageUsers } = useCurrentDashboardUser();
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return "Bom dia";
+    if (hour >= 12 && hour < 18) return "Boa tarde";
+    return "Boa noite";
+  }, []);
+
+  const displayName = me?.name || "usuário";
+
 
   // Avoid any server/client branch until hydration is complete so the first
   // client render always matches the SSR output.
@@ -286,22 +298,31 @@ function AppShell() {
               {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </button>
             {user && (
-              <>
-                <span className="text-xs text-muted-foreground hidden sm:inline">
-                  {user.email} · <span className="uppercase tracking-wide">{level}</span>
-                </span>
-                <button
-                  onClick={async () => {
-                    await signOut();
-                    router.navigate({ to: "/auth" });
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
-                  title="Sair"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sair
-                </button>
-              </>
+              <TooltipProvider>
+                <div className="flex items-center gap-2">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs text-muted-foreground cursor-default hover:text-foreground transition-colors">
+                        {greeting}, <span className="capitalize">{displayName}</span>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" align="end" className="bg-neutral-900 text-white border-none shadow-md">
+                      <p>Email: {user.email}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <button
+                    onClick={async () => {
+                      await signOut();
+                      router.navigate({ to: "/auth" });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    title="Sair"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </button>
+                </div>
+              </TooltipProvider>
             )}
           </div>
         </div>
