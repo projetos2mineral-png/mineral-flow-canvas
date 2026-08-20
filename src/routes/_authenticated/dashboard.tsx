@@ -1171,12 +1171,8 @@ function LaneColumn({
                 <div 
                   className="flex items-baseline justify-between w-full cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 transition-colors group relative"
                   onClick={() => {
-                    if (isMonthly) {
-                      setCapacityDraft(capacity?.toString() ?? "0");
-                      setIsCapacityDialogOpen(true);
-                    } else if (onRename) {
-                      setEditing(true);
-                    }
+                    setCapacityDraft(capacity?.toString() ?? "0");
+                    setIsCapacityDialogOpen(true);
                   }}
                 >
                   <div className="flex items-center gap-1.5 min-w-0 max-w-[60%]">
