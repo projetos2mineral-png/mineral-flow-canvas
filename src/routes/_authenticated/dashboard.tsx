@@ -980,6 +980,10 @@ function AssigneeBoard({
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                   onStatusChange={handleStatusChange}
                   onOpenCard={setOpenCard}
+                  fieldActivities={fieldsByLane.get(lane.id) ?? []}
+                  onEditField={handleEditField}
+                  onOpenParentCard={handleOpenParentCard}
+
                   onRename={async (newTitle) => {
                     try {
                       await updateLane(lane.id, { title: newTitle });
