@@ -1536,12 +1536,15 @@ function CardDetailsDialog({
   onClose,
   onSaveNote,
   onSendForReview,
+  onDeriveField,
 }: {
   card: DashboardCard | null;
   onClose: () => void;
   onSaveNote: (c: DashboardCard, note: string) => Promise<void>;
   onSendForReview: (c: DashboardCard) => void;
+  onDeriveField: (c: DashboardCard) => void;
 }) {
+
   const [note, setNote] = useState("");
   useEffect(() => {
     setNote(card?.internal_note ?? "");
