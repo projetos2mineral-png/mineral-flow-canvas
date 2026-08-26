@@ -1360,6 +1360,10 @@ function SortableLaneColumn(props: {
       laneStyle={style}
       isLaneDragging={isDragging}
       assigneeName={lane.assignee_name}
+      fieldActivities={props.fieldActivities}
+      onEditField={props.onEditField}
+      onOpenParentCard={props.onOpenParentCard}
+
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
