@@ -1363,6 +1363,9 @@ function DroppableLaneBody({
   onRequestCorrectionReview,
   onStatusChange,
   onOpenCard,
+  fieldActivities = [],
+  onEditField,
+  onOpenParentCard,
 }: {
   laneId: string;
   cards: DashboardCard[];
@@ -1372,6 +1375,9 @@ function DroppableLaneBody({
   onRequestCorrectionReview: (r: ReviewRow) => void;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `lane:${laneId}` });
   return (
@@ -1401,7 +1407,16 @@ function DroppableLaneBody({
           onOpenCard={onOpenCard}
         />
       ))}
-      {cards.length === 0 && reviews.length === 0 && (
+      {fieldActivities.map((f) => (
+        <FieldActivityCard
+          key={`field:${f.id}`}
+          activity={f}
+          parentName={projectNameById.get(f.runrunit_project_id) ?? `Projeto #${f.runrunit_project_id}`}
+          onEdit={() => onEditField?.(f)}
+          onOpenParent={onOpenParentCard ? () => onOpenParentCard(f) : undefined}
+        />
+      ))}
+      {cards.length === 0 && reviews.length === 0 && fieldActivities.length === 0 && (
         <div className="text-center text-xs text-muted-foreground py-6">
           Arraste cards para cá
         </div>
@@ -1409,6 +1424,7 @@ function DroppableLaneBody({
     </div>
   );
 }
+
 
 function SortableCard({
   card,
