@@ -1080,7 +1080,24 @@ function AssigneeBoard({
           setOpenCard(null);
           setReviewCard(c);
         }}
+        onDeriveField={(c) => {
+          setOpenCard(null);
+          handleDeriveField(c);
+        }}
       />
+
+      <FieldActivityDialog
+        open={fieldDialogOpen}
+        parent={fieldParent}
+        activity={editingField}
+        currentUserName={currentUserName}
+        onClose={() => {
+          setFieldDialogOpen(false);
+          setEditingField(null);
+        }}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["dashboard", "field_activities"] })}
+      />
+
 
       <SendForReviewDialog
         card={reviewCard}
