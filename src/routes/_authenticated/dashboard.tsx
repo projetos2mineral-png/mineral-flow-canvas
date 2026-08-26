@@ -525,7 +525,51 @@ function AssigneeBoard({
     return m;
   }, [items, localLanes]);
 
+  // ---- Ações de campo derivado ----
+  const handleDeriveField = (c: DashboardCard) => {
+    if (!c.card?.id) {
+      toast.error(
+        "Este post-it ainda não foi persistido. Mova-o para uma fila ou altere o status antes de derivar um campo."
+      );
+      return;
+    }
+    setEditingField(null);
+    setFieldParent({
+      card_id: c.card.id,
+      runrunit_project_id: c.runrunit_project_id,
+      assignee_name: c.assignee_name,
+      lane_id: c.lane_id,
+      project_name: c.project.project_name,
+      client_name: c.project.client_name,
+    });
+    setFieldDialogOpen(true);
+  };
+
+  const handleEditField = (f: FieldActivityRow) => {
+    const parentItem = items.find((i) => i.runrunit_project_id === f.runrunit_project_id) ?? null;
+    setEditingField(f);
+    setFieldParent({
+      card_id: f.parent_card_id,
+      runrunit_project_id: f.runrunit_project_id,
+      assignee_name: f.assignee_name,
+      lane_id: f.lane_id,
+      project_name: parentItem?.project.project_name ?? `Projeto #${f.runrunit_project_id}`,
+      client_name: parentItem?.project.client_name ?? null,
+    });
+    setFieldDialogOpen(true);
+  };
+
+  const handleOpenParentCard = (f: FieldActivityRow) => {
+    const parentItem = items.find((i) => i.runrunit_project_id === f.runrunit_project_id);
+    if (!parentItem) {
+      toast.info("O post-it de origem não está visível neste quadro.");
+      return;
+    }
+    setOpenCard(parentItem);
+  };
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
 
