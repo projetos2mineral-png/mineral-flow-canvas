@@ -1054,7 +1054,11 @@ function LaneColumn({
   laneStyle?: React.CSSProperties;
   isLaneDragging?: boolean;
   assigneeName: string;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
 }) {
+
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   useEffect(() => setDraft(title), [title]);
