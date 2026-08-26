@@ -1620,10 +1620,14 @@ function CardDetailsDialog({
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => onDeriveField(card)}>
+            <MapPin className="h-4 w-4" /> Derivar campo
+          </Button>
           <Button onClick={() => onSendForReview(card)} disabled={isAwaitingReview}>
             <Send className="h-4 w-4" /> {isAwaitingReview ? "Aguardando revisão" : "Enviar para revisão"}
           </Button>
         </DialogFooter>
+
       </DialogContent>
     </Dialog>
   );
