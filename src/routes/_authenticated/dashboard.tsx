@@ -1035,6 +1035,10 @@ function LaneColumn({
   laneStyle,
   isLaneDragging,
   assigneeName,
+  fieldActivities,
+  onEditField,
+  onOpenParentCard,
+
 }: {
   lane?: Lane;
   laneId: string;
