@@ -82,7 +82,17 @@ import {
   monthlyTitleToDateISO,
 } from "@/lib/dashboard";
 
-import { Eye } from "lucide-react";
+import { Eye, MapPin } from "lucide-react";
+import {
+  FieldActivityCard,
+  FieldActivityDialog,
+  type FieldParentContext,
+} from "@/components/dashboard/FieldActivity";
+import {
+  fetchFieldActivities,
+  type FieldActivityRow,
+} from "@/lib/field-activities";
+
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -424,6 +434,32 @@ function AssigneeBoard({
     return m;
   }, [reviews, localLanes]);
 
+  // ---- Atividades de campo derivadas de post-its existentes ----
+  const fieldsQ = useQuery({
+    queryKey: ["dashboard", "field_activities"],
+    queryFn: fetchFieldActivities,
+    staleTime: 30_000,
+  });
+  const fieldActivities = useMemo(
+    () => (fieldsQ.data ?? []).filter((f) => f.assignee_name === assignee),
+    [fieldsQ.data, assignee]
+  );
+  const fieldsByLane = useMemo(() => {
+    const m = new Map<string, FieldActivityRow[]>();
+    m.set(UNASSIGNED_LANE, []);
+    for (const l of localLanes) m.set(l.id, []);
+    for (const f of fieldActivities) {
+      const key = f.lane_id && m.has(f.lane_id) ? f.lane_id : UNASSIGNED_LANE;
+      m.get(key)!.push(f);
+    }
+    return m;
+  }, [fieldActivities, localLanes]);
+
+  const [fieldDialogOpen, setFieldDialogOpen] = useState(false);
+  const [fieldParent, setFieldParent] = useState<FieldParentContext | null>(null);
+  const [editingField, setEditingField] = useState<FieldActivityRow | null>(null);
+
+
   const hydrated: DashboardCard[] = useMemo(() => {
     const out: DashboardCard[] = [];
     for (const p of projectMap.values()) {
@@ -489,7 +525,51 @@ function AssigneeBoard({
     return m;
   }, [items, localLanes]);
 
+  // ---- Ações de campo derivado ----
+  const handleDeriveField = (c: DashboardCard) => {
+    if (!c.card?.id) {
+      toast.error(
+        "Este post-it ainda não foi persistido. Mova-o para uma fila ou altere o status antes de derivar um campo."
+      );
+      return;
+    }
+    setEditingField(null);
+    setFieldParent({
+      card_id: c.card.id,
+      runrunit_project_id: c.runrunit_project_id,
+      assignee_name: c.assignee_name,
+      lane_id: c.lane_id,
+      project_name: c.project.project_name,
+      client_name: c.project.client_name,
+    });
+    setFieldDialogOpen(true);
+  };
+
+  const handleEditField = (f: FieldActivityRow) => {
+    const parentItem = items.find((i) => i.runrunit_project_id === f.runrunit_project_id) ?? null;
+    setEditingField(f);
+    setFieldParent({
+      card_id: f.parent_card_id,
+      runrunit_project_id: f.runrunit_project_id,
+      assignee_name: f.assignee_name,
+      lane_id: f.lane_id,
+      project_name: parentItem?.project.project_name ?? `Projeto #${f.runrunit_project_id}`,
+      client_name: parentItem?.project.client_name ?? null,
+    });
+    setFieldDialogOpen(true);
+  };
+
+  const handleOpenParentCard = (f: FieldActivityRow) => {
+    const parentItem = items.find((i) => i.runrunit_project_id === f.runrunit_project_id);
+    if (!parentItem) {
+      toast.info("O post-it de origem não está visível neste quadro.");
+      return;
+    }
+    setOpenCard(parentItem);
+  };
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
 
@@ -920,6 +1000,10 @@ function AssigneeBoard({
               onRequestCorrectionReview={(r) => setCorrectionReview(r)}
               onStatusChange={handleStatusChange}
               onOpenCard={setOpenCard}
+              fieldActivities={fieldsByLane.get("__unassigned__") ?? []}
+              onEditField={handleEditField}
+              onOpenParentCard={handleOpenParentCard}
+
               isUnassigned
               assigneeName={assignee}
             />
@@ -940,6 +1024,10 @@ function AssigneeBoard({
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                   onStatusChange={handleStatusChange}
                   onOpenCard={setOpenCard}
+                  fieldActivities={fieldsByLane.get(lane.id) ?? []}
+                  onEditField={handleEditField}
+                  onOpenParentCard={handleOpenParentCard}
+
                   onRename={async (newTitle) => {
                     try {
                       await updateLane(lane.id, { title: newTitle });
@@ -992,7 +1080,24 @@ function AssigneeBoard({
           setOpenCard(null);
           setReviewCard(c);
         }}
+        onDeriveField={(c) => {
+          setOpenCard(null);
+          handleDeriveField(c);
+        }}
       />
+
+      <FieldActivityDialog
+        open={fieldDialogOpen}
+        parent={fieldParent}
+        activity={editingField}
+        currentUserName={currentUserName}
+        onClose={() => {
+          setFieldDialogOpen(false);
+          setEditingField(null);
+        }}
+        onSaved={() => qc.invalidateQueries({ queryKey: ["dashboard", "field_activities"] })}
+      />
+
 
       <SendForReviewDialog
         card={reviewCard}
@@ -1035,6 +1140,10 @@ function LaneColumn({
   laneStyle,
   isLaneDragging,
   assigneeName,
+  fieldActivities,
+  onEditField,
+  onOpenParentCard,
+
 }: {
   lane?: Lane;
   laneId: string;
@@ -1054,7 +1163,11 @@ function LaneColumn({
   laneStyle?: React.CSSProperties;
   isLaneDragging?: boolean;
   assigneeName: string;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
 }) {
+
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   useEffect(() => setDraft(title), [title]);
@@ -1294,6 +1407,10 @@ function LaneColumn({
           onRequestCorrectionReview={onRequestCorrectionReview}
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
+          fieldActivities={fieldActivities}
+          onEditField={onEditField}
+          onOpenParentCard={onOpenParentCard}
+
         />
       </SortableContext>
     </div>
@@ -1311,6 +1428,10 @@ function SortableLaneColumn(props: {
   onOpenCard: (c: DashboardCard) => void;
   onRename: (next: string) => void | Promise<void>;
   onDelete: () => void | Promise<void>;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
+
 }) {
   const { lane } = props;
   const {
@@ -1344,6 +1465,10 @@ function SortableLaneColumn(props: {
       laneStyle={style}
       isLaneDragging={isDragging}
       assigneeName={lane.assignee_name}
+      fieldActivities={props.fieldActivities}
+      onEditField={props.onEditField}
+      onOpenParentCard={props.onOpenParentCard}
+
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
@@ -1363,6 +1488,9 @@ function DroppableLaneBody({
   onRequestCorrectionReview,
   onStatusChange,
   onOpenCard,
+  fieldActivities = [],
+  onEditField,
+  onOpenParentCard,
 }: {
   laneId: string;
   cards: DashboardCard[];
@@ -1372,6 +1500,9 @@ function DroppableLaneBody({
   onRequestCorrectionReview: (r: ReviewRow) => void;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `lane:${laneId}` });
   return (
@@ -1401,7 +1532,16 @@ function DroppableLaneBody({
           onOpenCard={onOpenCard}
         />
       ))}
-      {cards.length === 0 && reviews.length === 0 && (
+      {fieldActivities.map((f) => (
+        <FieldActivityCard
+          key={`field:${f.id}`}
+          activity={f}
+          parentName={projectNameById.get(f.runrunit_project_id) ?? `Projeto #${f.runrunit_project_id}`}
+          onEdit={() => onEditField?.(f)}
+          onOpenParent={onOpenParentCard ? () => onOpenParentCard(f) : undefined}
+        />
+      ))}
+      {cards.length === 0 && reviews.length === 0 && fieldActivities.length === 0 && (
         <div className="text-center text-xs text-muted-foreground py-6">
           Arraste cards para cá
         </div>
@@ -1409,6 +1549,7 @@ function DroppableLaneBody({
     </div>
   );
 }
+
 
 function SortableCard({
   card,
@@ -1536,12 +1677,15 @@ function CardDetailsDialog({
   onClose,
   onSaveNote,
   onSendForReview,
+  onDeriveField,
 }: {
   card: DashboardCard | null;
   onClose: () => void;
   onSaveNote: (c: DashboardCard, note: string) => Promise<void>;
   onSendForReview: (c: DashboardCard) => void;
+  onDeriveField: (c: DashboardCard) => void;
 }) {
+
   const [note, setNote] = useState("");
   useEffect(() => {
     setNote(card?.internal_note ?? "");
@@ -1620,10 +1764,14 @@ function CardDetailsDialog({
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+          <Button variant="outline" onClick={() => onDeriveField(card)}>
+            <MapPin className="h-4 w-4" /> Derivar campo
+          </Button>
           <Button onClick={() => onSendForReview(card)} disabled={isAwaitingReview}>
             <Send className="h-4 w-4" /> {isAwaitingReview ? "Aguardando revisão" : "Enviar para revisão"}
           </Button>
         </DialogFooter>
+
       </DialogContent>
     </Dialog>
   );
