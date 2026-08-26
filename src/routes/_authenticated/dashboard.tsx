@@ -1294,6 +1294,10 @@ function LaneColumn({
           onRequestCorrectionReview={onRequestCorrectionReview}
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
+          fieldActivities={fieldActivities}
+          onEditField={onEditField}
+          onOpenParentCard={onOpenParentCard}
+
         />
       </SortableContext>
     </div>
