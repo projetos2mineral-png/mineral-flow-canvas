@@ -956,6 +956,10 @@ function AssigneeBoard({
               onRequestCorrectionReview={(r) => setCorrectionReview(r)}
               onStatusChange={handleStatusChange}
               onOpenCard={setOpenCard}
+              fieldActivities={fieldsByLane.get("__unassigned__") ?? []}
+              onEditField={handleEditField}
+              onOpenParentCard={handleOpenParentCard}
+
               isUnassigned
               assigneeName={assignee}
             />
