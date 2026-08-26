@@ -82,7 +82,17 @@ import {
   monthlyTitleToDateISO,
 } from "@/lib/dashboard";
 
-import { Eye } from "lucide-react";
+import { Eye, MapPin } from "lucide-react";
+import {
+  FieldActivityCard,
+  FieldActivityDialog,
+  type FieldParentContext,
+} from "@/components/dashboard/FieldActivity";
+import {
+  fetchFieldActivities,
+  type FieldActivityRow,
+} from "@/lib/field-activities";
+
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
