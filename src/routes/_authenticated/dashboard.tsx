@@ -434,6 +434,32 @@ function AssigneeBoard({
     return m;
   }, [reviews, localLanes]);
 
+  // ---- Atividades de campo derivadas de post-its existentes ----
+  const fieldsQ = useQuery({
+    queryKey: ["dashboard", "field_activities"],
+    queryFn: fetchFieldActivities,
+    staleTime: 30_000,
+  });
+  const fieldActivities = useMemo(
+    () => (fieldsQ.data ?? []).filter((f) => f.assignee_name === assignee),
+    [fieldsQ.data, assignee]
+  );
+  const fieldsByLane = useMemo(() => {
+    const m = new Map<string, FieldActivityRow[]>();
+    m.set(UNASSIGNED_LANE, []);
+    for (const l of localLanes) m.set(l.id, []);
+    for (const f of fieldActivities) {
+      const key = f.lane_id && m.has(f.lane_id) ? f.lane_id : UNASSIGNED_LANE;
+      m.get(key)!.push(f);
+    }
+    return m;
+  }, [fieldActivities, localLanes]);
+
+  const [fieldDialogOpen, setFieldDialogOpen] = useState(false);
+  const [fieldParent, setFieldParent] = useState<FieldParentContext | null>(null);
+  const [editingField, setEditingField] = useState<FieldActivityRow | null>(null);
+
+
   const hydrated: DashboardCard[] = useMemo(() => {
     const out: DashboardCard[] = [];
     for (const p of projectMap.values()) {
