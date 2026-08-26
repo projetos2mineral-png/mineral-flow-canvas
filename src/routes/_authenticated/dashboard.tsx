@@ -1323,6 +1323,10 @@ function SortableLaneColumn(props: {
   onOpenCard: (c: DashboardCard) => void;
   onRename: (next: string) => void | Promise<void>;
   onDelete: () => void | Promise<void>;
+  fieldActivities?: FieldActivityRow[];
+  onEditField?: (f: FieldActivityRow) => void;
+  onOpenParentCard?: (f: FieldActivityRow) => void;
+
 }) {
   const { lane } = props;
   const {
