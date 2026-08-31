@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSelecionarProjetosRouteImport } from './routes/_authenticated/selecionar-projetos'
 import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authenticated/planejamento'
 import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_authenticated/gerenciar-usuarios'
+import { Route as AuthenticatedDemandasAvulsasRouteImport } from './routes/_authenticated/demandas-avulsas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -55,6 +56,12 @@ const AuthenticatedGerenciarUsuariosRoute =
     path: '/gerenciar-usuarios',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDemandasAvulsasRoute =
+  AuthenticatedDemandasAvulsasRouteImport.update({
+    id: '/demandas-avulsas',
+    path: '/demandas-avulsas',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -66,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
@@ -75,6 +83,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
@@ -86,6 +95,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/_authenticated/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/_authenticated/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/_authenticated/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/dashboard'
+    | '/demandas-avulsas'
     | '/gerenciar-usuarios'
     | '/planejamento'
     | '/selecionar-projetos'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/dashboard'
+    | '/demandas-avulsas'
     | '/gerenciar-usuarios'
     | '/planejamento'
     | '/selecionar-projetos'
@@ -116,6 +128,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/reset-password'
     | '/_authenticated/dashboard'
+    | '/_authenticated/demandas-avulsas'
     | '/_authenticated/gerenciar-usuarios'
     | '/_authenticated/planejamento'
     | '/_authenticated/selecionar-projetos'
@@ -179,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedGerenciarUsuariosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/demandas-avulsas': {
+      id: '/_authenticated/demandas-avulsas'
+      path: '/demandas-avulsas'
+      fullPath: '/demandas-avulsas'
+      preLoaderRoute: typeof AuthenticatedDemandasAvulsasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
@@ -191,6 +211,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedDemandasAvulsasRoute: typeof AuthenticatedDemandasAvulsasRoute
   AuthenticatedGerenciarUsuariosRoute: typeof AuthenticatedGerenciarUsuariosRoute
   AuthenticatedPlanejamentoRoute: typeof AuthenticatedPlanejamentoRoute
   AuthenticatedSelecionarProjetosRoute: typeof AuthenticatedSelecionarProjetosRoute
@@ -198,6 +219,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedDemandasAvulsasRoute: AuthenticatedDemandasAvulsasRoute,
   AuthenticatedGerenciarUsuariosRoute: AuthenticatedGerenciarUsuariosRoute,
   AuthenticatedPlanejamentoRoute: AuthenticatedPlanejamentoRoute,
   AuthenticatedSelecionarProjetosRoute: AuthenticatedSelecionarProjetosRoute,
