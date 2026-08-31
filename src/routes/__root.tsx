@@ -240,7 +240,9 @@ function AppShell() {
   ];
   if (canUseCalendar) {
     navItems.push({ to: "/planejamento", label: "Calendário", icon: CalendarDays });
+    navItems.push({ to: "/demandas-avulsas", label: "Demandas Avulsas", icon: ClipboardList });
   }
+
   if (canSelectProjects) {
     navItems.push({ to: "/selecionar-projetos", label: "Selecionar Projetos", icon: ListChecks });
   }
