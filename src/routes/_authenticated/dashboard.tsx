@@ -111,6 +111,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 
 import { supabase } from "@/integrations/supabase/client";
+import { fetchManualDemands } from "@/lib/manual-demands";
+import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
+import { DemandCardView } from "@/components/dashboard/DemandCardView";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
