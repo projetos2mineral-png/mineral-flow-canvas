@@ -443,6 +443,32 @@ function AssigneeBoard({
     return m;
   }, [reviews, localLanes]);
 
+  // Demandas Avulsas agrupadas pela fila mensal derivada de `desired_date`.
+  // Sem fila correspondente, o card cai em "Sem fila" (nunca some).
+  const demandsByLane = useMemo(() => {
+    const m = new Map<string, DemandBoardCard[]>();
+    m.set(UNASSIGNED_LANE, []);
+    for (const l of localLanes) m.set(l.id, []);
+    const laneIdByTitle = new Map(
+      localLanes.map((l) => [l.title.trim().toLowerCase(), l.id])
+    );
+    for (const d of demandCards) {
+      const laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
+      m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
+    }
+    for (const [, arr] of m) {
+      arr.sort((a, b) =>
+        a.demand.desired_date === b.demand.desired_date
+          ? a.demand.name.localeCompare(b.demand.name, "pt-BR")
+          : a.demand.desired_date < b.demand.desired_date
+            ? -1
+            : 1
+      );
+    }
+    return m;
+  }, [demandCards, localLanes]);
+
+
   const hydrated: DashboardCard[] = useMemo(() => {
     const out: DashboardCard[] = [];
     for (const p of projectMap.values()) {
