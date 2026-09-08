@@ -1069,6 +1069,7 @@ function LaneColumn({
   title,
   cards,
   reviews,
+  demands = [],
   projectNameById,
   onApproveReview,
   onRequestCorrectionReview,
