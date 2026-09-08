@@ -178,6 +178,12 @@ function DashboardPage() {
     queryFn: fetchReviews,
     staleTime: 30_000,
   });
+  // Demandas Avulsas: cards derivados em tempo real (nada é gravado como card).
+  const demandsQ = useQuery({
+    queryKey: ["manual-demands"],
+    queryFn: fetchManualDemands,
+    staleTime: 30_000,
+  });
 
   // Current logged-in user's display name (from dashboard_users)
   const [currentUserName, setCurrentUserName] = useState<string>("");
