@@ -378,6 +378,7 @@ function AssigneeBoard({
   lanes,
   cards,
   reviews,
+  demandCards = [],
   allLanes,
   reviewerOptions,
   currentUserName,
