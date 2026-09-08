@@ -981,6 +981,7 @@ function AssigneeBoard({
                   lane={lane}
                   cards={grouped.get(lane.id) ?? []}
                   reviews={reviewsByLane.get(lane.id) ?? []}
+                  demands={demandsByLane.get(lane.id) ?? []}
                   projectNameById={projectNameById}
                   onApproveReview={handleApproveReview}
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
