@@ -1131,7 +1131,14 @@ function LaneColumn({
 
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
-  const plannedHours = useMemo(() => sumLaneEstimatedHours(cards), [cards]);
+  // Demandas Avulsas somam apenas as horas INDIVIDUAIS do responsável desta
+  // fila — as horas nunca são divididas entre as pessoas da demanda.
+  const plannedHours = useMemo(
+    () =>
+      sumLaneEstimatedHours(cards) +
+      demands.reduce((acc, d) => acc + (Number(d.ownHours) || 0), 0),
+    [cards, demands]
+  );
 
   const capacitySummary = useMemo(() => ({
     plannedHours,
