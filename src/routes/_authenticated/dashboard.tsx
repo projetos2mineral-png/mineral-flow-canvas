@@ -960,6 +960,7 @@ function AssigneeBoard({
               title="Sem fila"
               cards={grouped.get("__unassigned__") ?? []}
               reviews={reviewsByLane.get("__unassigned__") ?? []}
+              demands={demandsByLane.get("__unassigned__") ?? []}
               projectNameById={projectNameById}
               onApproveReview={handleApproveReview}
               onRequestCorrectionReview={(r) => setCorrectionReview(r)}
