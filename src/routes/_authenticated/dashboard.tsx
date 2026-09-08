@@ -1391,6 +1391,7 @@ function SortableLaneColumn(props: {
       title={lane.title}
       cards={props.cards}
       reviews={props.reviews}
+      demands={props.demands}
       projectNameById={props.projectNameById}
       onApproveReview={props.onApproveReview}
       onRequestCorrectionReview={props.onRequestCorrectionReview}
