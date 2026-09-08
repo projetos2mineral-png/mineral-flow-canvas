@@ -391,6 +391,7 @@ function AssigneeBoard({
   lanes: Lane[];
   cards: ProjectCardRow[];
   reviews: ReviewRow[];
+  demandCards?: DemandBoardCard[];
   allLanes: Lane[];
   reviewerOptions: string[];
   currentUserName: string;
