@@ -203,11 +203,18 @@ function DashboardPage() {
   const users = usersQ.data ?? [];
   const reviews = reviewsQ.data ?? [];
 
+  // Cards de Demandas Avulsas visíveis, já resolvidos por responsável e mês.
+  const demandCards = useMemo(
+    () => buildDemandBoardCards(demandsQ.data ?? [], users),
+    [demandsQ.data, users]
+  );
+
   const assignees = useMemo(() => {
     const set = new Set<string>();
     for (const p of projects) set.add(p.assignee_name ?? UNASSIGNED);
+    for (const d of demandCards) set.add(d.assigneeName);
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [projects]);
+  }, [projects, demandCards]);
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
 
