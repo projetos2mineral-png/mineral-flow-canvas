@@ -356,6 +356,7 @@ function DashboardPage() {
                 lanes={lanes.filter((l) => l.assignee_name === a)}
                 cards={cards.filter((c) => c.assignee_name === a)}
                 reviews={reviews.filter((r) => r.reviewer_name === a && r.review_status === "aguardando revisão")}
+                demandCards={demandCards.filter((d) => d.assigneeName === a)}
                 allLanes={lanes}
                 reviewerOptions={reviewerOptions}
                 currentUserName={currentUserName}
