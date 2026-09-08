@@ -1345,6 +1345,7 @@ function LaneColumn({
           laneId={laneId}
           cards={cards}
           reviews={reviews}
+          demands={demands}
           projectNameById={projectNameById}
           onApproveReview={onApproveReview}
           onRequestCorrectionReview={onRequestCorrectionReview}
