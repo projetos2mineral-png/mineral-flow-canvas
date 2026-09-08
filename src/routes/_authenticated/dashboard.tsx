@@ -111,6 +111,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 
 import { supabase } from "@/integrations/supabase/client";
+import { fetchManualDemands } from "@/lib/manual-demands";
+import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
+import { DemandCardView } from "@/components/dashboard/DemandCardView";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -175,6 +178,12 @@ function DashboardPage() {
     queryFn: fetchReviews,
     staleTime: 30_000,
   });
+  // Demandas Avulsas: cards derivados em tempo real (nada é gravado como card).
+  const demandsQ = useQuery({
+    queryKey: ["manual-demands"],
+    queryFn: fetchManualDemands,
+    staleTime: 30_000,
+  });
 
   // Current logged-in user's display name (from dashboard_users)
   const [currentUserName, setCurrentUserName] = useState<string>("");
@@ -194,11 +203,18 @@ function DashboardPage() {
   const users = usersQ.data ?? [];
   const reviews = reviewsQ.data ?? [];
 
+  // Cards de Demandas Avulsas visíveis, já resolvidos por responsável e mês.
+  const demandCards = useMemo(
+    () => buildDemandBoardCards(demandsQ.data ?? [], users),
+    [demandsQ.data, users]
+  );
+
   const assignees = useMemo(() => {
     const set = new Set<string>();
     for (const p of projects) set.add(p.assignee_name ?? UNASSIGNED);
+    for (const d of demandCards) set.add(d.assigneeName);
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [projects]);
+  }, [projects, demandCards]);
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
 
@@ -340,6 +356,7 @@ function DashboardPage() {
                 lanes={lanes.filter((l) => l.assignee_name === a)}
                 cards={cards.filter((c) => c.assignee_name === a)}
                 reviews={reviews.filter((r) => r.reviewer_name === a && r.review_status === "aguardando revisão")}
+                demandCards={demandCards.filter((d) => d.assigneeName === a)}
                 allLanes={lanes}
                 reviewerOptions={reviewerOptions}
                 currentUserName={currentUserName}
@@ -361,6 +378,7 @@ function AssigneeBoard({
   lanes,
   cards,
   reviews,
+  demandCards = [],
   allLanes,
   reviewerOptions,
   currentUserName,
@@ -373,6 +391,7 @@ function AssigneeBoard({
   lanes: Lane[];
   cards: ProjectCardRow[];
   reviews: ReviewRow[];
+  demandCards?: DemandBoardCard[];
   allLanes: Lane[];
   reviewerOptions: string[];
   currentUserName: string;
@@ -423,6 +442,32 @@ function AssigneeBoard({
     }
     return m;
   }, [reviews, localLanes]);
+
+  // Demandas Avulsas agrupadas pela fila mensal derivada de `desired_date`.
+  // Sem fila correspondente, o card cai em "Sem fila" (nunca some).
+  const demandsByLane = useMemo(() => {
+    const m = new Map<string, DemandBoardCard[]>();
+    m.set(UNASSIGNED_LANE, []);
+    for (const l of localLanes) m.set(l.id, []);
+    const laneIdByTitle = new Map(
+      localLanes.map((l) => [l.title.trim().toLowerCase(), l.id])
+    );
+    for (const d of demandCards) {
+      const laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
+      m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
+    }
+    for (const [, arr] of m) {
+      arr.sort((a, b) =>
+        a.demand.desired_date === b.demand.desired_date
+          ? a.demand.name.localeCompare(b.demand.name, "pt-BR")
+          : a.demand.desired_date < b.demand.desired_date
+            ? -1
+            : 1
+      );
+    }
+    return m;
+  }, [demandCards, localLanes]);
+
 
   const hydrated: DashboardCard[] = useMemo(() => {
     const out: DashboardCard[] = [];
@@ -915,6 +960,7 @@ function AssigneeBoard({
               title="Sem fila"
               cards={grouped.get("__unassigned__") ?? []}
               reviews={reviewsByLane.get("__unassigned__") ?? []}
+              demands={demandsByLane.get("__unassigned__") ?? []}
               projectNameById={projectNameById}
               onApproveReview={handleApproveReview}
               onRequestCorrectionReview={(r) => setCorrectionReview(r)}
@@ -935,6 +981,7 @@ function AssigneeBoard({
                   lane={lane}
                   cards={grouped.get(lane.id) ?? []}
                   reviews={reviewsByLane.get(lane.id) ?? []}
+                  demands={demandsByLane.get(lane.id) ?? []}
                   projectNameById={projectNameById}
                   onApproveReview={handleApproveReview}
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
@@ -1022,6 +1069,7 @@ function LaneColumn({
   title,
   cards,
   reviews,
+  demands = [],
   projectNameById,
   onApproveReview,
   onRequestCorrectionReview,
@@ -1041,6 +1089,7 @@ function LaneColumn({
   title: string;
   cards: DashboardCard[];
   reviews: ReviewRow[];
+  demands?: DemandBoardCard[];
   projectNameById: Map<number, string>;
   onApproveReview: (r: ReviewRow) => void;
   onRequestCorrectionReview: (r: ReviewRow) => void;
@@ -1082,7 +1131,14 @@ function LaneColumn({
 
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
-  const plannedHours = useMemo(() => sumLaneEstimatedHours(cards), [cards]);
+  // Demandas Avulsas somam apenas as horas INDIVIDUAIS do responsável desta
+  // fila — as horas nunca são divididas entre as pessoas da demanda.
+  const plannedHours = useMemo(
+    () =>
+      sumLaneEstimatedHours(cards) +
+      demands.reduce((acc, d) => acc + (Number(d.ownHours) || 0), 0),
+    [cards, demands]
+  );
 
   const capacitySummary = useMemo(() => ({
     plannedHours,
@@ -1289,6 +1345,7 @@ function LaneColumn({
           laneId={laneId}
           cards={cards}
           reviews={reviews}
+          demands={demands}
           projectNameById={projectNameById}
           onApproveReview={onApproveReview}
           onRequestCorrectionReview={onRequestCorrectionReview}
@@ -1304,6 +1361,7 @@ function SortableLaneColumn(props: {
   lane: Lane;
   cards: DashboardCard[];
   reviews: ReviewRow[];
+  demands?: DemandBoardCard[];
   projectNameById: Map<number, string>;
   onApproveReview: (r: ReviewRow) => void;
   onRequestCorrectionReview: (r: ReviewRow) => void;
@@ -1333,6 +1391,7 @@ function SortableLaneColumn(props: {
       title={lane.title}
       cards={props.cards}
       reviews={props.reviews}
+      demands={props.demands}
       projectNameById={props.projectNameById}
       onApproveReview={props.onApproveReview}
       onRequestCorrectionReview={props.onRequestCorrectionReview}
