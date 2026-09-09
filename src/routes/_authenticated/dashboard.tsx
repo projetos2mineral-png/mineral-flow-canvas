@@ -1462,7 +1462,10 @@ function DroppableLaneBody({
           onOpenCard={onOpenCard}
         />
       ))}
-      {cards.length === 0 && reviews.length === 0 && (
+      {demands.map((d) => (
+        <DemandCardView key={d.key} card={d} />
+      ))}
+      {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
         <div className="text-center text-xs text-muted-foreground py-6">
           Arraste cards para cá
         </div>
