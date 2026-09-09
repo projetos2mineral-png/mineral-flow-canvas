@@ -1417,6 +1417,7 @@ function DroppableLaneBody({
   laneId,
   cards,
   reviews,
+  demands = [],
   projectNameById,
   onApproveReview,
   onRequestCorrectionReview,
