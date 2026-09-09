@@ -1427,6 +1427,7 @@ function DroppableLaneBody({
   laneId: string;
   cards: DashboardCard[];
   reviews: ReviewRow[];
+  demands?: DemandBoardCard[];
   projectNameById: Map<number, string>;
   onApproveReview: (r: ReviewRow) => void;
   onRequestCorrectionReview: (r: ReviewRow) => void;
