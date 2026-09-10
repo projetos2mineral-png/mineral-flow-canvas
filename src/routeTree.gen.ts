@@ -18,6 +18,7 @@ import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authent
 import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_authenticated/gerenciar-usuarios'
 import { Route as AuthenticatedDemandasAvulsasRouteImport } from './routes/_authenticated/demandas-avulsas'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCapacidadeRouteImport } from './routes/_authenticated/capacidade'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -67,11 +68,17 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCapacidadeRoute = AuthenticatedCapacidadeRouteImport.update({
+  id: '/capacidade',
+  path: '/capacidade',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/capacidade': typeof AuthenticatedCapacidadeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/capacidade': typeof AuthenticatedCapacidadeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/capacidade': typeof AuthenticatedCapacidadeRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/_authenticated/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/capacidade'
     | '/dashboard'
     | '/demandas-avulsas'
     | '/gerenciar-usuarios'
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/reset-password'
+    | '/capacidade'
     | '/dashboard'
     | '/demandas-avulsas'
     | '/gerenciar-usuarios'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/reset-password'
+    | '/_authenticated/capacidade'
     | '/_authenticated/dashboard'
     | '/_authenticated/demandas-avulsas'
     | '/_authenticated/gerenciar-usuarios'
@@ -206,10 +218,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/capacidade': {
+      id: '/_authenticated/capacidade'
+      path: '/capacidade'
+      fullPath: '/capacidade'
+      preLoaderRoute: typeof AuthenticatedCapacidadeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCapacidadeRoute: typeof AuthenticatedCapacidadeRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDemandasAvulsasRoute: typeof AuthenticatedDemandasAvulsasRoute
   AuthenticatedGerenciarUsuariosRoute: typeof AuthenticatedGerenciarUsuariosRoute
@@ -218,6 +238,7 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCapacidadeRoute: AuthenticatedCapacidadeRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDemandasAvulsasRoute: AuthenticatedDemandasAvulsasRoute,
   AuthenticatedGerenciarUsuariosRoute: AuthenticatedGerenciarUsuariosRoute,
