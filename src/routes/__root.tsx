@@ -237,7 +237,7 @@ function AppShell() {
     icon: typeof LayoutDashboard;
     badge?: boolean;
   }[] = [
-    { to: "/dashboard", label: "Painel Geral", icon: LayoutDashboard },
+    { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
   ];
   if (canUseCalendar) {
     navItems.push({ to: "/planejamento", label: "Calendário", icon: CalendarDays });
