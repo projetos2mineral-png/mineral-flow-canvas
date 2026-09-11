@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Check, ChevronsUpDown, X } from "lucide-react";
 
 import { RequireLevel } from "@/components/RequireLevel";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -12,6 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fetchCards, fetchDashboardUsers, fetchLanes } from "@/lib/dashboard";
 import { fetchManualDemands } from "@/lib/manual-demands";
@@ -20,7 +26,6 @@ import {
   collectMonths,
   fetchAllCapacities,
   formatHours,
-  summarizeCapacity,
   CAPACITY_STATUS_CLASS,
   CAPACITY_STATUS_LABEL,
   type CapacityRow,
@@ -34,13 +39,13 @@ export const Route = createFileRoute("/_authenticated/capacidade")({
       {
         name: "description",
         content:
-          "Compare horas disponíveis e horas estimadas por colaborador e acompanhe a ocupação da equipe.",
+          "Compare horas disponíveis e horas planejadas por colaborador e acompanhe a ocupação da equipe.",
       },
       { property: "og:title", content: "Capacidade da equipe · Central de Projetos" },
       {
         property: "og:description",
         content:
-          "Compare horas disponíveis e horas estimadas por colaborador e acompanhe a ocupação da equipe.",
+          "Compare horas disponíveis e horas planejadas por colaborador e acompanhe a ocupação da equipe.",
       },
     ],
   }),
@@ -55,7 +60,8 @@ const ALL = "__all__";
 
 function CapacityPage() {
   const [month, setMonth] = useState<string>(ALL);
-  const [person, setPerson] = useState<string>(ALL);
+  const [selectedPeople, setSelectedPeople] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
 
   const users = useQuery({ queryKey: ["dashboard", "users"], queryFn: fetchDashboardUsers });
   const lanes = useQuery({ queryKey: ["dashboard", "lanes"], queryFn: fetchLanes });
@@ -66,6 +72,11 @@ function CapacityPage() {
   const loading =
     users.isLoading || lanes.isLoading || cards.isLoading || demands.isLoading || capacities.isLoading;
   const error = users.error || lanes.error || cards.error || demands.error || capacities.error;
+
+  const people = useMemo(
+    () => (users.data ?? []).filter((u) => u.is_active !== false).map((u) => u.name),
+    [users.data]
+  );
 
   const months = useMemo(() => {
     const demandMonths = (demands.data ?? [])
@@ -84,10 +95,9 @@ function CapacityPage() {
       capacities: capacities.data ?? [],
       months: month === ALL ? [] : [month],
     });
-    return person === ALL ? all : all.filter((r) => r.userName === person);
-  }, [loading, error, users.data, lanes.data, cards.data, demands.data, capacities.data, month, person]);
-
-  const totals = useMemo(() => summarizeCapacity(rows), [rows]);
+    if (selectedPeople.length === 0) return all;
+    return all.filter((r) => selectedPeople.includes(r.userName));
+  }, [loading, error, users.data, lanes.data, cards.data, demands.data, capacities.data, month, selectedPeople]);
 
   if (loading) return <LoadingScreen label="Carregando capacidade…" />;
 
@@ -99,7 +109,17 @@ function CapacityPage() {
     );
   }
 
-  const people = (users.data ?? []).filter((u) => u.is_active !== false).map((u) => u.name);
+  const togglePerson = (name: string) => {
+    setSelectedPeople((prev) =>
+      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+    );
+  };
+
+  const selectAll = () => setSelectedPeople([...people]);
+  const clearAll = () => setSelectedPeople([]);
+
+  const allSelected = selectedPeople.length === people.length;
+  const noneSelected = selectedPeople.length === 0;
 
   return (
     <div className="p-6 space-y-6">
@@ -120,37 +140,83 @@ function CapacityPage() {
             </SelectContent>
           </Select>
         </div>
+
         <div className="space-y-1">
           <span className="text-xs text-muted-foreground">Colaborador</span>
-          <Select value={person} onValueChange={setPerson}>
-            <SelectTrigger className="w-[220px]">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Todos</SelectItem>
-              {people.map((p) => (
-                <SelectItem key={p} value={p}>
-                  {p}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className="w-[260px] justify-between"
+              >
+                <span className="truncate">
+                  {noneSelected
+                    ? "Todos os colaboradores"
+                    : allSelected
+                    ? "Todos os colaboradores"
+                    : `${selectedPeople.length} selecionado(s)`}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[260px] p-0">
+              <Command>
+                <CommandInput placeholder="Buscar colaborador…" />
+                <CommandList>
+                  <CommandEmpty>Nenhum colaborador encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem onSelect={selectAll} className="cursor-pointer">
+                      <Checkbox checked={allSelected} className="mr-2" />
+                      <span className="flex-1">Selecionar todos</span>
+                    </CommandItem>
+                    {people.map((p) => {
+                      const checked = selectedPeople.includes(p);
+                      return (
+                        <CommandItem
+                          key={p}
+                          onSelect={() => togglePerson(p)}
+                          className="cursor-pointer"
+                        >
+                          <Checkbox checked={checked} className="mr-2" />
+                          <span className="flex-1 truncate">{p}</span>
+                          {checked && <Check className="h-4 w-4" />}
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                </CommandList>
+                <div className="flex items-center justify-between border-t p-2">
+                  <Button variant="ghost" size="sm" onClick={clearAll} disabled={noneSelected}>
+                    Limpar
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                    Fechar
+                  </Button>
+                </div>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
-      </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <SummaryCard label="Horas disponíveis" value={formatHours(totals.availableHours)} />
-        <SummaryCard label="Horas estimadas" value={formatHours(totals.estimatedHours)} />
-        <SummaryCard
-          label="Saldo"
-          value={formatHours(totals.balance)}
-          tone={totals.balance < 0 ? "negative" : "positive"}
-        />
-        <SummaryCard
-          label="Ocupação da equipe"
-          value={totals.occupancy === null ? "—" : `${totals.occupancy.toFixed(0)}%`}
-          hint={`${totals.overloaded} sobrecarregado(s) · ${totals.adequate} adequado(s) · ${totals.low} com folga`}
-        />
+        {!noneSelected && (
+          <div className="flex flex-wrap items-center gap-1 pb-0.5">
+            {selectedPeople.map((p) => (
+              <Badge key={p} variant="secondary" className="gap-1 pl-2 pr-1">
+                <span className="max-w-[120px] truncate">{p}</span>
+                <button
+                  type="button"
+                  onClick={() => togglePerson(p)}
+                  className="rounded-full p-0.5 hover:bg-secondary-foreground/10"
+                  aria-label={`Remover ${p}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -160,10 +226,7 @@ function CapacityPage() {
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Colaborador</th>
                 <th className="px-4 py-2 text-right font-medium">Disponíveis</th>
-                <th className="px-4 py-2 text-right font-medium">Estimadas</th>
-                <th className="px-4 py-2 text-right font-medium">Projetos</th>
-                <th className="px-4 py-2 text-right font-medium">Demandas</th>
-                <th className="px-4 py-2 text-right font-medium">Saldo</th>
+                <th className="px-4 py-2 text-right font-medium">Planejadas</th>
                 <th className="px-4 py-2 text-left font-medium w-[220px]">Ocupação</th>
                 <th className="px-4 py-2 text-left font-medium">Indicador</th>
               </tr>
@@ -171,7 +234,7 @@ function CapacityPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                     Nenhum colaborador para os filtros selecionados.
                   </td>
                 </tr>
@@ -183,20 +246,6 @@ function CapacityPage() {
                       {r.availableHours > 0 ? formatHours(r.availableHours) : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">{formatHours(r.estimatedHours)}</td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
-                      {formatHours(r.projectHours)}
-                    </td>
-                    <td className="px-4 py-2 text-right text-muted-foreground">
-                      {formatHours(r.demandHours)}
-                    </td>
-                    <td
-                      className={cn(
-                        "px-4 py-2 text-right",
-                        r.balance !== null && r.balance < 0 && "text-red-600 font-medium"
-                      )}
-                    >
-                      {r.balance === null ? "—" : formatHours(r.balance)}
-                    </td>
                     <td className="px-4 py-2">
                       {r.occupancy === null ? (
                         <span className="text-muted-foreground">—</span>
@@ -228,37 +277,10 @@ function CapacityPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Horas disponíveis vêm da capacidade mensal cadastrada nas filas do Painel Geral. Horas estimadas
+        Horas disponíveis vêm da capacidade mensal cadastrada nas filas do Painel Geral. Horas planejadas
         somam os projetos do Runrun.it posicionados em filas mensais e as horas individuais das demandas
         avulsas.
       </p>
-    </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "positive" | "negative";
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p
-        className={cn(
-          "mt-1 text-2xl font-semibold text-foreground",
-          tone === "negative" && "text-red-600"
-        )}
-      >
-        {value}
-      </p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
