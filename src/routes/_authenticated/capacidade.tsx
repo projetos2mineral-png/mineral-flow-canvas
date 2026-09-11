@@ -19,7 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { fetchCards, fetchDashboardUsers, fetchLanes } from "@/lib/dashboard";
+import { fetchCards, fetchDashboardProjects, fetchDashboardUsers, fetchLanes } from "@/lib/dashboard";
 import { fetchManualDemands } from "@/lib/manual-demands";
 import {
   buildCapacityRows,
@@ -64,19 +64,49 @@ function CapacityPage() {
   const [open, setOpen] = useState(false);
 
   const users = useQuery({ queryKey: ["dashboard", "users"], queryFn: fetchDashboardUsers });
+  const projects = useQuery({ queryKey: ["dashboard", "projects"], queryFn: fetchDashboardProjects });
   const lanes = useQuery({ queryKey: ["dashboard", "lanes"], queryFn: fetchLanes });
   const cards = useQuery({ queryKey: ["dashboard", "cards"], queryFn: fetchCards });
   const demands = useQuery({ queryKey: ["manual-demands"], queryFn: fetchManualDemands });
   const capacities = useQuery({ queryKey: ["dashboard", "capacities"], queryFn: fetchAllCapacities });
 
   const loading =
-    users.isLoading || lanes.isLoading || cards.isLoading || demands.isLoading || capacities.isLoading;
-  const error = users.error || lanes.error || cards.error || demands.error || capacities.error;
+    projects.isLoading || users.isLoading || lanes.isLoading || cards.isLoading || demands.isLoading || capacities.isLoading;
+  const error = projects.error || users.error || lanes.error || cards.error || demands.error || capacities.error;
 
-  const people = useMemo(
-    () => (users.data ?? []).filter((u) => u.is_active !== false).map((u) => u.name),
-    [users.data]
-  );
+  const people = useMemo(() => {
+    const set = new Set<string>();
+
+    // 1. Responsáveis cadastrados em projetos (v_dashboard_projects)
+    for (const p of projects.data ?? []) {
+      const name = p.assignee_name?.trim();
+      if (name && name !== "Sem responsável") {
+        set.add(name);
+      }
+    }
+
+    // 2. Responsáveis cadastrados em cards com estimativas (dashboard_cards_with_estimates)
+    for (const c of cards.data ?? []) {
+      const name = c.assignee_name?.trim();
+      if (name && name !== "Sem responsável") {
+        set.add(name);
+      }
+    }
+
+    // 3. Responsáveis cadastrados em demandas avulsas ativas
+    const nameById = new Map((users.data ?? []).map((u) => [u.id, u.name]));
+    for (const demand of demands.data ?? []) {
+      if (demand.status !== "Ativa") continue;
+      for (const a of demand.assignees ?? []) {
+        const name = nameById.get(a.user_id)?.trim();
+        if (name && name !== "Sem responsável") {
+          set.add(name);
+        }
+      }
+    }
+
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [projects.data, cards.data, demands.data, users.data]);
 
   const months = useMemo(() => {
     const demandMonths = (demands.data ?? [])
@@ -88,6 +118,7 @@ function CapacityPage() {
   const rows = useMemo<CapacityRow[]>(() => {
     if (loading || error) return [];
     const all = buildCapacityRows({
+      responsibles: people,
       users: users.data ?? [],
       lanes: lanes.data ?? [],
       cards: cards.data ?? [],
@@ -97,7 +128,7 @@ function CapacityPage() {
     });
     if (selectedPeople.length === 0) return all;
     return all.filter((r) => selectedPeople.includes(r.userName));
-  }, [loading, error, users.data, lanes.data, cards.data, demands.data, capacities.data, month, selectedPeople]);
+  }, [loading, error, people, users.data, lanes.data, cards.data, demands.data, capacities.data, month, selectedPeople]);
 
   if (loading) return <LoadingScreen label="Carregando capacidade…" />;
 
@@ -277,7 +308,7 @@ function CapacityPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Horas disponíveis vêm da capacidade mensal cadastrada nas filas do Painel Geral. Horas planejadas
+        Horas disponíveis vêm da capacidade mensal cadastrada nas filas do Painel. Horas planejadas
         somam os projetos do Runrun.it posicionados em filas mensais e as horas individuais das demandas
         avulsas.
       </p>

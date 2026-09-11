@@ -93,7 +93,8 @@ export function collectMonths(lanes: Lane[], capacities: UserCapacityRow[], dema
 }
 
 export interface BuildCapacityInput {
-  users: DashboardUser[];
+  users?: DashboardUser[];
+  responsibles?: string[];
   lanes: Lane[];
   cards: ProjectCardRow[];
   demands: ManualDemand[];
@@ -108,39 +109,52 @@ function toNumber(v: unknown): number {
 }
 
 export function buildCapacityRows(input: BuildCapacityInput): CapacityRow[] {
-  const { users, lanes, cards, demands, capacities } = input;
+  const { lanes, cards, demands, capacities, users = [] } = input;
   const monthFilter = input.months.length ? new Set(input.months) : null;
   const inPeriod = (title: string) => (monthFilter ? monthFilter.has(title) : true);
 
-  const activeUsers = users.filter((u) => u.is_active !== false);
-  const rows = new Map<string, CapacityRow>();
-  const ensure = (name: string): CapacityRow => {
-    const key = name.trim();
-    let r = rows.get(key);
-    if (!r) {
-      r = {
-        userName: key,
-        availableHours: 0,
-        estimatedHours: 0,
-        projectHours: 0,
-        demandHours: 0,
-        occupancy: null,
-        balance: null,
-        status: "sem-capacidade",
-      };
-      rows.set(key, r);
+  // Define a lista de responsáveis que possuem demandas/projetos
+  let targetResponsibles: string[];
+  if (input.responsibles && input.responsibles.length > 0) {
+    targetResponsibles = input.responsibles;
+  } else {
+    const set = new Set<string>();
+    for (const c of cards) {
+      const name = (c.assignee_name || "").trim();
+      if (name && name !== "Sem responsável") set.add(name);
     }
-    return r;
-  };
-  for (const u of activeUsers) ensure(u.name);
+    const demandCards = buildDemandBoardCards(demands, users);
+    for (const d of demandCards) {
+      const name = (d.assigneeName || "").trim();
+      if (name && name !== "Sem responsável") set.add(name);
+    }
+    targetResponsibles = Array.from(set);
+  }
 
-  // Horas disponíveis
+  const rows = new Map<string, CapacityRow>();
+  for (const name of targetResponsibles) {
+    const key = name.trim();
+    if (!key || key === "Sem responsável" || rows.has(key)) continue;
+    rows.set(key, {
+      userName: key,
+      availableHours: 0,
+      estimatedHours: 0,
+      projectHours: 0,
+      demandHours: 0,
+      occupancy: null,
+      balance: null,
+      status: "sem-capacidade",
+    });
+  }
+
+  // Horas disponíveis (dashboard_user_capacity)
   const hasCapacity = new Set<string>();
   for (const c of capacities) {
     if (!c.user_name || !c.reference_month) continue;
     const title = monthlyLaneTitle(c.reference_month);
     if (!inPeriod(title)) continue;
-    const r = ensure(c.user_name);
+    const r = rows.get(c.user_name.trim());
+    if (!r) continue;
     r.availableHours += toNumber(c.capacity_hours);
     hasCapacity.add(r.userName);
   }
@@ -152,14 +166,25 @@ export function buildCapacityRows(input: BuildCapacityInput): CapacityRow[] {
     const lane = laneById.get(card.lane_id);
     if (!lane || !isMonthlyLaneTitle(lane.title)) continue;
     if (!inPeriod(lane.title.trim())) continue;
-    const r = ensure(lane.assignee_name || card.assignee_name || "Sem responsável");
-    r.projectHours += toNumber(card.total_estimated_hours);
+
+    // Usa o mesmo nome do responsável utilizado nos registros de tarefas e estimativas
+    const responsibleName = (card.assignee_name || lane.assignee_name || "").trim();
+    if (!responsibleName || responsibleName === "Sem responsável") continue;
+
+    const r = rows.get(responsibleName);
+    if (r) {
+      r.projectHours += toNumber(card.total_estimated_hours);
+    }
   }
 
   // Horas estimadas de demandas avulsas (horas individuais, nunca divididas)
   for (const d of buildDemandBoardCards(demands, users)) {
     if (!inPeriod(d.laneTitle)) continue;
-    ensure(d.assigneeName).demandHours += toNumber(d.ownHours);
+    const responsibleName = (d.assigneeName || "").trim();
+    const r = rows.get(responsibleName);
+    if (r) {
+      r.demandHours += toNumber(d.ownHours);
+    }
   }
 
   for (const r of rows.values()) {
