@@ -505,18 +505,11 @@ function AssigneeBoard({
       const key = it.lane_id && m.has(it.lane_id) ? it.lane_id : UNASSIGNED_LANE;
       m.get(key)!.push(it);
     }
-    // Nas filas mensais (título "Mês/AAAA"): cards manualmente posicionados
-    // vêm primeiro (na ordem salva); os demais são ordenados por
-    // desired_delivery_date crescente e desempate por nome do projeto.
-    // Nas outras filas, ordena apenas por position.
-    const laneById = new Map(localLanes.map((l) => [l.id, l]));
+    // Ordenação automática por "Data de entrega desejada" (desired_delivery_date)
+    // para TODAS as filas, da mais próxima para a mais distante.
+    // Cards com posição manual (manually_positioned) mantêm exatamente a
+    // posição onde foram soltos e prevalecem sobre a ordenação automática.
     for (const [laneId, arr] of m) {
-      const lane = laneById.get(laneId);
-      const monthly = lane ? isMonthlyLaneTitle(lane.title) : false;
-      if (!monthly) {
-        arr.sort((a, b) => a.position - b.position);
-        continue;
-      }
       const manual = arr.filter((c) => c.card?.manually_positioned === true);
       const auto = arr.filter((c) => c.card?.manually_positioned !== true);
       manual.sort((a, b) => a.position - b.position);
@@ -659,16 +652,16 @@ function AssigneeBoard({
     if (!over) return;
     const activeKey = String(active.id);
     if (activeKey.startsWith("laneItem:")) return; // handled in onDragEnd
+    // Mantém preview visual mínimo; a lógica de preservação exata de posição
+    // e de prevalência manual é resolvida integralmente no onDragEnd
+    // usando a ordem exibida (manual primeiro + data). Não mutamos lane aqui
+    // para que findContainer/toIdx no onDragEnd reflitam a posição visual
+    // exata onde o card foi solto.
     const fromLane = findContainer(String(active.id));
     const toLane = findContainer(String(over.id));
     if (!fromLane || !toLane || fromLane === toLane) return;
-    setItems((prev) =>
-      prev.map((it) =>
-        it.key === String(active.id)
-          ? { ...it, lane_id: toLane === UNASSIGNED_LANE ? null : toLane }
-          : it
-      )
-    );
+    // Sem mutação otimista de lane_id aqui — evita inconsistência entre
+    // ordem exibida (agrupada por data) e índices de drop.
   };
 
   const onDragEnd = async (e: DragEndEvent) => {
@@ -705,24 +698,41 @@ function AssigneeBoard({
     const toLane = findContainer(overKey);
     if (!toLane) return;
 
-    const next = [...items];
-    const inLane = next
-      .filter((i) => (toLane === UNASSIGNED_LANE ? !i.lane_id : i.lane_id === toLane))
-      .sort((a, b) => a.position - b.position);
+    const activeCard = items.find((i) => i.key === activeKey);
+    if (!activeCard) return;
 
-    const fromIdx = inLane.findIndex((i) => i.key === activeKey);
-    let toIdx = inLane.findIndex((i) => i.key === overKey);
-    if (toIdx === -1) toIdx = inLane.length - 1;
+    const fromLane = activeCard.lane_id && grouped.has(activeCard.lane_id) ? activeCard.lane_id : UNASSIGNED_LANE;
 
-    let reordered = inLane;
-    if (fromIdx !== -1 && toIdx !== -1 && fromIdx !== toIdx) {
-      reordered = arrayMove(inLane, fromIdx, toIdx);
+    // Ordem exibida da fila destino (manual prevalece + auto por data) — é exatamente o que o usuário vê
+    const destDisplayed = grouped.get(toLane) ?? [];
+
+    let toIdx: number;
+    if (overKey.startsWith("lane:")) {
+      toIdx = destDisplayed.length;
+    } else {
+      toIdx = destDisplayed.findIndex((c) => c.key === overKey);
+      if (toIdx === -1) {
+        // Over pode ser card da mesma fila ou de outra; se não encontrado, anexa ao final
+        toIdx = destDisplayed.length;
+      }
+    }
+
+    let reordered: DashboardCard[];
+    if (fromLane === toLane) {
+      const fromIdx = destDisplayed.findIndex((c) => c.key === activeKey);
+      if (fromIdx === -1 || fromIdx === toIdx) return;
+      reordered = arrayMove(destDisplayed, fromIdx, toIdx);
+    } else {
+      // Entre filas: insere na posição visual exata onde foi solto
+      reordered = [...destDisplayed.slice(0, toIdx), activeCard, ...destDisplayed.slice(toIdx)];
     }
 
     const updates: { id: string | null; runrunit_project_id: number; lane_id: string | null; position: number; updated_by?: string | null }[] = [];
     reordered.forEach((it, idx) => {
       const lane_id = toLane === UNASSIGNED_LANE ? null : toLane;
-      if (it.position !== idx || it.lane_id !== lane_id || it.card == null) {
+      // Preserva exatamente onde foi solto: atualiza posição sequencial conforme ordem visual.
+      // bulkUpdate marcará como manually_positioned=true, garantindo prevalência manual.
+      if (it.position !== idx || it.lane_id !== lane_id || it.card == null || it.key === activeKey) {
         updates.push({
           id: it.card?.id ?? null,
           runrunit_project_id: it.runrunit_project_id,
@@ -737,7 +747,16 @@ function AssigneeBoard({
       prev.map((it) => {
         const u = updates.find((u) => u.runrunit_project_id === it.runrunit_project_id);
         if (!u) return it;
-        return { ...it, lane_id: u.lane_id, position: u.position };
+        // Atualiza otimisticamente também o flag manual para que a ordenação
+        // agrupada (manual primeiro) reflita imediatamente a posição exata solta
+        const nextCard = it.card
+          ? { ...it.card, manually_positioned: true as const, position: u.position }
+          : it.card;
+        // Para cards ainda sem linha no banco (card==null), criamos um stub manual
+        const stubCard = !it.card
+          ? ({ manually_positioned: true, position: u.position } as unknown as ProjectCardRow)
+          : nextCard;
+        return { ...it, lane_id: u.lane_id, position: u.position, card: stubCard as ProjectCardRow };
       })
     );
 
@@ -756,6 +775,7 @@ function AssigneeBoard({
           assignee_name: assignee,
           lane_id: u.lane_id,
           position: u.position,
+          manually_positioned: true,
           updated_by: currentUserName,
         });
       }
