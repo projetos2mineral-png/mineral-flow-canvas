@@ -714,15 +714,15 @@ function SelecionarProjetosPage() {
             {closedCountLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Verificando projetos encerrados...
+                Verificando projetos encerrados no Runrun.it...
               </div>
             ) : closedCountPreview === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nenhum projeto encerrado marcado para exibição foi encontrado. Nada a limpar.
+                Nenhum projeto encerrado foi encontrado no Runrun.it. Nada a limpar — projetos abertos permanecem inalterados e todo o histórico é mantido.
               </p>
             ) : closedCountPreview !== null ? (
               <p className="text-sm">
-                Foram identificados <span className="font-semibold">{closedCountPreview}</span> projeto(s) encerrado(s) ainda marcado(s) para exibição. Deseja realmente removê-los da visualização?
+                Foram identificados <span className="font-semibold">{closedCountPreview}</span> projeto(s) encerrado(s) no Runrun.it (status real <code className="px-1 py-0.5 bg-muted rounded text-xs">is_open=false</code>, independentemente de exibição). Ao confirmar, eles serão removidos da lista “Selecionar Projetos” e do Painel. Projetos abertos permanecerão inalterados e nenhum registro/histórico será excluído do Supabase. Deseja continuar?
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">Carregando...</p>
