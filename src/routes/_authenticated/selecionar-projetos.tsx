@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar, MoreVertical } from "lucide-react";
+import { Search, RefreshCw, Sparkles, Loader2, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Download, FileSpreadsheet, Calendar, MoreVertical, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   fetchAllRunrunitProjects,
@@ -15,6 +15,8 @@ import {
   invokeSyncVisibleProjects,
   allocateProjectToMonthlyLanes,
   reallocateAllTrackedProjects,
+  countClosedTrackedProjects,
+  clearClosedTrackedProjects,
   type RunrunitProject,
 } from "@/lib/projects";
 import { exportProjectsToExcel } from "@/lib/export-projects";
@@ -121,6 +123,10 @@ function SelecionarProjetosPage() {
   const [ignoreAllLoading, setIgnoreAllLoading] = useState(false);
   const [importId, setImportId] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [clearClosedLoading, setClearClosedLoading] = useState(false);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [closedCountPreview, setClosedCountPreview] = useState<number | null>(null);
+  const [closedCountLoading, setClosedCountLoading] = useState(false);
 
   const { data: syncStatus, refetch: refetchSyncStatus } = useQuery({
     queryKey: ["dashboard_sync_status", "discover_projects"],
@@ -510,6 +516,50 @@ function SelecionarProjetosPage() {
     }
   };
 
+  const handleOpenClearClosedDialog = async () => {
+    setClosedCountLoading(true);
+    setClearDialogOpen(true);
+    try {
+      const count = await countClosedTrackedProjects();
+      setClosedCountPreview(count);
+    } catch (e) {
+      console.error("countClosedTrackedProjects error:", e);
+      toast.error("Falha ao verificar projetos encerrados: " + (e as Error).message);
+      setClosedCountPreview(null);
+      setClearDialogOpen(false);
+    } finally {
+      setClosedCountLoading(false);
+    }
+  };
+
+  const handleConfirmClearClosed = async () => {
+    setClearClosedLoading(true);
+    try {
+      const removed = await clearClosedTrackedProjects();
+      setClearDialogOpen(false);
+      setClosedCountPreview(null);
+      if (removed === 0) {
+        toast.info("Nenhum projeto encerrado encontrado para limpar.");
+      } else {
+        toast.success(`${removed} projeto(s) encerrado(s) removido(s) da visualização.`, {
+          description: "Os registros foram mantidos no histórico; apenas retirados da lista e do Painel.",
+        });
+      }
+      // Remove da lista de "Selecionar Projetos" e da exibição do Painel
+      // Invalida queries de projetos e dashboard (is_tracking_enabled = false)
+      await qc.invalidateQueries({ queryKey: ["runrunit_projects"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
+      await qc.invalidateQueries({ queryKey: ["runrunit_project_people"] });
+      // Não altera projetos abertos — apenas is_open = false foram afetados
+    } catch (e) {
+      console.error("clearClosedTrackedProjects error:", e);
+      toast.error("Falha ao limpar projetos encerrados: " + (e as Error).message);
+    } finally {
+      setClearClosedLoading(false);
+    }
+  };
+
 
   const limparFiltros = () => {
     setClient(ALL);
@@ -553,6 +603,21 @@ function SelecionarProjetosPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
+            <Button
+              variant="outline"
+              onClick={handleOpenClearClosedDialog}
+              disabled={clearClosedLoading || closedCountLoading}
+              className="h-9 px-4"
+              title="Remove da visualização projetos já fechados no Runrun.it"
+            >
+              {clearClosedLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Limpar projetos encerrados
+            </Button>
 
             <TooltipProvider>
               <Tooltip>
@@ -629,6 +694,53 @@ function SelecionarProjetosPage() {
               </p>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Limpar projetos encerrados
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação remove da visualização ativa os projetos já fechados no Runrun.it.
+              Os registros permanecem no Supabase com todo o histórico, apenas deixam de aparecer
+              na lista de “Selecionar Projetos” e no Painel. Projetos abertos não serão alterados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            {closedCountLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Verificando projetos encerrados...
+              </div>
+            ) : closedCountPreview === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nenhum projeto encerrado marcado para exibição foi encontrado. Nada a limpar.
+              </p>
+            ) : closedCountPreview !== null ? (
+              <p className="text-sm">
+                Foram identificados <span className="font-semibold">{closedCountPreview}</span> projeto(s) encerrado(s) ainda marcado(s) para exibição. Deseja realmente removê-los da visualização?
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)} disabled={clearClosedLoading}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmClearClosed}
+              disabled={closedCountLoading || clearClosedLoading || closedCountPreview === 0 || closedCountPreview === null}
+            >
+              {clearClosedLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Confirmar limpeza
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

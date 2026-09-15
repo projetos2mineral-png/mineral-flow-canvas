@@ -282,3 +282,68 @@ export async function reallocateAllTrackedProjects() {
     }
   }
 }
+
+// ---------- Limpar projetos encerrados ----------
+/**
+ * Conta quantos projetos encerrados (is_open = false) ainda estão marcados
+ * para exibição (is_tracking_enabled = true). Usado para preview da confirmação.
+ */
+export async function countClosedTrackedProjects(): Promise<number> {
+  const pageSize = 1000;
+  let total = 0;
+  let from = 0;
+  for (let i = 0; i < 50; i++) {
+    const to = from + pageSize - 1;
+    const { data, error } = await (supabase as any)
+      .from("runrunit_projects")
+      .select("runrunit_project_id")
+      .eq("is_open", false)
+      .eq("is_tracking_enabled", true)
+      .range(from, to);
+    if (error) throw error;
+    const rows = (data ?? []) as { runrunit_project_id: number }[];
+    total += rows.length;
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return total;
+}
+
+/**
+ * Remove da visualização ativa (is_tracking_enabled = false) todos os
+ * projetos já fechados no Runrun.it (is_open = false) que ainda estavam
+ * marcados para exibição. Não exclui registros do Supabase, apenas retira
+ * da lista de "Selecionar Projetos" e do Painel, mantendo histórico.
+ * Retorna quantos projetos foram afetados. Não altera projetos abertos.
+ */
+export async function clearClosedTrackedProjects(): Promise<number> {
+  // Busca IDs em lotes para evitar limite de URL e garantir contagem exata
+  const pageSize = 1000;
+  const ids: number[] = [];
+  let from = 0;
+  for (let i = 0; i < 50; i++) {
+    const to = from + pageSize - 1;
+    const { data, error } = await (supabase as any)
+      .from("runrunit_projects")
+      .select("runrunit_project_id")
+      .eq("is_open", false)
+      .eq("is_tracking_enabled", true)
+      .range(from, to);
+    if (error) throw error;
+    const rows = (data ?? []) as { runrunit_project_id: number }[];
+    ids.push(...rows.map((r) => r.runrunit_project_id));
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  if (ids.length === 0) return 0;
+  // Atualiza em lotes de 500 para respeitar limites do PostgREST
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500);
+    const { error } = await (supabase as any)
+      .from("runrunit_projects")
+      .update({ is_tracking_enabled: false, is_new_candidate: false })
+      .in("runrunit_project_id", chunk);
+    if (error) throw error;
+  }
+  return ids.length;
+}
