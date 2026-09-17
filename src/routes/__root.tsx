@@ -13,7 +13,7 @@ import {
 import appCss from "../styles.css?url";
 
 import { Toaster } from "@/components/ui/sonner";
-import { ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound, Grid2x2 } from "lucide-react";
+import { ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, HelpCircle, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -251,7 +251,6 @@ function AppShell() {
     badge?: boolean;
   }[] = [
     { to: "/dashboard", label: "Central de Planejamento", icon: LayoutDashboard },
-    { to: "/quem-faz-o-que", label: "Quem faz o que", icon: Grid2x2 },
   ];
   if (canUseCalendar) {
     navItems.push({ to: "/planejamento", label: "Calendário", icon: CalendarDays });
@@ -261,14 +260,6 @@ function AppShell() {
 
   if (canSelectProjects) {
     navItems.push({ to: "/selecionar-projetos", label: "Selecionar Projetos", icon: ListChecks });
-  }
-  if (canManageUsers) {
-    navItems.push({
-      to: "/gerenciar-usuarios",
-      label: "Gerenciar Usuários",
-      icon: UsersRound,
-      badge: hasNewUsers,
-    });
   }
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -306,10 +297,55 @@ function AppShell() {
               );
             })}
           </nav>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
+            {user && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/quem-faz-o-que"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      aria-label="Quem faz o que"
+                      title="Quem faz o que"
+                    >
+                      <HelpCircle className="h-4 w-4" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Quem faz o que</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {canManageUsers && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to="/gerenciar-usuarios"
+                      onClick={() => {
+                        try {
+                          window.localStorage.setItem("last_seen_users_at", String(Date.now()));
+                          setLastSeenUsersAt(Date.now());
+                        } catch {}
+                      }}
+                      className="relative inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                      aria-label="Gerenciar Usuários"
+                      title="Gerenciar Usuários"
+                    >
+                      <Settings className="h-4 w-4" />
+                      {hasNewUsers && (
+                        <span className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5 items-center justify-center rounded-full bg-red-600 ring-2 ring-card">
+                          <span className="sr-only">Há usuários novos</span>
+                        </span>
+                      )}
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Gerenciar Usuários</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
             <button
               onClick={toggleTheme}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
               title={theme === "dark" ? "Modo claro" : "Modo escuro"}
               aria-label="Alternar tema"
             >
@@ -317,10 +353,10 @@ function AppShell() {
             </button>
             {user && (
               <TooltipProvider>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 pl-1">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-xs text-muted-foreground cursor-default hover:text-foreground transition-colors">
+                      <span className="hidden sm:inline text-xs text-muted-foreground cursor-default hover:text-foreground transition-colors">
                         {greeting}, <span className="capitalize">{displayName}</span>
                       </span>
                     </TooltipTrigger>
@@ -333,11 +369,11 @@ function AppShell() {
                       await signOut();
                       router.navigate({ to: "/auth" });
                     }}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                     title="Sair"
                   >
                     <LogOut className="h-4 w-4" />
-                    Sair
+                    <span className="hidden sm:inline">Sair</span>
                   </button>
                 </div>
               </TooltipProvider>
