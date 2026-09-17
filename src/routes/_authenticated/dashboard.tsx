@@ -39,6 +39,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   GripHorizontal,
+  CalendarDays,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -1558,6 +1559,15 @@ function ProjectCardView({
 
           <div className="space-y-0.5 text-[12px] text-[#6B7280]">
             <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
+            {p.desired_delivery_date && (
+              <Row icon={<CalendarDays className="h-3 w-3" />}>
+                {new Date(
+                  (p.desired_delivery_date as string).length <= 10
+                    ? `${p.desired_delivery_date}T00:00:00Z`
+                    : (p.desired_delivery_date as string)
+                ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+              </Row>
+            )}
           </div>
           {(totalTasks != null || estimatedHours != null) && (
             <div className="mt-1 space-y-0 text-[12px] text-[#6B7280]">
