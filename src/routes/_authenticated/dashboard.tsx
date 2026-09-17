@@ -352,7 +352,7 @@ function DashboardPage() {
           ))}
           {/* Filtro flutuante de responsáveis — compacto e discreto na base do Painel */}
           <div className="pointer-events-none fixed bottom-4 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4">
-            <div className="pointer-events-auto inline-flex max-w-[min(92vw,680px)] items-center gap-1 rounded-full border border-border/60 bg-card/90 px-2 py-1.5 shadow-lg backdrop-blur-md">
+            <div className="pointer-events-auto inline-flex max-w-[min(90vw,600px)] items-center gap-1 rounded-full border border-border/50 bg-card/80 px-2 py-1.5 shadow-md backdrop-blur-md">
               <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 <TabsList className="flex h-auto w-max items-center gap-1 bg-transparent p-0">
                   {assignees.map((a) => {
@@ -999,23 +999,23 @@ function AssigneeBoard({
         }}
       >
         {/* Busca + controle de densidade */}
-        <div className="flex items-center justify-between gap-3 px-4 pt-2">
-          <div className="relative w-full max-w-[360px]">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-2">
+          <div className="relative w-full max-w-[300px]">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por título, processo, OS, cliente ou responsável..."
-              className="h-8 pl-8 pr-8 text-sm"
+              className="h-7 pl-7 pr-7 text-[13px] bg-card/80 border-border/60 focus-visible:ring-1"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
                 aria-label="Limpar busca"
               >
-                <X className="h-3.5 w-3.5" />
+                <X className="h-3 w-3" />
               </button>
             )}
           </div>
@@ -1262,13 +1262,13 @@ function LaneColumn({
       ref={laneSetNodeRef}
       style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "shrink-0 flex flex-col rounded-[10px] bg-muted/40 border border-border max-h-full",
+        "shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
         isLaneDragging && "opacity-50"
       )}
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="px-2.5 flex items-center border-b border-border bg-card rounded-t-lg min-h-[44px]"
+        className="px-2.5 flex items-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px]"
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
@@ -1312,7 +1312,7 @@ function LaneColumn({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div 
-                  className="flex items-center justify-center w-full cursor-pointer rounded px-1 -mx-1 transition-colors group relative hover:bg-muted/30"
+                  className="flex items-center justify-center w-full cursor-pointer rounded-md px-1 -mx-1 transition-colors group relative hover:bg-muted/20"
                   onClick={() => {
                     setCapacityDraft(capacity?.toString() ?? "0");
                     setIsCapacityDialogOpen(true);
@@ -1321,13 +1321,13 @@ function LaneColumn({
                   {dragHandleProps && (
                     <button 
                       type="button"
-                      className="absolute left-0 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
+                      className="absolute left-1 text-muted-foreground/15 group-hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
                       {...dragHandleProps}
                     >
                       <GripHorizontal className="h-3 w-3" />
                     </button>
                   )}
-                  <h3 className="text-[13px] font-medium tracking-wide leading-none truncate uppercase text-foreground/85">
+                  <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
                     {isMonthly ? title.toUpperCase() : title}
                   </h3>
                 </div>
@@ -1588,7 +1588,7 @@ function ProjectCardView({
     <div
       style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-[8px] border border-[#E5E7EB]/80 shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col justify-between bg-white min-h-[158px] h-[158px]",
+        "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card min-h-[158px] h-[158px]",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-md" : ""
       )}
