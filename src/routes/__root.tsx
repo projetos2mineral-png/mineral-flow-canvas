@@ -13,7 +13,7 @@ import {
 import appCss from "../styles.css?url";
 
 import { Toaster } from "@/components/ui/sonner";
-import { ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound } from "lucide-react";
+import { ClipboardList, Gauge, LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, UsersRound, Grid2x2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -238,6 +238,7 @@ function AppShell() {
     badge?: boolean;
   }[] = [
     { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
+    { to: "/quem-faz-o-que", label: "Quem faz o que", icon: Grid2x2 },
   ];
   if (canUseCalendar) {
     navItems.push({ to: "/planejamento", label: "Calendário", icon: CalendarDays });

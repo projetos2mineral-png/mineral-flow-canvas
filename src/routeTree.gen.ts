@@ -18,6 +18,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedDemandasAvulsasRouteImport } from './routes/_authenticated/demandas-avulsas'
 import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_authenticated/gerenciar-usuarios'
 import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authenticated/planejamento'
+import { Route as AuthenticatedQuemFazOQueRouteImport } from './routes/_authenticated/quem-faz-o-que'
 import { Route as AuthenticatedSelecionarProjetosRouteImport } from './routes/_authenticated/selecionar-projetos'
 
 const IndexRoute = IndexRouteImport.update({
@@ -67,6 +68,12 @@ const AuthenticatedPlanejamentoRoute =
     path: '/planejamento',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedQuemFazOQueRoute =
+  AuthenticatedQuemFazOQueRouteImport.update({
+    id: '/quem-faz-o-que',
+    path: '/quem-faz-o-que',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSelecionarProjetosRoute =
   AuthenticatedSelecionarProjetosRouteImport.update({
     id: '/selecionar-projetos',
@@ -83,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
+  '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
 }
 export interface FileRoutesByTo {
@@ -94,6 +102,7 @@ export interface FileRoutesByTo {
   '/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
+  '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
 }
 export interface FileRoutesById {
@@ -107,6 +116,7 @@ export interface FileRoutesById {
   '/_authenticated/demandas-avulsas': typeof AuthenticatedDemandasAvulsasRoute
   '/_authenticated/gerenciar-usuarios': typeof AuthenticatedGerenciarUsuariosRoute
   '/_authenticated/planejamento': typeof AuthenticatedPlanejamentoRoute
+  '/_authenticated/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/_authenticated/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
 }
 export interface FileRouteTypes {
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/demandas-avulsas'
     | '/gerenciar-usuarios'
     | '/planejamento'
+    | '/quem-faz-o-que'
     | '/selecionar-projetos'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/demandas-avulsas'
     | '/gerenciar-usuarios'
     | '/planejamento'
+    | '/quem-faz-o-que'
     | '/selecionar-projetos'
   id:
     | '__root__'
@@ -143,6 +155,7 @@ export interface FileRouteTypes {
     | '/_authenticated/demandas-avulsas'
     | '/_authenticated/gerenciar-usuarios'
     | '/_authenticated/planejamento'
+    | '/_authenticated/quem-faz-o-que'
     | '/_authenticated/selecionar-projetos'
   fileRoutesById: FileRoutesById
 }
@@ -218,6 +231,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPlanejamentoRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/quem-faz-o-que': {
+      id: '/_authenticated/quem-faz-o-que'
+      path: '/quem-faz-o-que'
+      fullPath: '/quem-faz-o-que'
+      preLoaderRoute: typeof AuthenticatedQuemFazOQueRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/selecionar-projetos': {
       id: '/_authenticated/selecionar-projetos'
       path: '/selecionar-projetos'
@@ -234,6 +254,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDemandasAvulsasRoute: typeof AuthenticatedDemandasAvulsasRoute
   AuthenticatedGerenciarUsuariosRoute: typeof AuthenticatedGerenciarUsuariosRoute
   AuthenticatedPlanejamentoRoute: typeof AuthenticatedPlanejamentoRoute
+  AuthenticatedQuemFazOQueRoute: typeof AuthenticatedQuemFazOQueRoute
   AuthenticatedSelecionarProjetosRoute: typeof AuthenticatedSelecionarProjetosRoute
 }
 
@@ -243,6 +264,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDemandasAvulsasRoute: AuthenticatedDemandasAvulsasRoute,
   AuthenticatedGerenciarUsuariosRoute: AuthenticatedGerenciarUsuariosRoute,
   AuthenticatedPlanejamentoRoute: AuthenticatedPlanejamentoRoute,
+  AuthenticatedQuemFazOQueRoute: AuthenticatedQuemFazOQueRoute,
   AuthenticatedSelecionarProjetosRoute: AuthenticatedSelecionarProjetosRoute,
 }
 
