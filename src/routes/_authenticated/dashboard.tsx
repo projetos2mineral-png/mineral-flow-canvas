@@ -70,7 +70,6 @@ import {
   type ReviewRow,
 } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { AssigneeFilterBar } from "@/components/dashboard/AssigneeFilterBar";
 import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
 
 
@@ -87,7 +86,6 @@ import { Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -325,26 +323,8 @@ function DashboardPage() {
         <Tabs
           value={activeAssignee}
           onValueChange={setActiveAssignee}
-          className="flex-1 flex flex-col min-h-0"
+          className="flex-1 flex flex-col min-h-0 relative pb-14"
         >
-          <AssigneeFilterBar
-            assignees={assignees}
-            counts={Object.fromEntries(
-              assignees.map((a) => [
-                a,
-                new Set(
-                  projects
-                    .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
-                    .map((p) => p.runrunit_project_id)
-                ).size,
-              ])
-            )}
-            value={activeAssignee}
-          />
-
-
-
-
           {assignees.map((a) => (
             <TabsContent
               key={a}
@@ -367,6 +347,35 @@ function DashboardPage() {
               />
             </TabsContent>
           ))}
+          {/* Filtro flutuante de responsáveis — compacto e discreto na base do Painel */}
+          <div className="pointer-events-none fixed bottom-4 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4">
+            <div className="pointer-events-auto inline-flex max-w-[min(92vw,680px)] items-center gap-1 rounded-full border border-border/60 bg-card/90 px-2 py-1.5 shadow-lg backdrop-blur-md">
+              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <TabsList className="flex h-auto w-max items-center gap-1 bg-transparent p-0">
+                  {assignees.map((a) => {
+                    const count = new Set(
+                      projects
+                        .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
+                        .map((p) => p.runrunit_project_id)
+                    ).size;
+                    return (
+                      <TabsTrigger
+                        key={a}
+                        value={a}
+                        title={a}
+                        className="group flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-background px-2.5 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                      >
+                        <span className="max-w-[110px] truncate">{a}</span>
+                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] leading-none text-muted-foreground group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground">
+                          {count}
+                        </span>
+                      </TabsTrigger>
+                    );
+                  })}
+                </TabsList>
+              </div>
+            </div>
+          </div>
         </Tabs>
       )}
     </div>
