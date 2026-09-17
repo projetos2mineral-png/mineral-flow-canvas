@@ -1690,75 +1690,176 @@ function CardDetailsDialog({
   const p = card.project;
   const isAwaitingReview = card.review_status === "aguardando revisão";
 
+  const formattedDelivery = p.desired_delivery_date
+    ? new Date(
+        (p.desired_delivery_date as string).length <= 10
+          ? `${p.desired_delivery_date}T00:00:00Z`
+          : (p.desired_delivery_date as string)
+      ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+    : null;
+
   return (
     <Dialog open={!!card} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="leading-snug">{p.project_name}</DialogTitle>
-          <DialogDescription>
+      <DialogContent className="max-w-[680px] p-0 gap-0 overflow-hidden">
+        {/* Cabeçalho — título e identificação */}
+        <DialogHeader className="px-6 pt-6 pb-4 space-y-3 text-left border-b border-border/60 bg-card">
+          <DialogTitle className="text-[18px] font-semibold leading-snug tracking-tight pr-6">
+            {p.project_name}
+          </DialogTitle>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+              <Building2 className="h-3 w-3" />
+              {p.client_name ?? "Sem cliente"}
+            </span>
+            {p.project_group_name && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+                <FolderTree className="h-3 w-3" />
+                {p.project_group_name}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium bg-background">
+              <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
+              {STATUS_LABEL[card.status]}
+            </span>
+          </div>
+          <DialogDescription className="text-xs leading-relaxed">
             Dados do Runrun.it são somente leitura. Observações e revisões são internas.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 text-sm">
-          <ReadRow label="Cliente" value={p.client_name ?? "—"} />
-          <ReadRow label="Grupo" value={p.project_group_name ?? "—"} />
-          <ReadRow label="Responsável" value={p.assignee_name ?? "—"} />
-          <ReadRow label="Time" value={p.team_name ?? "—"} />
-          {card.card?.calculation_details ? (
-            <ReadRow label="Origem da estimativa" value={estimateSourceLabel(card.card.calculation_details as any) || "—"} />
-          ) : null}
-          <ReadRow
-            label="Última sincronização"
-            value={p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
-          />
-          <ReadRow label="Status" value={STATUS_LABEL[card.status]} />
-          {card.updated_at && (
-            <div className="pt-2 mt-2 border-t border-border/50">
-              <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Última alteração</label>
-              <div className="flex justify-between items-center mt-1">
-                <span className="text-xs text-foreground/80">{card.updated_by || "Sistema"}</span>
-                <span className="text-xs text-muted-foreground">
+
+        <div className="max-h-[68vh] overflow-y-auto">
+          <div className="px-6 py-5 space-y-6">
+            {/* Prazos — destaque */}
+            {formattedDelivery && (
+              <div className="rounded-lg border border-primary/20 bg-primary/[0.04] dark:bg-primary/10 p-4">
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Prazo
+                </div>
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <div>
+                    <div className="text-xs text-muted-foreground">Entrega desejada</div>
+                    <div className="text-[15px] font-semibold tracking-tight font-mono tabular-nums">
+                      {formattedDelivery}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">Runrun.it</div>
+                  </div>
+                  {p.last_synced_at && (
+                    <div className="text-right">
+                      <div className="text-[11px] text-muted-foreground">Última sincronização</div>
+                      <div className="text-xs font-mono tabular-nums text-muted-foreground">
+                        {new Date(p.last_synced_at).toLocaleString("pt-BR")}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Informações agrupadas — metadados secundários */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Projeto</div>
+                <div className="space-y-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground">Cliente</span>
+                    <span className="text-sm text-foreground/80 truncate">{p.client_name ?? "—"}</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground">Grupo</span>
+                    <span className="text-sm text-foreground/80 truncate">{p.project_group_name ?? "—"}</span>
+                  </div>
+                  {card.card?.calculation_details ? (
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-muted-foreground">Origem da estimativa</span>
+                      <span className="text-xs text-foreground/70 leading-snug">
+                        {estimateSourceLabel(card.card.calculation_details as any) || "—"}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Responsáveis</div>
+                <div className="space-y-2.5">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground">Responsável</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
+                      <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground/60" />
+                      {p.assignee_name ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground">Time</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
+                      <Users className="h-3 w-3 text-muted-foreground/60" />
+                      {p.team_name ?? "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-muted-foreground">Status</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm">
+                      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
+                      {STATUS_LABEL[card.status]}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {card.correction_note && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-3.5 dark:bg-[#3A2208] dark:border-orange-900/50">
+                <div className="text-xs font-semibold text-orange-800 dark:text-orange-200 mb-1.5 inline-flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5" /> Correção solicitada
+                </div>
+                <div className="text-sm leading-relaxed text-orange-900 dark:text-orange-100 whitespace-pre-wrap">
+                  {card.correction_note}
+                </div>
+              </div>
+            )}
+
+            {/* Observações */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <h4 className="text-sm font-semibold">Observações internas</h4>
+                <span className="text-[11px] text-muted-foreground">· visível apenas internamente</span>
+              </div>
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Anote algo sobre este projeto…"
+                rows={4}
+                className="resize-none"
+              />
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => onSaveNote(card, note)}>
+                  Salvar observação
+                </Button>
+              </div>
+            </div>
+
+            {/* Sincronização / alteração — discreto */}
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3 text-[11px] leading-none text-muted-foreground/70 font-mono tabular-nums">
+              <span>
+                Sincronizado: {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
+              </span>
+              {card.updated_at ? (
+                <span>
+                  Alterado {card.updated_by ? `por ${card.updated_by}` : ""} ·{" "}
                   {new Date(card.updated_at).toLocaleString("pt-BR")}
                 </span>
-              </div>
-            </div>
-          )}
-          {p.desired_delivery_date && (
-            <ReadRow
-              label="Entrega desejada (Runrun.it)"
-              value={new Date(
-                (p.desired_delivery_date as string).length <= 10
-                  ? `${p.desired_delivery_date}T00:00:00Z`
-                  : (p.desired_delivery_date as string)
-              ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-            />
-          )}
-
-          {card.correction_note && (
-            <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs dark:bg-[#3A2208] dark:border-orange-900/70">
-              <div className="font-semibold text-orange-800 dark:text-orange-200 mb-1 inline-flex items-center gap-1">
-                <AlertTriangle className="h-3.5 w-3.5" /> Correção solicitada
-              </div>
-              <div className="text-orange-900 dark:text-orange-100 whitespace-pre-wrap">{card.correction_note}</div>
-            </div>
-          )}
-
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Observações internas</label>
-            <Textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Anote algo sobre este projeto…"
-              rows={4}
-            />
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => onSaveNote(card, note)}>
-                Salvar observação
-              </Button>
+              ) : (
+                <span>Sem alterações internas</span>
+              )}
             </div>
           </div>
         </div>
-        <DialogFooter className="gap-2 sm:gap-2 flex-wrap">
+
+        <DialogFooter className="px-6 py-4 bg-muted/20 border-t border-border/60 flex-row justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Fechar
+          </Button>
           <Button onClick={() => onSendForReview(card)} disabled={isAwaitingReview}>
             <Send className="h-4 w-4" /> {isAwaitingReview ? "Aguardando revisão" : "Enviar para revisão"}
           </Button>
