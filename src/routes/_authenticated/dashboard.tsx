@@ -1552,7 +1552,7 @@ function ProjectCardView({
         <div className="min-w-0 flex-1">
           <button
             onClick={() => onOpenCard(card)}
-            className="w-full text-left font-semibold text-[14px] leading-snug line-clamp-2 mb-1 hover:text-primary transition-colors cursor-pointer"
+            className="w-full text-left font-bold text-[10px] leading-[1.35] tracking-[-0.01em] line-clamp-3 break-words [overflow-wrap:anywhere] [hyphens:auto] mb-1 hover:text-primary transition-colors cursor-pointer"
           >
             {p.project_name}
           </button>
