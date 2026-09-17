@@ -1032,7 +1032,7 @@ function SelecionarProjetosPage() {
                     ? new Date(p.created_at_runrunit).toLocaleDateString("pt-BR")
                     : "—"}
                 </TableCell>
-                <TableCell className="text-sm">
+                <TableCell className="text-sm font-mono tabular-nums">
                   {p.desired_delivery_date
                     ? new Date(
                         (p.desired_delivery_date as string).length <= 10
@@ -1041,7 +1041,7 @@ function SelecionarProjetosPage() {
                       ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
                     : "—"}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
+                <TableCell className="text-sm text-muted-foreground font-mono tabular-nums">
                   {p.last_synced_at
                     ? new Date(p.last_synced_at).toLocaleString("pt-BR")
                     : "—"}

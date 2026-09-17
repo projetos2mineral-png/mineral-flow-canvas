@@ -59,6 +59,9 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* Tipografia — IBM Plex */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 :root {
@@ -140,9 +143,77 @@
     border-color: var(--color-border);
   }
 
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: -0.011em;
+  }
+
+  /* Escala tipográfica consistente — SaaS limpo e moderno */
+  h1 {
+    font-family: var(--font-sans);
+    font-size: 1.5rem; /* 24px */
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-family: var(--font-sans);
+    font-size: 1.25rem; /* 20px */
+    line-height: 1.3;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  h3 {
+    font-family: var(--font-sans);
+    font-size: 1.125rem; /* 18px */
+    line-height: 1.35;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  h4 {
+    font-family: var(--font-sans);
+    font-size: 1rem; /* 16px */
+    line-height: 1.4;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  /* Hierarquia textual */
+  /* Primário: títulos e destaques */
+  /* Secundário: descrições, labels, corpo */
+  /* Administrativo: captions, metadados, infos secundárias */
+  small,
+  .text-caption {
+    font-size: 0.75rem; /* 12px */
+    line-height: 1.4;
+    font-weight: 400;
+    letter-spacing: -0.005em;
+  }
+
+  /* Mono — números, códigos, OS, processos, técnico */
+  code,
+  pre,
+  kbd,
+  samp,
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+  .tabular-nums,
+  [data-mono] {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
   }
 }
 

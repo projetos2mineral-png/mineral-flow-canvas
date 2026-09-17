@@ -1561,19 +1561,21 @@ function ProjectCardView({
             <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
             {p.desired_delivery_date && (
               <Row icon={<CalendarDays className="h-3 w-3" />}>
-                {new Date(
-                  (p.desired_delivery_date as string).length <= 10
-                    ? `${p.desired_delivery_date}T00:00:00Z`
-                    : (p.desired_delivery_date as string)
-                ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+                <span className="font-mono tabular-nums">
+                  {new Date(
+                    (p.desired_delivery_date as string).length <= 10
+                      ? `${p.desired_delivery_date}T00:00:00Z`
+                      : (p.desired_delivery_date as string)
+                  ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
+                </span>
               </Row>
             )}
           </div>
           {(totalTasks != null || estimatedHours != null) && (
             <div className="mt-1 space-y-0 text-[12px] text-[#6B7280]">
               <div className="flex flex-wrap items-center gap-x-2">
-                {totalTasks != null && <span>📌 {totalTasks}</span>}
-                {estimatedHours != null && <span>⏱ {estimatedHours}h</span>}
+                {totalTasks != null && <span className="font-mono tabular-nums">📌 {totalTasks}</span>}
+                {estimatedHours != null && <span className="font-mono tabular-nums">⏱ {estimatedHours}h</span>}
               </div>
             </div>
           )}
