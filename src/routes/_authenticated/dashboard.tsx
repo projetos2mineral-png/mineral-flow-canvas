@@ -1542,45 +1542,42 @@ function ProjectCardView({
     <div
       style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-[8px] border border-[#E5E7EB] shadow-sm transition-shadow text-foreground bg-white",
+        "rounded-[8px] border border-[#E5E7EB]/80 shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col justify-between bg-white min-h-[158px] h-[158px]",
         STATUS_CARD_CLASS[card.status],
-        dragging ? "shadow-lg" : "hover:shadow"
+        dragging ? "shadow-md" : ""
       )}
     >
-      <div className="flex items-start gap-1.5">
-        <GripVertical className="h-3.5 w-3.5 mt-0.5 text-muted-foreground/40 shrink-0" />
-        <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-2 flex-1 min-h-0">
+        <GripVertical className="h-3 w-3 mt-1 text-muted-foreground/25 shrink-0" />
+        <div className="min-w-0 flex-1 flex flex-col gap-1.5">
           <button
             onClick={() => onOpenCard(card)}
-            className="w-full text-left font-bold text-[10px] leading-[1.35] tracking-[-0.01em] line-clamp-3 break-words [overflow-wrap:anywhere] [hyphens:auto] mb-1 hover:text-primary transition-colors cursor-pointer"
+            className="w-full text-left font-semibold text-[13px] leading-[1.3] tracking-[-0.015em] line-clamp-3 break-words [overflow-wrap:anywhere] hover:text-primary transition-colors cursor-pointer"
+            style={{ fontFamily: "var(--font-sans)" }}
           >
             {p.project_name}
           </button>
 
-          <div className="space-y-0.5 text-[12px] text-[#6B7280]">
-            <Row icon={<Building2 className="h-3 w-3" />}>{p.client_name ?? "Sem cliente"}</Row>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/80">
+              <Building2 className="h-3 w-3 shrink-0 opacity-60" />
+              <span className="truncate font-normal">{p.client_name ?? "Sem cliente"}</span>
+            </div>
             {p.desired_delivery_date && (
-              <Row icon={<CalendarDays className="h-3 w-3" />}>
-                <span className="font-mono tabular-nums">
+              <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/70">
+                <CalendarDays className="h-3 w-3 shrink-0 opacity-50" />
+                <span className="font-mono tabular-nums tracking-tight">
                   {new Date(
                     (p.desired_delivery_date as string).length <= 10
                       ? `${p.desired_delivery_date}T00:00:00Z`
                       : (p.desired_delivery_date as string)
                   ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
                 </span>
-              </Row>
+              </div>
             )}
           </div>
-          {(totalTasks != null || estimatedHours != null) && (
-            <div className="mt-1 space-y-0 text-[12px] text-[#6B7280]">
-              <div className="flex flex-wrap items-center gap-x-2">
-                {totalTasks != null && <span className="font-mono tabular-nums">📌 {totalTasks}</span>}
-                {estimatedHours != null && <span className="font-mono tabular-nums">⏱ {estimatedHours}h</span>}
-              </div>
-            </div>
-          )}
           {card.review_status && card.review_status !== "não enviado" && (
-            <div className="mt-1 text-[10px] text-foreground/70 italic truncate">
+            <div className="text-[10px] leading-3 text-muted-foreground/60 truncate">
               {card.review_status === "aguardando revisão" &&
                 `Revisão: ${card.review_requested_to ?? "—"}`}
               {card.review_status === "correção solicitada" && "Correção solicitada"}
@@ -1590,14 +1587,14 @@ function ProjectCardView({
         </div>
       </div>
       <div
-        className="mt-2 pt-1.5 border-t border-black/5 dark:border-white/10 flex flex-col gap-1.5"
+        className="mt-3 flex flex-col"
         onPointerDown={(e) => e.stopPropagation()}
       >
         <Select value={card.status} onValueChange={(v) => onStatusChange(card, v as CardStatus)}>
-          <SelectTrigger className="h-7 text-[11px] px-2 bg-white/50 dark:bg-black/20 dark:border-white/10 dark:text-neutral-200">
+          <SelectTrigger className="h-6 text-[10px] leading-none px-2 py-0 bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/30 hover:text-foreground/80 data-[state=open]:bg-muted/30 focus:ring-0 focus:ring-offset-0 shadow-none">
             <SelectValue>
               <span className="inline-flex items-center gap-1.5">
-                <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
+                <span className={cn("h-1.5 w-1.5 rounded-full opacity-70", STATUS_DOT_CLASS[card.status])} />
                 {STATUS_LABEL[card.status]}
               </span>
             </SelectValue>
