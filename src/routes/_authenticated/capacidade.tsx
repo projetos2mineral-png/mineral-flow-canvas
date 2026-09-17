@@ -35,13 +35,13 @@ import { monthlyLaneTitle } from "@/lib/dashboard";
 export const Route = createFileRoute("/_authenticated/capacidade")({
   head: () => ({
     meta: [
-      { title: "Capacidade da equipe · Central de Projetos" },
+      { title: "Capacidade da equipe · Central de Planejamento" },
       {
         name: "description",
         content:
           "Compare horas disponíveis e horas planejadas por colaborador e acompanhe a ocupação da equipe.",
       },
-      { property: "og:title", content: "Capacidade da equipe · Central de Projetos" },
+      { property: "og:title", content: "Capacidade da equipe · Central de Planejamento" },
       {
         property: "og:description",
         content:
@@ -308,9 +308,9 @@ function CapacityPage() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Horas disponíveis vêm da capacidade mensal cadastrada nas filas do Painel. Horas planejadas
-        somam os projetos do Runrun.it posicionados em filas mensais e as horas individuais das demandas
-        avulsas.
+        Horas disponíveis vêm da capacidade mensal cadastrada nas filas da Central de Planejamento. Horas
+        planejadas somam os projetos do Runrun.it posicionados em filas mensais e as horas individuais das
+        demandas avulsas.
       </p>
     </div>
   );

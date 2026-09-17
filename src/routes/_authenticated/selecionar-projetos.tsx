@@ -68,10 +68,10 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/_authenticated/selecionar-projetos")({
   head: () => ({
     meta: [
-      { title: "Selecionar Projetos · Runrun.it" },
+      { title: "Selecionar Projetos · Central de Planejamento" },
       {
         name: "description",
-        content: "Escolha quais projetos importados do Runrun.it aparecem no dashboard interno.",
+        content: "Escolha quais projetos importados do Runrun.it aparecem na Central de Planejamento.",
       },
     ],
   }),
@@ -314,9 +314,9 @@ function SelecionarProjetosPage() {
           console.error("invokeSyncSingleProject (toggle) error:", e);
           toast.error("Sincronização do projeto falhou: " + (e as Error).message);
         }
-        toast.success("Projeto exibido no dashboard");
+        toast.success("Projeto exibido na Central de Planejamento");
       } else {
-        toast.success("Projeto removido do dashboard");
+        toast.success("Projeto removido da Central de Planejamento");
       }
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
@@ -405,7 +405,7 @@ function SelecionarProjetosPage() {
         processSync(); // Executa em background
         toast.success(`${ids.length} projeto(s) sendo ativados e sincronizados...`);
       } else {
-        toast.success(`${ids.length} projeto(s) removido(s) do dashboard`);
+        toast.success(`${ids.length} projeto(s) removido(s) da Central de Planejamento`);
         qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       }
@@ -429,7 +429,7 @@ function SelecionarProjetosPage() {
         console.error("invokeSyncSingleProject (candidate) error:", e);
         toast.error("Sincronização do projeto falhou: " + (e as Error).message);
       }
-      toast.success("Projeto exibido no dashboard");
+      toast.success("Projeto exibido na Central de Planejamento");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
     } catch (e) {
@@ -548,7 +548,7 @@ function SelecionarProjetosPage() {
         toast.info("Nenhum projeto encerrado encontrado para limpar.");
       } else {
         toast.success(`${removed} projeto(s) encerrado(s) removido(s) da visualização.`, {
-          description: "Os registros foram mantidos no histórico; apenas retirados da lista e do Painel.",
+          description: "Os registros foram mantidos no histórico; apenas retirados da lista e da Central de Planejamento.",
         });
       }
       // Remove da lista de "Selecionar Projetos" e da exibição do Painel
@@ -714,7 +714,8 @@ function SelecionarProjetosPage() {
             <DialogDescription>
               Esta ação remove da visualização ativa os projetos já fechados no Runrun.it.
               Os registros permanecem no Supabase com todo o histórico, apenas deixam de aparecer
-              na lista de “Selecionar Projetos” e no Painel. Projetos abertos não serão alterados.
+              na lista de “Selecionar Projetos” e na Central de Planejamento. Projetos abertos não serão
+              alterados.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
@@ -729,7 +730,7 @@ function SelecionarProjetosPage() {
               </p>
             ) : closedCountPreview !== null ? (
               <p className="text-sm">
-                Foram identificados <span className="font-semibold">{closedCountPreview}</span> projeto(s) encerrado(s) no Runrun.it (status real <code className="px-1 py-0.5 bg-muted rounded text-xs">is_open=false</code>, independentemente de exibição). Ao confirmar, eles serão removidos da lista “Selecionar Projetos” e do Painel. Projetos abertos permanecerão inalterados e nenhum registro/histórico será excluído do Supabase. Deseja continuar?
+                Foram identificados <span className="font-semibold">{closedCountPreview}</span> projeto(s) encerrado(s) no Runrun.it (status real <code className="px-1 py-0.5 bg-muted rounded text-xs">is_open=false</code>, independentemente de exibição). Ao confirmar, eles serão removidos da lista “Selecionar Projetos” e da Central de Planejamento. Projetos abertos permanecerão inalterados e nenhum registro/histórico será excluído do Supabase. Deseja continuar?
               </p>
             ) : (
               <p className="text-sm text-muted-foreground">Carregando...</p>
@@ -828,7 +829,7 @@ function SelecionarProjetosPage() {
                           {busyIds.has(p.runrunit_project_id) && (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           )}
-                          Exibir no Dashboard
+                          Exibir na Central de Planejamento
                         </Button>
                         <Button
                           size="sm"
@@ -932,10 +933,10 @@ function SelecionarProjetosPage() {
           </span>
           <div className="ml-auto flex gap-2">
             <Button size="sm" onClick={() => bulkSet(true)}>
-              Exibir selecionados no Dashboard
+              Exibir selecionados na Central de Planejamento
             </Button>
             <Button size="sm" variant="outline" onClick={() => bulkSet(false)}>
-              Remover selecionados do Dashboard
+              Remover selecionados da Central de Planejamento
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Cancelar
@@ -982,7 +983,7 @@ function SelecionarProjetosPage() {
                 </button>
               </TableHead>
               <TableHead>Última atualização</TableHead>
-              <TableHead className="text-right">Exibir no Dashboard</TableHead>
+              <TableHead className="text-right">Exibir na Central de Planejamento</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1066,7 +1067,7 @@ function SelecionarProjetosPage() {
                       checked={!!p.is_tracking_enabled}
                       onCheckedChange={(v) => toggle(p, v)}
                       disabled={busyIds.has(p.runrunit_project_id)}
-                      aria-label="Exibir no Dashboard"
+                      aria-label="Exibir na Central de Planejamento"
                     />
                   </div>
                 </TableCell>

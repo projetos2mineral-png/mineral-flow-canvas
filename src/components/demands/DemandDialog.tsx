@@ -275,7 +275,7 @@ export function DemandDialog({
               <div className="flex items-center gap-2">
                 <Switch id="demand-visible" checked={visible} onCheckedChange={setVisible} />
                 <Label htmlFor="demand-visible" className="cursor-pointer">
-                  Exibir no Dashboard
+                  Exibir na Central de Planejamento
                 </Label>
               </div>
             </div>

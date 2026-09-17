@@ -118,10 +118,10 @@ import { DemandCardView } from "@/components/dashboard/DemandCardView";
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Dashboard · Projetos Runrun.it" },
+      { title: "Central de Planejamento" },
       {
         name: "description",
-        content: "Kanban interno de acompanhamento dos projetos abertos no Runrun.it.",
+        content: "Central de Planejamento — Kanban interno de acompanhamento dos projetos abertos no Runrun.it.",
       },
     ],
   }),

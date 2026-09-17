@@ -10,7 +10,7 @@ import { Briefcase, KeyRound } from "lucide-react";
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
-      { title: "Redefinir senha · Projetos Runrun.it" },
+      { title: "Redefinir senha · Central de Planejamento" },
       { name: "description", content: "Defina uma nova senha de acesso." },
     ],
   }),

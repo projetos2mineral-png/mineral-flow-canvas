@@ -6,7 +6,7 @@ import { ShieldAlert } from "lucide-react";
 /**
  * Gate para renderizar conteúdo apenas para determinados níveis de acesso.
  * Se o usuário não estiver autorizado, mostra mensagem padrão em pt-BR e
- * um link de retorno ao Dashboard.
+ * um link de retorno à Central de Planejamento.
  */
 export function RequireLevel({
   allow,
@@ -31,7 +31,7 @@ export function RequireLevel({
           to="/dashboard"
           className="inline-flex items-center justify-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90"
         >
-          Voltar ao Dashboard
+          Voltar à Central de Planejamento
         </Link>
       </div>
     );

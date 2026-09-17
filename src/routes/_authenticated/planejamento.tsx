@@ -65,7 +65,7 @@ import { RequireLevel } from "@/components/RequireLevel";
 export const Route = createFileRoute("/_authenticated/planejamento")({
   head: () => ({
     meta: [
-      { title: "Calendário · Projetos Runrun.it" },
+      { title: "Calendário · Central de Planejamento" },
       { name: "description", content: "Calendário mensal de projetos." },
     ],
   }),

@@ -83,16 +83,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "DB Projetos · Mineral Geologia" },
-      { name: "description", content: "Dashboard interno de projetos da Mineral Geologia, integrado ao Runrun.it." },
+      { title: "Central de Planejamento" },
+      { name: "description", content: "Central de Planejamento da Mineral Geologia, integrado ao Runrun.it." },
       { name: "author", content: "Mineral Geologia" },
-      { property: "og:title", content: "DB Projetos · Mineral Geologia" },
-      { property: "og:description", content: "Dashboard interno de projetos da Mineral Geologia, integrado ao Runrun.it." },
+      { property: "og:title", content: "Central de Planejamento" },
+      { property: "og:description", content: "Central de Planejamento da Mineral Geologia, integrado ao Runrun.it." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "DB Projetos · Mineral Geologia" },
-      { name: "twitter:description", content: "Dashboard interno de projetos da Mineral Geologia, integrado ao Runrun.it." },
+      { name: "twitter:title", content: "Central de Planejamento" },
+      { name: "twitter:description", content: "Central de Planejamento da Mineral Geologia, integrado ao Runrun.it." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e137ad61-3135-4ad2-a9f7-6f5a0aeec0aa/id-preview-ad2fca49--2f348948-8e8e-4f98-813e-aec9ed877e76.lovable.app-1783022251795.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/e137ad61-3135-4ad2-a9f7-6f5a0aeec0aa/id-preview-ad2fca49--2f348948-8e8e-4f98-813e-aec9ed877e76.lovable.app-1783022251795.png" },
     ],
@@ -250,7 +250,7 @@ function AppShell() {
     icon: typeof LayoutDashboard;
     badge?: boolean;
   }[] = [
-    { to: "/dashboard", label: "Painel", icon: LayoutDashboard },
+    { to: "/dashboard", label: "Central de Planejamento", icon: LayoutDashboard },
     { to: "/quem-faz-o-que", label: "Quem faz o que", icon: Grid2x2 },
   ];
   if (canUseCalendar) {

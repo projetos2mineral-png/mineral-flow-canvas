@@ -12,8 +12,8 @@ import { ArrowLeft } from "lucide-react";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Entrar · DB Projetos" },
-      { name: "description", content: "Acesse o dashboard interno." },
+      { title: "Entrar · Central de Planejamento" },
+      { name: "description", content: "Acesse a Central de Planejamento." },
     ],
   }),
   component: AuthPage,
@@ -85,7 +85,7 @@ function AuthPage() {
     <div className="min-h-screen grid place-items-center bg-background p-4">
       <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="mb-6">
-          <h1 className="text-lg font-semibold">Central de Projetos</h1>
+          <h1 className="text-lg font-semibold">Central de Planejamento</h1>
           <p className="text-xs text-muted-foreground">Mineral Geologia</p>
         </div>
 

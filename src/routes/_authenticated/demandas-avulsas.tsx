@@ -288,7 +288,7 @@ function DemandasAvulsasPage() {
               <TableHead>Responsáveis</TableHead>
               <TableHead>Estimativa total</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Exibir no Dashboard</TableHead>
+              <TableHead className="text-right">Exibir na Central de Planejamento</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
@@ -336,7 +336,7 @@ function DemandasAvulsasPage() {
                   <Switch
                     checked={d.is_visible_on_dashboard}
                     onCheckedChange={(v) => visibilityMutation.mutate({ id: d.id, visible: v })}
-                    aria-label={`Exibir ${d.name} no Dashboard`}
+                    aria-label={`Exibir ${d.name} na Central de Planejamento`}
                   />
                 </TableCell>
                 <TableCell>

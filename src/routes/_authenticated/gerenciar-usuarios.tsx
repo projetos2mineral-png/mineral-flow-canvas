@@ -32,8 +32,8 @@ import { Search } from "lucide-react";
 export const Route = createFileRoute("/_authenticated/gerenciar-usuarios")({
   head: () => ({
     meta: [
-      { title: "Gerenciar Usuários · Projetos Runrun.it" },
-      { name: "description", content: "Administração de níveis de acesso dos usuários do dashboard." },
+      { title: "Gerenciar Usuários · Central de Planejamento" },
+      { name: "description", content: "Administração de níveis de acesso dos usuários da Central de Planejamento." },
     ],
   }),
   component: () => (
