@@ -1246,49 +1246,29 @@ function LaneColumn({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div 
-                  className="flex items-baseline justify-between w-full cursor-pointer hover:bg-accent/30 rounded px-1 -mx-1 transition-colors group relative"
+                  className="flex items-center justify-center w-full cursor-pointer rounded px-1 -mx-1 transition-colors group relative hover:bg-muted/30"
                   onClick={() => {
                     setCapacityDraft(capacity?.toString() ?? "0");
                     setIsCapacityDialogOpen(true);
                   }}
                 >
-                  <div className="flex items-center gap-1.5 min-w-0 max-w-[60%]">
-                    {dragHandleProps && (
-                      <button 
-                        type="button"
-                        className="text-muted-foreground/30 group-hover:text-muted-foreground transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
-                        {...dragHandleProps}
-                      >
-                        <GripHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    <h3 className="text-[14px] font-semibold truncate">
-                      {title}
-                    </h3>
-                  </div>
-                  
-                  <div 
-                    className="text-[13px] font-medium tabular-nums text-right shrink-0"
-                  >
-                    <span className={cn(
-                      overCapacity ? "text-[#DC2626] font-bold" : "text-muted-foreground"
-                    )}>
-                      {formatHoursCompact(plannedHours)}
-                    </span>
-                    {isMonthly && capacity !== null && (
-                      <span className="text-muted-foreground opacity-70 font-normal"> / {formatHoursCompact(capacity)}</span>
-                    )}
-                  </div>
+                  {dragHandleProps && (
+                    <button 
+                      type="button"
+                      className="absolute left-0 text-muted-foreground/20 group-hover:text-muted-foreground/40 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
+                      {...dragHandleProps}
+                    >
+                      <GripHorizontal className="h-3 w-3" />
+                    </button>
+                  )}
+                  <h3 className="text-[13px] font-medium tracking-wide leading-none truncate uppercase text-foreground/85">
+                    {isMonthly ? title.toUpperCase() : title}
+                  </h3>
                 </div>
               </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs space-y-1 bg-neutral-900 text-white border-neutral-800">
+              <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
                 <p>Cartões: {cards.length}</p>
-                {isMonthly && (
-                  <p>Capacidade mensal: {capacity !== null ? formatHoursCompact(capacity) : "Não definida"}</p>
-                )}
-                <p>Planejado: {formatHoursCompact(plannedHours)}</p>
-                {overCapacity && <p className="font-semibold text-white">Excesso: +{formatHoursCompact(excess)}</p>}
-                {!isMonthly && !isUnassigned && <p className="text-[10px] text-muted-foreground italic mt-1">Clique para renomear</p>}
+                {!isMonthly && !isUnassigned && <p className="text-[10px] opacity-70 mt-1">Clique para configurar</p>}
               </TooltipContent>
             </Tooltip>
 
