@@ -1,22 +1,25 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type QfqAtividade = {
-  id: string;
+  id: number | string;
   nome: string;
+  grupo: string | null;
   tempo_esperado_horas: string | number | null;
   complexidade: string | null;
   categoria: string | null;
   software: string | null;
   tipo: string | null;
   ordem: number | null;
+  ativo: boolean | null;
   created_at: string | null;
   updated_at: string | null;
 };
 
 export type QfqColaborador = {
-  id: string;
+  id: number | string;
   nome: string;
   ordem: number | null;
+  ativo: boolean | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -33,21 +36,24 @@ export type QfqMatrizRow = {
 export async function fetchQfqAtividades(): Promise<QfqAtividade[]> {
   const { data, error } = await (supabase as any)
     .from("qfq_atividades")
-    .select("id,nome,tempo_esperado_horas,complexidade,categoria,software,tipo,ordem,created_at,updated_at")
+    .select("id,nome,grupo,tempo_esperado_horas,complexidade,categoria,software,tipo,ordem,ativo,created_at,updated_at")
     .order("ordem", { ascending: true, nullsFirst: false })
     .order("nome", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as QfqAtividade[];
+  // Filtra apenas ativos quando campo existir (mantém compatibilidade)
+  const rows = (data ?? []) as QfqAtividade[];
+  return rows.filter((r) => r.ativo !== false);
 }
 
 export async function fetchQfqColaboradores(): Promise<QfqColaborador[]> {
   const { data, error } = await (supabase as any)
     .from("qfq_colaboradores")
-    .select("id,nome,ordem,created_at,updated_at")
+    .select("id,nome,ordem,ativo,created_at,updated_at")
     .order("ordem", { ascending: true, nullsFirst: false })
     .order("nome", { ascending: true });
   if (error) throw error;
-  return (data ?? []) as QfqColaborador[];
+  const rows = (data ?? []) as QfqColaborador[];
+  return rows.filter((r) => r.ativo !== false);
 }
 
 export async function fetchQfqMatriz(): Promise<QfqMatrizRow[]> {
