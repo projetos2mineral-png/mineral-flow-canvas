@@ -40,6 +40,7 @@ import {
   AlertTriangle,
   GripHorizontal,
   CalendarDays,
+  Search,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -216,6 +217,7 @@ function DashboardPage() {
   }, [projects, demandCards]);
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
+  const [search, setSearch] = useState<string>("");
 
   // Restaura o último responsável aberto do localStorage (persistência
   // entre trocas de aba/página). Só cai no primeiro alfabético como
@@ -344,6 +346,7 @@ function DashboardPage() {
                 qc={qc}
                 readOnly={readOnly}
                 isActive={a === activeAssignee}
+                search={search}
               />
             </TabsContent>
           ))}
@@ -395,6 +398,7 @@ function AssigneeBoard({
   qc,
   readOnly = false,
   isActive = true,
+  search = "",
 }: {
   assignee: string;
   projects: DashboardProject[];
@@ -408,6 +412,7 @@ function AssigneeBoard({
   qc: ReturnType<typeof useQueryClient>;
   readOnly?: boolean;
   isActive?: boolean;
+  search?: string;
 }) {
   const projectMap = useMemo(() => {
     const m = new Map<number, DashboardProject>();
@@ -431,6 +436,7 @@ function AssigneeBoard({
   }, [projects]);
 
   const UNASSIGNED_LANE = "__unassigned__";
+  const normalizedSearch = (search ?? "").trim().toLowerCase();
 
   const lanesSorted = useMemo(
     () => [...lanes].sort((a, b) => a.position - b.position),
@@ -447,11 +453,16 @@ function AssigneeBoard({
     m.set(UNASSIGNED_LANE, []);
     for (const l of localLanes) m.set(l.id, []);
     for (const r of reviews) {
+      if (normalizedSearch) {
+        const projectName = projectNameById.get(r.runrunit_project_id) ?? "";
+        const haystack = [projectName, r.original_assignee_name, r.reviewer_name, r.requested_by_name, String(r.runrunit_project_id)].join(" ").toLowerCase();
+        if (!haystack.includes(normalizedSearch)) continue;
+      }
       const key = r.lane_id && m.has(r.lane_id) ? r.lane_id : UNASSIGNED_LANE;
       m.get(key)!.push(r);
     }
     return m;
-  }, [reviews, localLanes]);
+  }, [reviews, localLanes, normalizedSearch, projectNameById]);
 
   // Demandas Avulsas agrupadas pela fila mensal derivada de `desired_date`.
   // Sem fila correspondente, o card cai em "Sem fila" (nunca some).
@@ -463,6 +474,18 @@ function AssigneeBoard({
       localLanes.map((l) => [l.title.trim().toLowerCase(), l.id])
     );
     for (const d of demandCards) {
+      if (normalizedSearch) {
+        const haystack = [
+          d.demand.name,
+          d.demand.client_name ?? "",
+          d.assigneeName,
+          ...d.people.map((p) => p.name),
+          d.demand.desired_date,
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(normalizedSearch)) continue;
+      }
       const laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
       m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
     }
@@ -476,7 +499,7 @@ function AssigneeBoard({
       );
     }
     return m;
-  }, [demandCards, localLanes]);
+  }, [demandCards, localLanes, normalizedSearch]);
 
 
   const hydrated: DashboardCard[] = useMemo(() => {
@@ -512,6 +535,21 @@ function AssigneeBoard({
     m.set(UNASSIGNED_LANE, []);
     for (const l of localLanes) m.set(l.id, []);
     for (const it of items) {
+      if (normalizedSearch) {
+        const p = it.project;
+        const haystack = [
+          p.project_name,
+          p.client_name ?? "",
+          p.project_group_name ?? "",
+          p.assignee_name ?? "",
+          p.team_name ?? "",
+          String(p.runrunit_project_id),
+          it.status,
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(normalizedSearch)) continue;
+      }
       const key = it.lane_id && m.has(it.lane_id) ? it.lane_id : UNASSIGNED_LANE;
       m.get(key)!.push(it);
     }
@@ -535,7 +573,7 @@ function AssigneeBoard({
       m.set(laneId, [...manual, ...auto]);
     }
     return m;
-  }, [items, localLanes]);
+  }, [items, localLanes, normalizedSearch]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -960,8 +998,27 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
-        {/* Controle de densidade — afeta somente o Kanban */}
-        <div className="flex justify-end px-4 pt-2">
+        {/* Busca + controle de densidade */}
+        <div className="flex items-center justify-between gap-3 px-4 pt-2">
+          <div className="relative w-full max-w-[360px]">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por título, processo, OS, cliente ou responsável..."
+              className="h-8 pl-8 pr-8 text-sm"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Limpar busca"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <DensityControl value={density} onChange={setDensity} />
         </div>
         {/* Top proxy scrollbar synced with the main Kanban scroll */}
