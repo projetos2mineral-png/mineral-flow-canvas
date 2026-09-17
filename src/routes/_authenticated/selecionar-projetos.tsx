@@ -62,6 +62,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { RequireLevel } from "@/components/RequireLevel";
 import { HierarchicalDateFilter } from "@/components/ui/hierarchical-date-filter";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/selecionar-projetos")({
@@ -109,6 +110,7 @@ function SelecionarProjetosPage() {
   const [search, setSearch] = useState("");
   const [client, setClient] = useState<string>(ALL);
   const [group, setGroup] = useState<string>(ALL);
+  const [selectedSubgroups, setSelectedSubgroups] = useState<Set<string>>(new Set());
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [situation, setSituation] = useState<Situation>("all");
@@ -188,6 +190,7 @@ function SelecionarProjetosPage() {
 
   const clients = useMemo(() => uniqueSorted("client_name"), [rows]);
   const groups = useMemo(() => uniqueSorted("project_group_name"), [rows]);
+  const subgroups = useMemo(() => uniqueSorted("project_sub_group_name"), [rows]);
   const availableDates = useMemo(() => uniqueSorted("desired_delivery_date"), [rows]);
 
   const newCandidates = useMemo(
@@ -225,6 +228,9 @@ function SelecionarProjetosPage() {
       }
       if (client !== ALL && r.client_name !== client) return false;
       if (group !== ALL && r.project_group_name !== group) return false;
+      if (selectedSubgroups.size > 0) {
+        if (!r.project_sub_group_name || !selectedSubgroups.has(r.project_sub_group_name)) return false;
+      }
       if (q && !r.name.toLowerCase().includes(q)) return false;
       if (fromTs || toTs) {
         const t = r.created_at_runrunit ? new Date(r.created_at_runrunit).getTime() : null;
@@ -237,7 +243,7 @@ function SelecionarProjetosPage() {
       }
       return true;
     });
-  }, [rows, search, client, group, dateFrom, dateTo, situation, selectedDates]);
+  }, [rows, search, client, group, selectedSubgroups, dateFrom, dateTo, situation, selectedDates]);
 
   const trackedCount = useMemo(
     () => rows.filter((r) => r.is_tracking_enabled).length,
@@ -564,6 +570,7 @@ function SelecionarProjetosPage() {
   const limparFiltros = () => {
     setClient(ALL);
     setGroup(ALL);
+    setSelectedSubgroups(new Set());
     setSearch("");
     setDateFrom("");
     setDateTo("");
@@ -868,6 +875,7 @@ function SelecionarProjetosPage() {
         </div>
         <FilterSelect label="Cliente" value={client} onChange={setClient} options={clients} />
         <FilterSelect label="Grupo" value={group} onChange={setGroup} options={groups} />
+        <MultiSelectFilter label="Subgrupo" options={subgroups} selected={selectedSubgroups} onChange={setSelectedSubgroups} />
         <div className="flex flex-col gap-1">
           <label className="text-[11px] text-muted-foreground">Criado de</label>
           <Input
@@ -907,7 +915,7 @@ function SelecionarProjetosPage() {
             Exportar Excel
           </Button>
         </div>
-        {(client !== ALL || group !== ALL || search || dateFrom || dateTo || situation !== "all" || selectedDates.size > 0) && (
+        {(client !== ALL || group !== ALL || selectedSubgroups.size > 0 || search || dateFrom || dateTo || situation !== "all" || selectedDates.size > 0) && (
           <button
             onClick={limparFiltros}
             className="text-sm px-3 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -1100,6 +1108,88 @@ function FilterSelect({
           ))}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: Set<string>;
+  onChange: (s: Set<string>) => void;
+}) {
+  const toggle = (value: string, checked: boolean) => {
+    const next = new Set(selected);
+    if (checked) next.add(value);
+    else next.delete(value);
+    onChange(next);
+  };
+
+  const displayLabel =
+    selected.size === 0
+      ? "Todos"
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} selecionados`;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] text-muted-foreground">{label}</label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-[200px] h-9 justify-between font-normal px-3"
+          >
+            <span className="truncate">{displayLabel}</span>
+            <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[260px] p-0" align="start">
+          <div className="p-3 border-b border-border bg-muted/30 flex justify-between items-center">
+            <span className="text-xs font-medium">Filtrar por {label.toLowerCase()}</span>
+            {selected.size > 0 && (
+              <button
+                onClick={() => onChange(new Set())}
+                className="text-[10px] text-primary hover:underline"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          <div className="max-h-[300px] overflow-y-auto p-2">
+            {options.length === 0 ? (
+              <div className="text-xs text-muted-foreground p-4 text-center">
+                Nenhum {label.toLowerCase()} disponível
+              </div>
+            ) : (
+              options.map((opt) => (
+                <div
+                  key={opt}
+                  className="flex items-center gap-2 py-1.5 hover:bg-accent/50 rounded px-2"
+                >
+                  <Checkbox
+                    id={`multiselect-${label}-${opt}`}
+                    checked={selected.has(opt)}
+                    onCheckedChange={(c) => toggle(opt, !!c)}
+                  />
+                  <label
+                    htmlFor={`multiselect-${label}-${opt}`}
+                    className="text-xs cursor-pointer select-none flex-1 truncate"
+                  >
+                    {opt}
+                  </label>
+                </div>
+              ))
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
