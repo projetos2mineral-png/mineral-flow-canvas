@@ -74,3 +74,49 @@ export async function fetchQfqMatriz(): Promise<QfqMatrizRow[]> {
   }
   return all;
 }
+
+export async function upsertQfqMatrizNivel(
+  atividade_id: string | number,
+  colaborador_id: string | number,
+  nivel: string | null
+): Promise<void> {
+  const cleanNivel = nivel ? nivel.toString().trim().toUpperCase() : null;
+  // Se limpar, remove o registro para manter matriz esparsa
+  if (!cleanNivel) {
+    const { error } = await (supabase as any)
+      .from("qfq_matriz")
+      .delete()
+      .eq("atividade_id", atividade_id)
+      .eq("colaborador_id", colaborador_id);
+    if (error) throw error;
+    return;
+  }
+  // Tenta upsert direto (requer unique em atividade_id+colaborador_id)
+  const { error: upsertError } = await (supabase as any)
+    .from("qfq_matriz")
+    .upsert(
+      { atividade_id, colaborador_id, nivel: cleanNivel },
+      { onConflict: "atividade_id,colaborador_id" }
+    );
+  if (!upsertError) return;
+  // Fallback: busca existente e faz update/insert manual (caso onConflict não exista)
+  const { data: existing, error: selErr } = await (supabase as any)
+    .from("qfq_matriz")
+    .select("id")
+    .eq("atividade_id", atividade_id)
+    .eq("colaborador_id", colaborador_id)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing?.id) {
+    const { error } = await (supabase as any)
+      .from("qfq_matriz")
+      .update({ nivel: cleanNivel, updated_at: new Date().toISOString() })
+      .eq("id", existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await (supabase as any)
+      .from("qfq_matriz")
+      .insert({ atividade_id, colaborador_id, nivel: cleanNivel });
+    if (error) throw error;
+  }
+}

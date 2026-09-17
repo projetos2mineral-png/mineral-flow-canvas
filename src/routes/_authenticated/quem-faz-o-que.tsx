@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Search, Info, Users, Layers, Clock, Wrench, Tag, FolderKanban } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { fetchQfqAtividades, fetchQfqColaboradores, fetchQfqMatriz } from "@/lib/qfq";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { toast } from "sonner";
+import {
+  fetchQfqAtividades,
+  fetchQfqColaboradores,
+  fetchQfqMatriz,
+  upsertQfqMatrizNivel,
+} from "@/lib/qfq";
 
 export const Route = createFileRoute("/_authenticated/quem-faz-o-que")({
   head: () => ({
@@ -18,8 +25,7 @@ export const Route = createFileRoute("/_authenticated/quem-faz-o-que")({
       { title: "Quem faz o que · Mineral Geologia" },
       {
         name: "description",
-        content:
-          "Matriz informativa de atividades por colaborador com níveis W, K, Y, X e Z.",
+        content: "Matriz de atividades por colaborador com níveis por cores.",
       },
     ],
   }),
@@ -81,11 +87,98 @@ function NivelCell({ nivel }: { nivel: string | null | undefined }) {
   }
   return (
     <div
-      className={`flex h-full w-full items-center justify-center font-bold text-[12px] border ${cfg.bg} ${cfg.text} ${cfg.border}`}
-      title={`${cfg.label} — ${cfg.desc}`}
-    >
-      {cfg.label}
-    </div>
+      className={`flex h-full w-full items-center justify-center border ${cfg.bg} ${cfg.border}`}
+      title={cfg.desc}
+      aria-label={cfg.desc}
+    />
+  );
+}
+
+function EditableNivelCell({
+  atividadeId,
+  colaboradorId,
+  nivel,
+  onChange,
+  atividadeNome,
+  colaboradorNome,
+}: {
+  atividadeId: string | number;
+  colaboradorId: string | number;
+  nivel: string | null;
+  onChange: (atividadeId: string | number, colaboradorId: string | number, novoNivel: string | null) => void;
+  atividadeNome: string;
+  colaboradorNome: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const key = (nivel ?? "").toUpperCase().trim();
+  const cfg = NIVEL_CONFIG[key];
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="h-8 w-full flex items-center justify-center p-0 border-0 bg-transparent hover:brightness-[0.97] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                aria-label={`${atividadeNome} — ${colaboradorNome}`}
+              >
+                {cfg ? (
+                  <div className={`h-full w-full border ${cfg.bg} ${cfg.border}`} />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-muted/30 text-muted-foreground text-[11px]">
+                    —
+                  </div>
+                )}
+              </button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent className="bg-zinc-900 text-white border-zinc-800 text-xs max-w-[220px]">
+            <p className="font-medium">
+              {atividadeNome} — {colaboradorNome}
+            </p>
+            <p className="opacity-80">{cfg ? cfg.desc : "Sem registro — clique para definir"}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      <PopoverContent className="w-auto p-2" align="center" side="bottom">
+        <div className="flex flex-col gap-2">
+          <div className="text-[11px] font-medium text-muted-foreground text-center">
+            Selecione o nível
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {NIVEL_ORDER.map((lvl) => {
+              const c = NIVEL_CONFIG[lvl];
+              const isActive = key === lvl;
+              return (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => {
+                    onChange(atividadeId, colaboradorId, lvl);
+                    setOpen(false);
+                  }}
+                  className={`h-9 w-9 rounded-md border-2 ${c.bg} ${c.border} hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 ${isActive ? "ring-2 ring-foreground ring-offset-1" : ""}`}
+                  title={c.desc}
+                  aria-label={c.desc}
+                />
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onChange(atividadeId, colaboradorId, null);
+              setOpen(false);
+            }}
+            className="h-8 rounded-md border border-border bg-muted/40 hover:bg-muted text-xs text-muted-foreground"
+          >
+            Limpar
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -149,6 +242,80 @@ function QuemFazOQuePage() {
     [colaboradores]
   );
 
+  const qc = useQueryClient();
+
+  const handleNivelChange = async (
+    atividadeId: string | number,
+    colaboradorId: string | number,
+    novoNivel: string | null
+  ) => {
+    const key = `${atividadeId}::${colaboradorId}`;
+    const prevNivel = matrizMap.get(key) ?? null;
+    const nextNivel = novoNivel ? novoNivel.toUpperCase().trim() : null;
+
+    // Atualização otimista — reflete imediatamente na UI
+    qc.setQueryData(["qfq", "matriz"], (old: any) => {
+      const arr = (old ?? []) as any[];
+      const idx = arr.findIndex(
+        (r: any) => String(r.atividade_id) === String(atividadeId) && String(r.colaborador_id) === String(colaboradorId)
+      );
+      if (!nextNivel) {
+        if (idx >= 0) return arr.filter((_, i) => i !== idx);
+        return arr;
+      }
+      if (idx >= 0) {
+        const copy = [...arr];
+        copy[idx] = { ...copy[idx], nivel: nextNivel, updated_at: new Date().toISOString() };
+        return copy;
+      }
+      return [
+        ...arr,
+        {
+          id: `tmp-${Date.now()}-${atividadeId}-${colaboradorId}`,
+          atividade_id: atividadeId,
+          colaborador_id: colaboradorId,
+          nivel: nextNivel,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+    });
+
+    try {
+      await upsertQfqMatrizNivel(atividadeId, colaboradorId, nextNivel);
+    } catch (e) {
+      toast.error("Falha ao salvar: " + (e as Error).message);
+      // Reverte em caso de erro
+      qc.setQueryData(["qfq", "matriz"], (old: any) => {
+        const arr = (old ?? []) as any[];
+        const idx = arr.findIndex(
+          (r: any) => String(r.atividade_id) === String(atividadeId) && String(r.colaborador_id) === String(colaboradorId)
+        );
+        if (prevNivel) {
+          if (idx >= 0) {
+            const copy = [...arr];
+            copy[idx] = { ...copy[idx], nivel: prevNivel };
+            return copy;
+          }
+          return [
+            ...arr,
+            {
+              id: `tmp-${Date.now()}`,
+              atividade_id: atividadeId,
+              colaborador_id: colaboradorId,
+              nivel: prevNivel,
+              created_at: null,
+              updated_at: null,
+            },
+          ];
+        } else {
+          if (idx >= 0) return arr.filter((_, i) => i !== idx);
+          return arr;
+        }
+      });
+    }
+  };
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
@@ -179,34 +346,22 @@ function QuemFazOQuePage() {
                 key={lvl}
                 className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2"
               >
-                <span
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-sm border text-xs font-bold ${cfg.bg} ${cfg.text} ${cfg.border}`}
-                >
-                  {cfg.label}
+                <span className={`inline-flex h-7 w-7 items-center justify-center rounded-sm border ${cfg.bg} ${cfg.border}`} />
+                <span className="text-[11px] text-muted-foreground leading-tight max-w-[160px]">
+                  {cfg.desc}
                 </span>
-                <div className="flex flex-col">
-                  <span className="text-xs font-semibold leading-none">{cfg.label}</span>
-                  <span className="text-[11px] text-muted-foreground leading-tight">
-                    {cfg.desc}
-                  </span>
-                </div>
               </div>
             );
           })}
           <div className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-sm border bg-muted/40 text-muted-foreground text-[11px]">
-              —
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-sm border bg-muted/40" />
+            <span className="text-[11px] text-muted-foreground leading-tight">
+              Sem registro / Não avaliado
             </span>
-            <div className="flex flex-col">
-              <span className="text-xs font-semibold leading-none">—</span>
-              <span className="text-[11px] text-muted-foreground leading-tight">
-                Sem registro / Não avaliado
-              </span>
-            </div>
           </div>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Cores idênticas à planilha “Quem faz o que.xlsx”. A célula exibe apenas a letra com fundo colorido para leitura rápida.
+          Cores idênticas à planilha “Quem faz o que.xlsx”. A célula exibe somente a cor correspondente ao nível.
         </p>
       </div>
 
@@ -355,25 +510,14 @@ function QuemFazOQuePage() {
                         const lvl = matrizMap.get(key) ?? null;
                         return (
                           <td key={col.id} className="border border-border p-0 h-8 min-w-[64px] max-w-[84px]">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="h-8 w-full">
-                                    <NivelCell nivel={lvl} />
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent className="bg-zinc-900 text-white border-zinc-800 text-xs">
-                                  <p className="font-medium">
-                                    {atv.nome} — {col.nome}
-                                  </p>
-                                  <p className="opacity-80">
-                                    {lvl
-                                      ? `${lvl} — ${NIVEL_CONFIG[lvl]?.desc ?? ""}`
-                                      : "Sem registro"}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <EditableNivelCell
+                              atividadeId={atv.id}
+                              colaboradorId={col.id}
+                              nivel={lvl}
+                              onChange={handleNivelChange}
+                              atividadeNome={atv.nome}
+                              colaboradorNome={col.nome}
+                            />
                           </td>
                         );
                       })}
@@ -385,10 +529,12 @@ function QuemFazOQuePage() {
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Role horizontal e verticalmente para navegar. Cabeçalhos e primeira coluna são fixos. Dados lidos de{" "}
-            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_atividades</code>,{" "}
-            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_colaboradores</code> e{" "}
-            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_matriz</code> (somente leitura).
+            Role horizontal e verticalmente para navegar. Cabeçalhos e primeira coluna são fixos. Clique em uma
+            célula para editar o nível pela cor — a alteração é salva em{" "}
+            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_matriz</code> e persiste após recarregar.
+            Dados de{" "}
+            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_atividades</code> e{" "}
+            <code className="px-1 py-0.5 bg-muted rounded text-[10px]">qfq_colaboradores</code> são somente leitura.
           </p>
         </div>
       )}
