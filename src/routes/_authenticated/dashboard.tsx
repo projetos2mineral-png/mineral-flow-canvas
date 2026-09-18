@@ -1777,12 +1777,9 @@ function LaneColumn({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground pointer-events-auto"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         aria-label="Configurações do quadro"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenBoardSettings?.();
-                        }}
+                        onClick={() => onOpenBoardSettings?.()}
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
