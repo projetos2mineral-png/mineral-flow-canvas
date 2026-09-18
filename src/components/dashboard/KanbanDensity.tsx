@@ -122,3 +122,27 @@ export function DensityControl({ value, onChange, className }: DensityControlPro
     </div>
   );
 }
+
+/**
+ * Botão único e minimalista que cicla entre Compacta → Padrão → Confortável.
+ * Cada clique avança para o próximo modo; tooltip explica a ação.
+ */
+export function DensityCycleButton({ value, onChange, className }: DensityControlProps) {
+  const idx = DENSITY_MODES.indexOf(value);
+  const next = DENSITY_MODES[(idx + 1) % DENSITY_MODES.length];
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(next)}
+      aria-label={`Visualização: ${DENSITY_LABEL[value]}. Clique para alternar para ${DENSITY_LABEL[next]}.`}
+      title={`Visualização: ${DENSITY_LABEL[value]} — clique para ${DENSITY_LABEL[next]}`}
+      className={cn(
+        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-background px-3 text-[11px] font-medium leading-none text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+        className
+      )}
+    >
+      <Maximize2 className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden="true" />
+      <span>{DENSITY_LABEL[value]}</span>
+    </button>
+  );
+}

@@ -73,7 +73,7 @@ import {
   type ReviewRow,
 } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { DensityControl, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
+import { DensityCycleButton, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
 
 
 import { useCurrentDashboardUser } from "@/lib/auth";
@@ -338,17 +338,30 @@ function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    updateAssigneeEdges();
     const el = assigneeScrollRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(updateAssigneeEdges);
+    const update = () => updateAssigneeEdges();
+    // Agendamento em próximo frame para garantir layout concluído
+    const raf = requestAnimationFrame(update);
+    const t = window.setTimeout(update, 80);
+    const onScroll = () => updateAssigneeEdges();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", update);
+    const ro = new ResizeObserver(update);
     ro.observe(el);
-    el.addEventListener("scroll", updateAssigneeEdges);
+    const child = el.firstElementChild as HTMLElement | null;
+    if (child) ro.observe(child);
+    // Observa TabsList interno se existir (mudança de conteúdo altera scrollWidth)
+    const tabsList = el.querySelector("[role='tablist']") as HTMLElement | null;
+    if (tabsList) ro.observe(tabsList);
     return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(t);
       ro.disconnect();
-      el.removeEventListener("scroll", updateAssigneeEdges);
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", update);
     };
-  }, [updateAssigneeEdges, assignees.length]);
+  }, [updateAssigneeEdges, assignees.length, compactNames]);
 
   // Rolagem horizontal com roda / touchpad sem prejudicar scroll vertical do Kanban
   useEffect(() => {
@@ -359,6 +372,7 @@ function DashboardPage() {
       if (max <= 0) return;
       const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
       if (delta === 0) return;
+      // Converte roda vertical em rolagem horizontal quando sobre o seletor
       e.preventDefault();
       el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     };
@@ -377,13 +391,21 @@ function DashboardPage() {
     if (!target) return;
     const left = target.offsetLeft - el.clientWidth / 2 + target.offsetWidth / 2;
     el.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
-  }, [activeAssignee, assignees.length]);
+    // Atualiza estado das setas após centralizar
+    window.setTimeout(() => updateAssigneeEdges(), 300);
+  }, [activeAssignee, assignees.length, updateAssigneeEdges]);
 
-  const nudgeAssignee = (dir: -1 | 1) => {
-    const el = assigneeScrollRef.current;
-    if (!el) return;
-    el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" });
-  };
+  const nudgeAssignee = useCallback(
+    (dir: -1 | 1) => {
+      const el = assigneeScrollRef.current;
+      if (!el) return;
+      const amount = Math.max(180, el.clientWidth * 0.65);
+      el.scrollBy({ left: dir * amount, behavior: "smooth" });
+      // Garante atualização das setas mesmo se scroll suave não disparar imediatamente
+      window.setTimeout(() => updateAssigneeEdges(), 350);
+    },
+    [updateAssigneeEdges]
+  );
 
   // Restaura o último responsável aberto do localStorage (persistência
   // entre trocas de aba/página). Só cai no primeiro alfabético como
@@ -491,7 +513,7 @@ function DashboardPage() {
         <Tabs
           value={activeAssignee}
           onValueChange={setActiveAssignee}
-          className="flex-1 flex flex-col min-h-0 relative pb-[112px] sm:pb-[72px]"
+          className="flex-1 flex flex-col min-h-0 relative pb-[84px]"
           style={densityVars as React.CSSProperties}
         >
           {assignees.map((a) => (
@@ -518,18 +540,18 @@ function DashboardPage() {
               />
             </TabsContent>
           ))}
-          {/* Barra flutuante inferior unificada: busca + seletor de responsáveis + densidade */}
-          <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4">
-            <div className="pointer-events-auto flex w-full max-w-[min(96vw,980px)] items-center gap-2 rounded-full border border-border/50 bg-card/95 px-2.5 py-1.5 shadow-lg backdrop-blur-md">
-              {/* Busca compacta */}
+          {/* Painel flutuante inferior — [ Busca ] | [ < responsáveis > ] | [ modo ] */}
+          <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4">
+            <div className="pointer-events-auto flex w-full max-w-[min(96vw,1180px)] items-center gap-1.5 sm:gap-2 rounded-full border border-border/40 bg-card/95 px-2 sm:px-2.5 py-1.5 shadow-lg backdrop-blur-md">
+              {/* Busca — placeholder descritivo restaurado, busca instantânea */}
               <div className="relative shrink-0">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
                 <Input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar…"
+                  placeholder="Buscar por título, processo, OS, cliente ou responsável"
                   title="Buscar por título, processo, OS, cliente ou responsável"
-                  className="h-7 w-[148px] sm:w-[220px] pl-7 pr-7 text-[13px] bg-background border-border/60 focus-visible:ring-1 rounded-full"
+                  className="h-7 w-[200px] sm:w-[280px] lg:w-[360px] pl-7 pr-7 text-[13px] bg-background border-border/60 focus-visible:ring-1 rounded-full placeholder:text-muted-foreground/70 placeholder:truncate"
                 />
                 {search && (
                   <button
@@ -543,31 +565,30 @@ function DashboardPage() {
                 )}
               </div>
 
-              <div className="hidden sm:block h-6 w-px shrink-0 bg-border/60" aria-hidden="true" />
+              <div className="h-5 w-px shrink-0 bg-border/30 hidden sm:block" aria-hidden="true" />
 
-              {/* Seletor de responsáveis com rolagem horizontal, setas e barra fina */}
+              {/* Seletor de responsáveis — área ampliada, setas funcionais e sincronizadas */}
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 <button
                   type="button"
-                  aria-label="Rolar responsáveis para a esquerda"
+                  aria-label="Responsáveis anteriores"
                   onClick={() => nudgeAssignee(-1)}
                   disabled={!canScrollLeft}
-                  className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-25 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
 
                 <div className="relative min-w-0 flex-1">
-                  {/* fade lateral quando há overflow */}
                   {canScrollLeft && (
-                    <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-card to-transparent rounded-l-full" />
+                    <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-5 bg-gradient-to-r from-card via-card/80 to-transparent" />
                   )}
                   {canScrollRight && (
-                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-card to-transparent rounded-r-full" />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-5 bg-gradient-to-l from-card via-card/80 to-transparent" />
                   )}
                   <div
                     ref={assigneeScrollRef}
-                    className="overflow-x-auto overflow-y-hidden [scrollbar-width:thin] [-ms-overflow-style:auto] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent py-1"
+                    className="overflow-x-auto overflow-y-hidden [scrollbar-width:thin] [-ms-overflow-style:auto] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent py-0.5"
                   >
                     <TabsList className="flex h-auto w-max items-center gap-1 bg-transparent p-0">
                       {assignees.map((a) => {
@@ -581,7 +602,7 @@ function DashboardPage() {
                             data-assignee-chip={a}
                             className="group flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-background px-2.5 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
                           >
-                            <span className="max-w-[92px] truncate">{short}</span>
+                            <span className="max-w-[110px] truncate">{short}</span>
                             <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] leading-none text-muted-foreground group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground">
                               {count}
                             </span>
@@ -594,50 +615,21 @@ function DashboardPage() {
 
                 <button
                   type="button"
-                  aria-label="Rolar responsáveis para a direita"
+                  aria-label="Próximos responsáveis"
                   onClick={() => nudgeAssignee(1)}
                   disabled={!canScrollRight}
-                  className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-25 disabled:cursor-not-allowed disabled:shadow-none"
                 >
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>
 
-              {/* Controles móveis alternativos (setas sempre visíveis em telas muito pequenas via scroll) */}
-              <div className="flex sm:hidden items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  aria-label="Rolar responsáveis para a esquerda"
-                  onClick={() => nudgeAssignee(-1)}
-                  disabled={!canScrollLeft}
-                  className="flex h-7 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground disabled:opacity-30"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  aria-label="Rolar responsáveis para a direita"
-                  onClick={() => nudgeAssignee(1)}
-                  disabled={!canScrollRight}
-                  className="flex h-7 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground disabled:opacity-30"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
+              <div className="h-5 w-px shrink-0 bg-border/30 hidden sm:block" aria-hidden="true" />
 
-              <div className="hidden sm:block h-6 w-px shrink-0 bg-border/60" aria-hidden="true" />
-
-              {/* Controle de densidade compacto */}
-              <div className="shrink-0 hidden sm:flex">
-                <DensityControl value={density} onChange={setDensity} />
+              {/* Modo visual — botão único cíclico, minimalista */}
+              <div className="shrink-0">
+                <DensityCycleButton value={density} onChange={setDensity} />
               </div>
-              {/* Em telas muito estreitas, densidade vira menu compacto mas mantém funcionalidade — exibe só no desktop para não poluir */}
-            </div>
-          </div>
-          {/* Densidade para mobile: linha discreta abaixo da barra principal quando necessário */}
-          <div className="pointer-events-none fixed bottom-[56px] left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4 sm:hidden">
-            <div className="pointer-events-auto">
-              <DensityControl value={density} onChange={setDensity} className="shadow-md backdrop-blur-md bg-card/95" />
             </div>
           </div>
         </Tabs>
@@ -842,12 +834,31 @@ function AssigneeBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
 
-  // ---- Persistência de scroll (sem barra superior — topo liberado) ----
+  // ---- Persistência + barra horizontal flutuante do Kanban (sincronizada) ----
   const mainScrollRef = useRef<HTMLDivElement>(null);
+  const kanbanProxyRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const [kanbanContentWidth, setKanbanContentWidth] = useState(0);
+  const kanbanSyncingRef = useRef(false);
   const scrollStorageKey = `dashboard:scroll:${assignee}`;
 
-  // Restaura scroll salvo quando a aba fica ativa
+  // Mede largura real das colunas para a barra proxy flutuante
+  useEffect(() => {
+    if (!innerRef.current) return;
+    const el = innerRef.current;
+    const update = () => setKanbanContentWidth(el.scrollWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    // Observa também filhos — mudança de lanes/cards altera largura
+    window.addEventListener("resize", update);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [lanes.length, cards.length, reviews.length, demandCards?.length]);
+
+  // Restaura scroll salvo quando a aba fica ativa (sincroniza também a proxy)
   useLayoutEffect(() => {
     if (!isActive) return;
     try {
@@ -858,6 +869,9 @@ function AssigneeBoard({
           if (typeof saved.x === "number") mainScrollRef.current.scrollLeft = saved.x;
           if (typeof saved.y === "number") mainScrollRef.current.scrollTop = saved.y;
         }
+        if (kanbanProxyRef.current && typeof saved.x === "number") {
+          kanbanProxyRef.current.scrollLeft = saved.x;
+        }
         if (typeof saved.winY === "number") {
           window.scrollTo({ top: saved.winY });
         }
@@ -865,7 +879,7 @@ function AssigneeBoard({
     } catch {
       /* ignore */
     }
-  }, [isActive, scrollStorageKey]);
+  }, [isActive, scrollStorageKey, kanbanContentWidth]);
 
   // Salva posição vertical da página também
   useEffect(() => {
@@ -890,18 +904,54 @@ function AssigneeBoard({
   }, [isActive, scrollStorageKey]);
 
   const onMainScroll = () => {
+    if (kanbanSyncingRef.current) return;
+    kanbanSyncingRef.current = true;
     const el = mainScrollRef.current;
-    if (!el) return;
-    try {
-      localStorage.setItem(
-        scrollStorageKey,
-        JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
-      );
-    } catch {
-      /* ignore */
+    const proxy = kanbanProxyRef.current;
+    if (el && proxy) {
+      const elMax = Math.max(1, el.scrollWidth - el.clientWidth);
+      const proxyMax = Math.max(1, proxy.scrollWidth - proxy.clientWidth);
+      // Sincroniza proporcionalmente — evita descompasso quando larguras visíveis diferem
+      proxy.scrollLeft = (el.scrollLeft / elMax) * proxyMax;
     }
+    if (el) {
+      try {
+        localStorage.setItem(
+          scrollStorageKey,
+          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    requestAnimationFrame(() => {
+      kanbanSyncingRef.current = false;
+    });
   };
-  // ---- fim persistência ----
+
+  const onKanbanProxyScroll = () => {
+    if (kanbanSyncingRef.current) return;
+    kanbanSyncingRef.current = true;
+    const el = mainScrollRef.current;
+    const proxy = kanbanProxyRef.current;
+    if (el && proxy) {
+      const elMax = Math.max(1, el.scrollWidth - el.clientWidth);
+      const proxyMax = Math.max(1, proxy.scrollWidth - proxy.clientWidth);
+      el.scrollLeft = (proxy.scrollLeft / proxyMax) * elMax;
+      try {
+        localStorage.setItem(
+          scrollStorageKey,
+          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    requestAnimationFrame(() => {
+      kanbanSyncingRef.current = false;
+    });
+  };
+  // ---- fim persistência / proxy ----
 
   // Modal states
   const [openCard, setOpenCard] = useState<DashboardCard | null>(null);
@@ -1224,7 +1274,7 @@ function AssigneeBoard({
         <div
           ref={mainScrollRef}
           onScroll={onMainScroll}
-          className={`flex-1 min-h-0 overflow-x-auto ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
+          className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
         >
           <div
             ref={innerRef}
@@ -1299,6 +1349,20 @@ function AssigneeBoard({
             )}
           </div>
         </div>
+
+        {/* Barra horizontal flutuante do Kanban — controle sincronizado, sempre acessível na viewport */}
+        {isActive && kanbanContentWidth > 0 && (
+          <div className="pointer-events-none fixed bottom-[62px] left-1/2 z-20 flex w-full -translate-x-1/2 justify-center px-4">
+            <div
+              ref={kanbanProxyRef}
+              onScroll={onKanbanProxyScroll}
+              className="pointer-events-auto w-full max-w-[min(88vw,720px)] overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/90 px-1 py-1 backdrop-blur-md shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+              aria-label="Barra de rolagem horizontal do Kanban"
+            >
+              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+            </div>
+          </div>
+        )}
 
         <DragOverlay>
           {activeCard ? (
