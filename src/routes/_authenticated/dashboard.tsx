@@ -1525,18 +1525,10 @@ function LaneColumn({
       ref={laneSetNodeRef}
       style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "group relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
+        "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
         isLaneDragging && "opacity-50"
       )}
     >
-      {/* Tooltip de identificação da coluna — aparece ao passar o mouse sobre qualquer área da coluna */}
-      <div
-        role="tooltip"
-        aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1 z-20 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium leading-none text-white shadow-md group-hover:block"
-      >
-        {title}
-      </div>
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
         className="px-2.5 flex shrink-0 flex-col justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
