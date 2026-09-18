@@ -304,6 +304,11 @@ function DashboardPage() {
   const [activeAssignee, setActiveAssignee] = useState<string>("");
   const [search, setSearch] = useState<string>("");
 
+  // Posição vertical da barra de controles flutuante (reposicionável)
+  const [controlsBottom, setControlsBottom] = useState(12);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const controlsDragRef = useRef<{ startY: number; startBottom: number } | null>(null);
+
   // Densidade global do Kanban (controlada na barra flutuante inferior)
   const { density, setDensity, vars: densityVars } = useKanbanDensity();
 
@@ -407,6 +412,48 @@ function DashboardPage() {
       window.setTimeout(() => updateAssigneeEdges(), 350);
     },
     [updateAssigneeEdges]
+  );
+
+  const handleControlsPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const target = e.currentTarget as HTMLElement;
+      try {
+        (target as HTMLElement).setPointerCapture?.(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      controlsDragRef.current = { startY: e.clientY, startBottom: controlsBottom };
+      const onMove = (ev: PointerEvent) => {
+        const drag = controlsDragRef.current;
+        if (!drag) return;
+        const deltaY = ev.clientY - drag.startY;
+        const barH = controlsRef.current?.offsetHeight ?? 56;
+        const minBottom = 12;
+        const maxBottom = Math.max(minBottom, window.innerHeight - barH - 12);
+        const next = Math.min(maxBottom, Math.max(minBottom, drag.startBottom - deltaY));
+        setControlsBottom(next);
+      };
+      const onUp = (ev: PointerEvent) => {
+        controlsDragRef.current = null;
+        try {
+          (target as HTMLElement).releasePointerCapture?.(ev.pointerId);
+        } catch {
+          /* ignore */
+        }
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      document.body.style.cursor = "grabbing";
+      document.body.style.userSelect = "none";
+    },
+    [controlsBottom]
   );
 
   // Restaura o último responsável aberto do localStorage (persistência
@@ -544,8 +591,23 @@ function DashboardPage() {
             </TabsContent>
           ))}
           {/* Painel flutuante inferior — [ Busca ] | [ < responsáveis > ] | [ modo ] */}
-          <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4">
+          <div
+            ref={controlsRef}
+            className="pointer-events-none fixed left-1/2 z-50 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4"
+            style={{ bottom: controlsBottom }}
+          >
             <div className="pointer-events-auto flex w-full max-w-[min(96vw,1180px)] items-center gap-1.5 sm:gap-2 rounded-full border border-border/40 bg-card/95 px-2 sm:px-2.5 py-1.5 shadow-lg backdrop-blur-md">
+              {/* Handle discreto para reposicionamento vertical */}
+              <div
+                role="button"
+                aria-label="Arraste para reposicionar a barra"
+                title="Arraste para reposicionar"
+                onPointerDown={handleControlsPointerDown}
+                className="shrink-0 flex items-center justify-center h-7 w-6 rounded-full hover:bg-accent/60 cursor-grab active:cursor-grabbing touch-none select-none text-muted-foreground/40 hover:text-muted-foreground/70"
+              >
+                <GripVertical className="h-3.5 w-3.5" />
+              </div>
+              <div className="h-5 w-px shrink-0 bg-border/30 hidden sm:block" aria-hidden="true" />
               {/* Busca — compacta, placeholder completo em tooltip */}
               <div className="relative shrink-0">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
