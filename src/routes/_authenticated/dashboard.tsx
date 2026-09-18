@@ -1941,7 +1941,7 @@ function ProjectCardView({
               <span className="inline-flex items-center gap-1">
                 <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
                 <span className="tabular-nums">
-                  {totalTasks != null ? `${totalTasks} ${totalTasks === 1 ? "tarefa" : "tarefas"}` : "— tarefas"}
+                  {totalTasks != null ? `${totalTasks}` : "—"}
                 </span>
               </span>
               <span className="inline-flex items-center gap-1">
