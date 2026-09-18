@@ -43,6 +43,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ListChecks,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -235,6 +236,7 @@ function DashboardPage() {
   const qc = useQueryClient();
   const { level } = useCurrentDashboardUser();
   const readOnly = level === "comum";
+  const isAdmin = level === "administrador";
 
   const projectsQ = useQuery({
     queryKey: ["dashboard", "projects"],
@@ -534,6 +536,7 @@ function DashboardPage() {
                 currentUserName={currentUserName}
                 qc={qc}
                 readOnly={readOnly}
+                isAdmin={isAdmin}
                 isActive={a === activeAssignee}
                 search={search}
                 densityVars={densityVars}
@@ -650,6 +653,7 @@ function AssigneeBoard({
   currentUserName,
   qc,
   readOnly = false,
+  isAdmin = false,
   isActive = true,
   search = "",
   densityVars,
@@ -665,6 +669,7 @@ function AssigneeBoard({
   currentUserName: string;
   qc: ReturnType<typeof useQueryClient>;
   readOnly?: boolean;
+  isAdmin?: boolean;
   isActive?: boolean;
   search?: string;
   densityVars?: React.CSSProperties;
@@ -1307,6 +1312,7 @@ function AssigneeBoard({
               onOpenCard={setOpenCard}
               isUnassigned
               assigneeName={assignee}
+              isAdmin={isAdmin}
             />
 
             <SortableContext
@@ -1326,6 +1332,7 @@ function AssigneeBoard({
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                   onStatusChange={handleStatusChange}
                   onOpenCard={setOpenCard}
+                  isAdmin={isAdmin}
                   onRename={async (newTitle) => {
                     try {
                       await updateLane(lane.id, { title: newTitle });
@@ -1363,7 +1370,7 @@ function AssigneeBoard({
 
         <DragOverlay>
           {activeCard ? (
-            <ProjectCardView card={activeCard} onStatusChange={() => {}} onOpenCard={() => {}} dragging />
+            <ProjectCardView card={activeCard} onStatusChange={() => {}} onOpenCard={() => {}} dragging isAdmin={isAdmin} />
           ) : null}
         </DragOverlay>
       </DndContext>
@@ -1422,6 +1429,7 @@ function LaneColumn({
   laneStyle,
   isLaneDragging,
   assigneeName,
+  isAdmin = false,
 }: {
   lane?: Lane;
   laneId: string;
@@ -1442,6 +1450,7 @@ function LaneColumn({
   laneStyle?: React.CSSProperties;
   isLaneDragging?: boolean;
   assigneeName: string;
+  isAdmin?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -1590,6 +1599,21 @@ function LaneColumn({
                   <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
                     {isMonthly ? title.toUpperCase() : title}
                   </h3>
+                  {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
+                    <span
+                      className={cn(
+                        "absolute right-1.5 inline-flex items-center gap-1 text-[10px] font-normal tracking-normal normal-case tabular-nums",
+                        overCapacity ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/65"
+                      )}
+                      title={`${formatHoursCompact(plannedHours)} planejadas${capacity != null ? ` / ${formatHoursCompact(capacity)} capacidade` : ""}${overCapacity ? ` • +${formatHoursCompact(excess)} excesso` : ""}`}
+                    >
+                      <Clock className="h-3 w-3 opacity-60" />
+                      <span>
+                        {formatHoursCompact(plannedHours)}
+                        {capacity != null ? ` / ${formatHoursCompact(capacity)}` : ""}
+                      </span>
+                    </span>
+                  )}
                 </div>
               </TooltipTrigger>
               <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
@@ -1603,7 +1627,9 @@ function LaneColumn({
                 <DialogHeader>
                   <DialogTitle>Configurações da Fila</DialogTitle>
                   <DialogDescription>
-                    Ajuste o título ou a capacidade para {assigneeName}.
+                    {isAdmin && isMonthly
+                      ? `Ajuste o título ou a capacidade para ${assigneeName}.`
+                      : "Ajuste o título da fila."}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
@@ -1615,7 +1641,7 @@ function LaneColumn({
                       className="col-span-3"
                     />
                   </div>
-                  {isMonthly && (
+                  {isAdmin && isMonthly && (
                     <div className="grid grid-cols-4 items-center gap-4">
                       <label className="text-right text-sm font-medium">Capacidade (h)</label>
                       <Input 
@@ -1648,7 +1674,7 @@ function LaneColumn({
                       if (draft.trim() !== title && onRename) {
                         await onRename(draft.trim());
                       }
-                      if (isMonthly) {
+                      if (isAdmin && isMonthly) {
                         await handleSaveCapacity();
                       } else {
                         setIsCapacityDialogOpen(false);
@@ -1678,6 +1704,7 @@ function LaneColumn({
           onRequestCorrectionReview={onRequestCorrectionReview}
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
+          isAdmin={isAdmin}
         />
       </SortableContext>
     </div>
@@ -1696,6 +1723,7 @@ function SortableLaneColumn(props: {
   onOpenCard: (c: DashboardCard) => void;
   onRename: (next: string) => void | Promise<void>;
   onDelete: () => void | Promise<void>;
+  isAdmin?: boolean;
 }) {
   const { lane } = props;
   const {
@@ -1730,6 +1758,7 @@ function SortableLaneColumn(props: {
       laneStyle={style}
       isLaneDragging={isDragging}
       assigneeName={lane.assignee_name}
+      isAdmin={props.isAdmin}
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
@@ -1750,6 +1779,7 @@ function DroppableLaneBody({
   onRequestCorrectionReview,
   onStatusChange,
   onOpenCard,
+  isAdmin = false,
 }: {
   laneId: string;
   cards: DashboardCard[];
@@ -1760,6 +1790,7 @@ function DroppableLaneBody({
   onRequestCorrectionReview: (r: ReviewRow) => void;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  isAdmin?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `lane:${laneId}` });
   return (
@@ -1787,6 +1818,7 @@ function DroppableLaneBody({
           card={c}
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
+          isAdmin={isAdmin}
         />
       ))}
       {demands.map((d) => (
@@ -1805,10 +1837,12 @@ function SortableCard({
   card,
   onStatusChange,
   onOpenCard,
+  isAdmin = false,
 }: {
   card: DashboardCard;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  isAdmin?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.key });
@@ -1819,7 +1853,7 @@ function SortableCard({
   };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ProjectCardView card={card} onStatusChange={onStatusChange} onOpenCard={onOpenCard} />
+      <ProjectCardView card={card} onStatusChange={onStatusChange} onOpenCard={onOpenCard} isAdmin={isAdmin} />
     </div>
   );
 }
@@ -1829,11 +1863,13 @@ function ProjectCardView({
   onStatusChange,
   onOpenCard,
   dragging,
+  isAdmin = false,
 }: {
   card: DashboardCard;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
   dragging?: boolean;
+  isAdmin?: boolean;
 }) {
   const p = card.project;
   const hasNote = !!(card.internal_note && card.internal_note.trim());
@@ -1848,7 +1884,8 @@ function ProjectCardView({
     <div
       style={{ padding: "var(--kb-card-pad)" }}
       className={cn(
-        "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card min-h-[158px] h-[158px]",
+        "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card",
+        isAdmin ? "min-h-[158px]" : "min-h-[158px] h-[158px]",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-md" : ""
       )}
@@ -1882,6 +1919,22 @@ function ProjectCardView({
               </div>
             )}
           </div>
+          {isAdmin && (totalTasks != null || rawHours != null) && (
+            <div className="flex items-center gap-3 text-[11px] leading-4 text-muted-foreground/60">
+              {totalTasks != null && (
+                <span className="inline-flex items-center gap-1">
+                  <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
+                  <span className="tabular-nums">{totalTasks} {totalTasks === 1 ? "tarefa" : "tarefas"}</span>
+                </span>
+              )}
+              {rawHours != null && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
+                  <span className="tabular-nums">{formatHoursCompact(Number(rawHours))}</span>
+                </span>
+              )}
+            </div>
+          )}
           {card.review_status && card.review_status !== "não enviado" && (
             <div className="text-[10px] leading-3 text-muted-foreground/60 truncate">
               {card.review_status === "aguardando revisão" &&
