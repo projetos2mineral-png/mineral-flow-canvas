@@ -262,7 +262,7 @@ function AppShell() {
   }
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
+      <header className="border-b border-border bg-card">
         <div className="flex items-center gap-6 px-6 h-14">
           <nav className="flex items-center gap-1">
             {navItems.map((item) => {
