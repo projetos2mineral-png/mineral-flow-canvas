@@ -44,6 +44,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListChecks,
+  Settings,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -84,6 +85,7 @@ import {
   isMonthlyLaneTitle,
   estimateSourceLabel,
   monthlyTitleToDateISO,
+  monthlyLaneTitle,
 } from "@/lib/dashboard";
 
 import { Eye } from "lucide-react";
@@ -108,6 +110,8 @@ import {
 import { cn } from "@/lib/utils";
 import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
+import { fetchBoardAntecedence, upsertBoardAntecedence, calculatePositioningDate } from "@/lib/board-antecedence";
+import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
 
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -808,7 +812,10 @@ function AssigneeBoard({
           .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
-      const laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
+      // Aplica antecedência do quadro também para demandas
+      const posDate = calculatePositioningDate(d.demand.desired_date, boardAntecedence);
+      const posLaneTitle = posDate ? monthlyLaneTitle(posDate) : d.laneTitle;
+      const laneId = laneIdByTitle.get((posLaneTitle ?? d.laneTitle).trim().toLowerCase());
       m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
     }
     for (const [, arr] of m) {
@@ -821,7 +828,7 @@ function AssigneeBoard({
       );
     }
     return m;
-  }, [demandCards, localLanes, normalizedSearch]);
+  }, [demandCards, localLanes, normalizedSearch, boardAntecedence]);
 
 
   const hydrated: DashboardCard[] = useMemo(() => {
@@ -896,6 +903,50 @@ function AssigneeBoard({
     }
     return m;
   }, [items, localLanes, normalizedSearch]);
+
+  // ---- Antecedência do quadro (por responsável) ----
+  const [boardAntecedence, setBoardAntecedence] = useState<number>(0);
+  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
+  const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
+  const [boardAntecedenceSaving, setBoardAntecedenceSaving] = useState(false);
+
+  useEffect(() => {
+    if (!assignee || assignee === UNASSIGNED) return;
+    fetchBoardAntecedence(assignee).then((v) => {
+      setBoardAntecedence(v);
+      setBoardAntecedenceDraft(String(v));
+    });
+  }, [assignee]);
+
+  const handleSaveBoardAntecedence = async () => {
+    const days = parseInt(boardAntecedenceDraft, 10);
+    if (isNaN(days) || days < 0) {
+      toast.error("Informe um número inteiro positivo (0 ou maior).");
+      return;
+    }
+    setBoardAntecedenceSaving(true);
+    try {
+      await upsertBoardAntecedence(assignee, days);
+      setBoardAntecedence(days);
+      setIsBoardSettingsOpen(false);
+      toast.success(`Antecedência do quadro "${assignee}" atualizada para ${days} dias.`);
+      // Realoca cards existentes conforme nova regra
+      try {
+        const moved = await reallocateBoardCardsForAntecedence(assignee);
+        if (moved > 0) {
+          toast.info(`${moved} card(s) reposicionado(s) conforme nova antecedência.`);
+        }
+      } catch (e) {
+        console.warn("Reallocate after antecedence change failed:", e);
+      }
+      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+    } catch (e) {
+      toast.error("Falha ao salvar antecedência: " + (e as Error).message);
+    } finally {
+      setBoardAntecedenceSaving(false);
+    }
+  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -1350,6 +1401,35 @@ function AssigneeBoard({
         }}
       >
         <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Configuração do quadro — antecedência por responsável */}
+          {assignee !== UNASSIGNED && (
+            <div className="shrink-0 flex items-center justify-end gap-2 px-2 py-1 border-b border-border/20 bg-card/40">
+              {boardAntecedence > 0 && (
+                <span className="text-[11px] text-muted-foreground hidden sm:inline">
+                  Antecedência: {boardAntecedence} dias
+                </span>
+              )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => {
+                        setBoardAntecedenceDraft(String(boardAntecedence));
+                        setIsBoardSettingsOpen(true);
+                      }}
+                      aria-label="Configuração do quadro"
+                    >
+                      <Settings className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Configuração do quadro</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
           <div
             ref={mainScrollRef}
             onScroll={onMainScroll}
@@ -1469,6 +1549,52 @@ function AssigneeBoard({
           setCorrectionReview(null);
         }}
       />
+
+      <Dialog open={isBoardSettingsOpen} onOpenChange={setIsBoardSettingsOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configuração do quadro
+            </DialogTitle>
+            <DialogDescription>
+              Defina a antecedência para o quadro de <span className="font-medium text-foreground">{assignee}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium whitespace-nowrap">Antecedência para posicionamento:</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={boardAntecedenceDraft}
+                  onChange={(e) => setBoardAntecedenceDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="w-20 h-9 text-center"
+                  placeholder="0"
+                />
+                <span className="text-sm text-muted-foreground">dias</span>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+              Os cards deste quadro serão posicionados{" "}
+              <span className="font-medium text-foreground">{boardAntecedenceDraft || "0"} dias</span> antes da data de entrega desejada.
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Exemplo: entrega 03/07/2026 com 30 dias → posicionamento 03/06/2026 (fila JUNHO/2026). A data exibida no card continua 03/07/2026.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsBoardSettingsOpen(false)} disabled={boardAntecedenceSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveBoardAntecedence} disabled={boardAntecedenceSaving}>
+              {boardAntecedenceSaving ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
