@@ -1339,6 +1339,17 @@ function AssigneeBoard({
         }}
       >
         <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+          {/* Barra horizontal compacta — topo do Kanban, persiste durante rolagem vertical */}
+          {isActive && kanbanContentWidth > 0 && (
+            <div
+              ref={kanbanProxyRef}
+              onScroll={onKanbanProxyScroll}
+              className="shrink-0 w-full overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/95 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[8px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+              aria-label="Rolagem horizontal do Kanban"
+            >
+              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+            </div>
+          )}
           <div
             ref={mainScrollRef}
             onScroll={onMainScroll}
@@ -1347,7 +1358,7 @@ function AssigneeBoard({
             <div
               ref={innerRef}
               className="flex h-full min-w-max"
-              style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)", paddingBottom: "2.5rem" }}
+              style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
             >
 
             <LaneColumn
@@ -1419,17 +1430,6 @@ function AssigneeBoard({
             )}
           </div>
         </div>
-          {/* Barra horizontal flutuante — inferior da viewport do Kanban, overlay, sincronizada com o container horizontal */}
-          {isActive && kanbanContentWidth > 0 && (
-            <div
-              ref={kanbanProxyRef}
-              onScroll={onKanbanProxyScroll}
-              className="absolute bottom-3 left-3 right-3 z-10 overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/95 backdrop-blur-md shadow-lg [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
-              aria-label="Rolagem horizontal do Kanban"
-            >
-              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
-            </div>
-          )}
         </div>
 
         <DragOverlay>
