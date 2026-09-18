@@ -1326,6 +1326,17 @@ function AssigneeBoard({
         className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}
         style={effectiveDensityVars}
       >
+      {/* Barra horizontal compacta — topo do Kanban, fixed fora do container vertical, proxy da rolagem horizontal real */}
+      {isActive && kanbanContentWidth > 0 && (
+        <div
+          ref={kanbanProxyRef}
+          onScroll={onKanbanProxyScroll}
+          className="fixed top-[3.5rem] left-1/2 -translate-x-1/2 z-20 w-[calc(100%-2rem)] max-w-[1600px] overflow-x-auto overflow-y-hidden border border-border/20 bg-background/95 backdrop-blur-sm rounded-full shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent"
+          aria-label="Rolagem horizontal do Kanban"
+        >
+          <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+        </div>
+      )}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -1339,17 +1350,6 @@ function AssigneeBoard({
         }}
       >
         <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Barra horizontal compacta — topo do Kanban, persiste durante rolagem vertical */}
-          {isActive && kanbanContentWidth > 0 && (
-            <div
-              ref={kanbanProxyRef}
-              onScroll={onKanbanProxyScroll}
-              className="shrink-0 w-full overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/95 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[8px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
-              aria-label="Rolagem horizontal do Kanban"
-            >
-              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
-            </div>
-          )}
           <div
             ref={mainScrollRef}
             onScroll={onMainScroll}
