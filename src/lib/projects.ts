@@ -1,6 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 import { monthlyLaneTitle } from "@/lib/dashboard";
-import { fetchBoardAntecedence, calculatePositioningDate } from "@/lib/board-antecedence";
 
 export type ProjectPerson = {
   runrunit_project_id: number;
@@ -190,11 +189,9 @@ export async function invokeSyncVisibleProjects(limit = 100) {
 
 /**
  * Após a sincronização de um projeto, posiciona o card de cada responsável na
- * fila do mês correspondente (Mês/AAAA) considerando a antecedência do quadro:
- * data_posicionamento = desired_delivery_date - antecedence_days.
- * Somente quando o card ainda não existe ou ainda não tem fila definida.
- * Não cria filas automaticamente; se a fila não existir no quadro do responsável,
- * o card permanece "Sem fila".
+ * fila do mês correspondente (Mês/AAAA) — somente quando o card ainda não
+ * existe ou ainda não tem fila definida. Não cria filas automaticamente; se
+ * a fila não existir no quadro do responsável, o card permanece "Sem fila".
  */
 export async function allocateProjectToMonthlyLanes(runrunit_project_id: number) {
   const { data: proj, error: projErr } = await (supabase as any)
@@ -205,6 +202,9 @@ export async function allocateProjectToMonthlyLanes(runrunit_project_id: number)
   if (projErr) throw projErr;
   if (!proj?.desired_delivery_date) return;
   if (proj.is_open === false) return;
+
+  const laneTitle = monthlyLaneTitle(proj.desired_delivery_date as string);
+  if (!laneTitle) return;
 
   const { data: people, error: peopleErr } = await (supabase as any)
     .from("runrunit_project_people")
@@ -221,19 +221,6 @@ export async function allocateProjectToMonthlyLanes(runrunit_project_id: number)
   );
 
   for (const assignee of assignees) {
-    // Aplica antecedência do quadro para cálculo da data de posicionamento
-    let antecedence = 0;
-    try {
-      antecedence = await fetchBoardAntecedence(assignee);
-    } catch {
-      antecedence = 0;
-    }
-    const positioningDate =
-      calculatePositioningDate(proj.desired_delivery_date as string, antecedence) ??
-      (proj.desired_delivery_date as string);
-    const laneTitle = monthlyLaneTitle(positioningDate);
-    if (!laneTitle) continue;
-
     const { data: lanes } = await (supabase as any)
       .from("dashboard_lanes")
       .select("id,title")
@@ -271,78 +258,6 @@ export async function allocateProjectToMonthlyLanes(runrunit_project_id: number)
       });
     }
   }
-}
-
-/**
- * Realoca todos os cards de um quadro específico com base na antecedência configurada.
- * Usado quando a antecedência do quadro é alterada.
- * Respeita cards com manually_positioned = true (não move).
- */
-export async function reallocateBoardCardsForAntecedence(assigneeName: string): Promise<number> {
-  const name = assigneeName?.trim();
-  if (!name) return 0;
-  let antecedence = 0;
-  try {
-    antecedence = await fetchBoardAntecedence(name);
-  } catch {
-    antecedence = 0;
-  }
-
-  // Busca lanes do quadro para resolver título -> id
-  const { data: lanes } = await (supabase as any)
-    .from("dashboard_lanes")
-    .select("id,title")
-    .eq("assignee_name", name);
-  const laneMap = new Map<string, string>();
-  for (const l of (lanes ?? []) as { id: string; title: string }[]) {
-    laneMap.set(l.title.trim().toLowerCase(), l.id);
-  }
-
-  // Busca cards do quadro que não são manualmente posicionados
-  const { data: cards, error: cardsErr } = await (supabase as any)
-    .from("dashboard_project_cards")
-    .select("id,runrunit_project_id,manually_positioned,lane_id")
-    .eq("assignee_name", name);
-  if (cardsErr) throw cardsErr;
-  const toProcess = ((cards ?? []) as { id: string; runrunit_project_id: number; manually_positioned: boolean | null; lane_id: string | null }[]).filter(
-    (c) => c.manually_positioned !== true
-  );
-  if (toProcess.length === 0) return 0;
-
-  // Busca datas desejadas dos projetos correspondentes
-  const ids = toProcess.map((c) => c.runrunit_project_id);
-  // Busca em lotes de 500 para evitar limite de URL
-  const desiredMap = new Map<number, string>();
-  for (let i = 0; i < ids.length; i += 500) {
-    const chunk = ids.slice(i, i + 500);
-    const { data: projs } = await (supabase as any)
-      .from("runrunit_projects")
-      .select("runrunit_project_id,desired_delivery_date")
-      .in("runrunit_project_id", chunk);
-    for (const p of (projs ?? []) as { runrunit_project_id: number; desired_delivery_date: string | null }[]) {
-      if (p.desired_delivery_date) desiredMap.set(p.runrunit_project_id, p.desired_delivery_date);
-    }
-  }
-
-  let moved = 0;
-  for (const card of toProcess) {
-    const desired = desiredMap.get(card.runrunit_project_id);
-    if (!desired) continue;
-    const positioningDate = calculatePositioningDate(desired, antecedence) ?? desired;
-    const laneTitle = monthlyLaneTitle(positioningDate);
-    if (!laneTitle) continue;
-    const targetLaneId = laneMap.get(laneTitle.toLowerCase());
-    // Se a fila de destino não existir, mantém onde está (ou poderia ir para Sem fila = null,
-    // mas preservamos para não perder cards quando a fila ainda não foi criada)
-    if (!targetLaneId) continue;
-    if (card.lane_id === targetLaneId) continue;
-    const { error } = await (supabase as any)
-      .from("dashboard_project_cards")
-      .update({ lane_id: targetLaneId, updated_at: new Date().toISOString() })
-      .eq("id", card.id);
-    if (!error) moved++;
-  }
-  return moved;
 }
 
 /**

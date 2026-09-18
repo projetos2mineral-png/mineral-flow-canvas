@@ -85,7 +85,6 @@ import {
   isMonthlyLaneTitle,
   estimateSourceLabel,
   monthlyTitleToDateISO,
-  monthlyLaneTitle,
 } from "@/lib/dashboard";
 
 import { Eye } from "lucide-react";
@@ -110,8 +109,6 @@ import {
 import { cn } from "@/lib/utils";
 import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
-import { fetchBoardAntecedence, upsertBoardAntecedence, calculatePositioningDate } from "@/lib/board-antecedence";
-import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
 
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -812,10 +809,7 @@ function AssigneeBoard({
           .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
-      // Aplica antecedência do quadro também para demandas
-      const posDate = calculatePositioningDate(d.demand.desired_date, boardAntecedence);
-      const posLaneTitle = posDate ? monthlyLaneTitle(posDate) : d.laneTitle;
-      const laneId = laneIdByTitle.get((posLaneTitle ?? d.laneTitle).trim().toLowerCase());
+      const laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
       m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
     }
     for (const [, arr] of m) {
@@ -828,7 +822,7 @@ function AssigneeBoard({
       );
     }
     return m;
-  }, [demandCards, localLanes, normalizedSearch, boardAntecedence]);
+  }, [demandCards, localLanes, normalizedSearch]);
 
 
   const hydrated: DashboardCard[] = useMemo(() => {
@@ -903,49 +897,6 @@ function AssigneeBoard({
     }
     return m;
   }, [items, localLanes, normalizedSearch]);
-
-  // ---- Antecedência do quadro (por responsável) ----
-  const [boardAntecedence, setBoardAntecedence] = useState<number>(0);
-  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
-  const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
-  const [boardAntecedenceSaving, setBoardAntecedenceSaving] = useState(false);
-
-  useEffect(() => {
-    if (!assignee || assignee === UNASSIGNED) return;
-    fetchBoardAntecedence(assignee).then((v) => {
-      setBoardAntecedence(v);
-      setBoardAntecedenceDraft(String(v));
-    });
-  }, [assignee]);
-
-  const handleSaveBoardAntecedence = async () => {
-    const days = parseInt(boardAntecedenceDraft, 10);
-    if (isNaN(days) || days < 0) {
-      toast.error("Informe um número inteiro positivo (0 ou maior).");
-      return;
-    }
-    setBoardAntecedenceSaving(true);
-    try {
-      await upsertBoardAntecedence(assignee, days);
-      setBoardAntecedence(days);
-      setIsBoardSettingsOpen(false);
-      toast.success(`Antecedência do quadro "${assignee}" atualizada para ${days} dias.`);
-      try {
-        const moved = await reallocateBoardCardsForAntecedence(assignee);
-        if (moved > 0) {
-          toast.info(`${moved} card(s) reposicionado(s) conforme nova antecedência.`);
-        }
-      } catch (e) {
-        console.warn("Reallocate after antecedence change failed:", e);
-      }
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-    } catch (e) {
-      toast.error("Falha ao salvar antecedência: " + (e as Error).message);
-    } finally {
-      setBoardAntecedenceSaving(false);
-    }
-  };
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -1426,10 +1377,6 @@ function AssigneeBoard({
               isUnassigned
               assigneeName={assignee}
               isAdmin={isAdmin}
-              onOpenBoardSettings={() => {
-                setBoardAntecedenceDraft(String(boardAntecedence));
-                setIsBoardSettingsOpen(true);
-              }}
             />
 
             <SortableContext
@@ -1548,7 +1495,6 @@ function LaneColumn({
   isLaneDragging,
   assigneeName,
   isAdmin = false,
-  onOpenBoardSettings,
 }: {
   lane?: Lane;
   laneId: string;
@@ -1570,7 +1516,6 @@ function LaneColumn({
   isLaneDragging?: boolean;
   assigneeName: string;
   isAdmin?: boolean;
-  onOpenBoardSettings?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -1583,6 +1528,8 @@ function LaneColumn({
   const [capacity, setCapacity] = useState<number | null>(null);
   const [isCapacityDialogOpen, setIsCapacityDialogOpen] = useState(false);
   const [capacityDraft, setCapacityDraft] = useState("");
+  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
+  const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
 
   useEffect(() => {
     if (!isMonthly || !assigneeName) {
@@ -1758,7 +1705,7 @@ function LaneColumn({
                         size="icon"
                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
                         aria-label="Configurações do quadro"
-                        onClick={() => onOpenBoardSettings?.()}
+                        onClick={() => setIsBoardSettingsOpen(true)}
                       >
                         <Settings className="h-4 w-4" />
                       </Button>
@@ -1770,6 +1717,37 @@ function LaneColumn({
                 </TooltipProvider>
               )}
             </div>
+            <Dialog open={isBoardSettingsOpen} onOpenChange={setIsBoardSettingsOpen}>
+              <DialogContent className="sm:max-w-[420px]">
+                <DialogHeader>
+                  <DialogTitle>Configurações do quadro</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-2">
+                  <div>
+                    <label className="text-sm font-medium">Antecedência dos cards</label>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        value={boardAntecedenceDraft}
+                        onChange={(e) => setBoardAntecedenceDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                        className="w-20 h-9 text-center"
+                        placeholder="0"
+                      />
+                      <span className="text-sm text-muted-foreground">dias</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">Os cards poderão ser posicionados antes da data de entrega desejada.</p>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setIsBoardSettingsOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={() => setIsBoardSettingsOpen(false)}>Salvar</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
