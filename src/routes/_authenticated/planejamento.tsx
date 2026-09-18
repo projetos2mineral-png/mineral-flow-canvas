@@ -22,6 +22,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Search,
   CalendarDays,
   FileText,
@@ -31,6 +32,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -133,7 +136,8 @@ function PlanningPage() {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [groupFilter, setGroupFilter] = useState<string>("__all__");
+  const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
+  const [selectedSubgroups, setSelectedSubgroups] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
   const [view, setView] = useState<ViewMode>("mes");
   const [cursor, setCursor] = useState<Date>(() => {
@@ -148,15 +152,39 @@ function PlanningPage() {
     return Array.from(s).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [all]);
 
+  const subgroups = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of all) if ((p as any).project_sub_group_name) s.add((p as any).project_sub_group_name);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [all]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return all.filter((p) => {
-      if (q && !p.project_name.toLowerCase().includes(q)) return false;
-      if (groupFilter !== "__all__" && (p.project_group_name ?? "") !== groupFilter) return false;
+      if (q) {
+        const haystack = [
+          p.project_name ?? "",
+          (p as any).project_sub_group_name ?? "",
+          p.project_group_name ?? "",
+          p.client_name ?? "",
+          String(p.runrunit_project_id ?? ""),
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (selectedGroups.size > 0) {
+        const g = p.project_group_name ?? "";
+        if (!g || !selectedGroups.has(g)) return false;
+      }
+      if (selectedSubgroups.size > 0) {
+        const sg = (p as any).project_sub_group_name ?? "";
+        if (!sg || !selectedSubgroups.has(sg)) return false;
+      }
       if (statusFilter !== "__all__" && normalizePlanningStatus(p.planning_status) !== statusFilter) return false;
       return true;
     });
-  }, [all, search, groupFilter, statusFilter]);
+  }, [all, search, selectedGroups, selectedSubgroups, statusFilter]);
 
   // Index planned items by date
   const byDate = useMemo(() => {
@@ -214,17 +242,8 @@ function PlanningPage() {
               className="pl-8 h-9 w-56"
             />
           </div>
-          <Select value={groupFilter} onValueChange={setGroupFilter}>
-            <SelectTrigger className="h-9 w-48">
-              <SelectValue placeholder="Grupo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Todos os grupos</SelectItem>
-              {groups.map((g) => (
-                <SelectItem key={g} value={g}>{g}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <CalendarMultiSelect label="Grupo" placeholder="Todos os grupos" options={groups} selected={selectedGroups} onChange={setSelectedGroups} />
+          <CalendarMultiSelect label="Subgrupo" placeholder="Todos os subgrupos" options={subgroups} selected={selectedSubgroups} onChange={setSelectedSubgroups} />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-9 w-44">
               <SelectValue placeholder="Status" />
@@ -894,6 +913,73 @@ function ProjectModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function CalendarMultiSelect({
+  label,
+  placeholder,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  options: string[];
+  selected: Set<string>;
+  onChange: (s: Set<string>) => void;
+}) {
+  const toggle = (value: string, checked: boolean) => {
+    const next = new Set(selected);
+    if (checked) next.add(value);
+    else next.delete(value);
+    onChange(next);
+  };
+
+  const displayLabel =
+    selected.size === 0
+      ? placeholder
+      : selected.size === 1
+        ? Array.from(selected)[0]
+        : `${selected.size} selecionados`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" className="h-9 w-48 justify-between font-normal px-3">
+          <span className="truncate">{displayLabel}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <div className="p-3 border-b border-border bg-muted/30 flex justify-between items-center">
+          <span className="text-xs font-medium">Filtrar por {label.toLowerCase()}</span>
+          {selected.size > 0 && (
+            <button onClick={() => onChange(new Set())} className="text-[10px] text-primary hover:underline">
+              Limpar
+            </button>
+          )}
+        </div>
+        <div className="max-h-[300px] overflow-y-auto p-2">
+          {options.length === 0 ? (
+            <div className="text-xs text-muted-foreground p-4 text-center">Nenhum {label.toLowerCase()} disponível</div>
+          ) : (
+            options.map((opt) => (
+              <div key={opt} className="flex items-center gap-2 py-1.5 hover:bg-accent/50 rounded px-2">
+                <Checkbox
+                  id={`calendar-${label}-${opt}`}
+                  checked={selected.has(opt)}
+                  onCheckedChange={(c) => toggle(opt, !!c)}
+                />
+                <label htmlFor={`calendar-${label}-${opt}`} className="text-xs cursor-pointer select-none flex-1 truncate">
+                  {opt}
+                </label>
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

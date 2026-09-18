@@ -644,6 +644,7 @@ export type PlanningProject = {
   project_name: string;
   client_name: string | null;
   project_group_name: string | null;
+  project_sub_group_name?: string | null;
   created_at_runrunit: string | null;
   last_synced_at: string | null;
   is_tracking_enabled: boolean | null;
@@ -673,25 +674,29 @@ export async function fetchPlanningProjects(): Promise<PlanningProject[]> {
     from += pageSize;
   }
   // Restringe a projetos abertos, exibidos e com data desejada preenchida.
-  // Também carrega desired_delivery_date para uso como data efetiva do
-  // Calendário (planning_date tem prioridade quando existir).
+  // Também carrega desired_delivery_date e subgrupo para uso no Calendário
+  // (planning_date tem prioridade quando existir).
   const { data: validRows, error: vErr } = await (supabase as any)
     .from("runrunit_projects")
-    .select("runrunit_project_id,desired_delivery_date")
+    .select("runrunit_project_id,desired_delivery_date,project_sub_group_name")
     .eq("is_open", true)
     .eq("is_tracking_enabled", true)
     .not("desired_delivery_date", "is", null);
   if (vErr) throw vErr;
-  const validMap = new Map<number, string>();
+  const validMap = new Map<number, { desired_delivery_date: string; project_sub_group_name: string | null }>();
   for (const r of (validRows ?? []) as {
     runrunit_project_id: number;
     desired_delivery_date: string | null;
+    project_sub_group_name: string | null;
   }[]) {
-    if (r.desired_delivery_date) validMap.set(r.runrunit_project_id, r.desired_delivery_date);
+    if (r.desired_delivery_date) validMap.set(r.runrunit_project_id, { desired_delivery_date: r.desired_delivery_date, project_sub_group_name: r.project_sub_group_name ?? null });
   }
   return all
     .filter((p) => validMap.has(p.runrunit_project_id))
-    .map((p) => ({ ...p, desired_delivery_date: validMap.get(p.runrunit_project_id) ?? null }));
+    .map((p) => {
+      const extra = validMap.get(p.runrunit_project_id);
+      return { ...p, desired_delivery_date: extra?.desired_delivery_date ?? null, project_sub_group_name: (p as any).project_sub_group_name ?? extra?.project_sub_group_name ?? null };
+    });
 }
 
 /**
