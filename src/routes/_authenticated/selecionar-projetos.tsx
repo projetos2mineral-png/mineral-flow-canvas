@@ -769,101 +769,110 @@ function SelecionarProjetosPage() {
       </Dialog>
 
 
-      {newCandidates.length > 0 && (
-        <div className="rounded-lg border border-border bg-card">
-          <div className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-accent/40 transition-colors cursor-pointer group" onClick={() => setNewOpen((v) => !v)}>
-            <div className="flex items-center gap-2">
-              {newOpen ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        {newCandidates.length > 0 ? (
+          <div className="flex-1 min-w-0 rounded-lg border border-border bg-card">
+            <div className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-accent/40 transition-colors cursor-pointer group" onClick={() => setNewOpen((v) => !v)}>
+              <div className="flex items-center gap-2">
+                {newOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Novos projetos encontrados</span>
+                <Badge variant="secondary" className="ml-1">{newCandidates.length}</Badge>
+              </div>
+              {newOpen && newCandidates.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleIgnoreAllNew();
+                  }}
+                  disabled={ignoreAllLoading}
+                  className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground font-normal"
+                >
+                  {ignoreAllLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                  Marcar todos como vistos
+                </Button>
               )}
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Novos projetos encontrados</span>
-              <Badge variant="secondary" className="ml-1">{newCandidates.length}</Badge>
             </div>
-            {newOpen && newCandidates.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleIgnoreAllNew();
-                }}
-                disabled={ignoreAllLoading}
-                className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground font-normal"
-              >
-                {ignoreAllLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
-                Marcar todos como vistos
-              </Button>
+            {newOpen && (
+              <div className="border-t border-border p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-muted-foreground">Período:</label>
+                  <Select value={newPeriod} onValueChange={(v) => setNewPeriod(v as "7" | "30" | "all")}>
+                    <SelectTrigger className="w-[180px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7">Últimos 7 dias</SelectItem>
+                      <SelectItem value="30">Últimos 30 dias</SelectItem>
+                      <SelectItem value="all">Todos os novos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    {newCandidatesFiltered.length} exibido(s)
+                  </span>
+                </div>
+                {newCandidatesFiltered.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    Nenhum projeto novo no período selecionado.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border rounded-md border border-border bg-background">
+                    {newCandidatesFiltered.map((p) => (
+                      <li
+                        key={p.runrunit_project_id}
+                        className="flex items-center gap-3 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{p.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {(p.client_name ?? "—")} · {(p.project_group_name ?? "—")} ·{" "}
+                            {p.created_at_runrunit
+                              ? new Date(p.created_at_runrunit).toLocaleDateString("pt-BR")
+                              : "—"}
+                          </div>
+                        </div>
+                        <div className="inline-flex gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            disabled={busyIds.has(p.runrunit_project_id)}
+                            onClick={() => handleEnableFromCandidate(p)}
+                          >
+                            {busyIds.has(p.runrunit_project_id) && (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            )}
+                            Exibir na Central de Planejamento
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busyIds.has(p.runrunit_project_id)}
+                            onClick={() => handleIgnoreCandidate(p)}
+                          >
+                            Ignorar
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
           </div>
-          {newOpen && (
-            <div className="border-t border-border p-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] text-muted-foreground">Período:</label>
-                <Select value={newPeriod} onValueChange={(v) => setNewPeriod(v as "7" | "30" | "all")}>
-                  <SelectTrigger className="w-[180px] h-8">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="7">Últimos 7 dias</SelectItem>
-                    <SelectItem value="30">Últimos 30 dias</SelectItem>
-                    <SelectItem value="all">Todos os novos</SelectItem>
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground">
-                  {newCandidatesFiltered.length} exibido(s)
-                </span>
-              </div>
-              {newCandidatesFiltered.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  Nenhum projeto novo no período selecionado.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border rounded-md border border-border bg-background">
-                  {newCandidatesFiltered.map((p) => (
-                    <li
-                      key={p.runrunit_project_id}
-                      className="flex items-center gap-3 px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{p.name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {(p.client_name ?? "—")} · {(p.project_group_name ?? "—")} ·{" "}
-                          {p.created_at_runrunit
-                            ? new Date(p.created_at_runrunit).toLocaleDateString("pt-BR")
-                            : "—"}
-                        </div>
-                      </div>
-                      <div className="inline-flex gap-2 shrink-0">
-                        <Button
-                          size="sm"
-                          disabled={busyIds.has(p.runrunit_project_id)}
-                          onClick={() => handleEnableFromCandidate(p)}
-                        >
-                          {busyIds.has(p.runrunit_project_id) && (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          )}
-                          Exibir na Central de Planejamento
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busyIds.has(p.runrunit_project_id)}
-                          onClick={() => handleIgnoreCandidate(p)}
-                        >
-                          Ignorar
-                        </Button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
+        ) : (
+          <div className="hidden lg:flex flex-1 min-w-0 rounded-lg border border-dashed border-border/50 bg-muted/20 items-center justify-center px-4 py-2.5 text-xs text-muted-foreground">
+            Nenhum projeto novo
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <DemandasAvulsasSection />
         </div>
-      )}
+      </div>
 
       <div className="flex flex-wrap gap-2 items-end">
         <div className="relative w-full sm:w-72">
@@ -1092,17 +1101,13 @@ function SelecionarProjetosPage() {
           </TableBody>
           </Table>
         </div>
-
-        {/* Seção exclusiva — Demandas Avulsas (contexto separado de Projetos do Runrun.it) */}
-        <div className="mt-8 border-t border-border pt-8">
-          <DemandasAvulsasSection />
-        </div>
       </div>
     );
   }
 
   function DemandasAvulsasSection() {
     const qc = useQueryClient();
+    const [isOpen, setIsOpen] = useState(false);
     const [search, setSearch] = useState("");
     const [status, setStatus] = useState<string>(ALL);
     const [client, setClient] = useState<string>(ALL);
@@ -1225,34 +1230,47 @@ function SelecionarProjetosPage() {
     };
 
     return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-border bg-card">
-          <div className="p-6 pb-4 border-b border-border/60">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-                    <Plus className="h-4 w-4" />
-                  </span>
-                  Demandas Avulsas
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Contexto separado de <span className="font-medium">Projetos do Runrun.it</span> — demandas manuais, sem vínculo com o Runrun.it, com formulário e regras próprias.
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  setEditing(null);
-                  setDialogOpen(true);
-                }}
-              >
-                <Plus className="mr-1 h-4 w-4" />
-                Nova demanda
-              </Button>
-            </div>
+      <div className="rounded-lg border border-border bg-card">
+        <div
+          className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg hover:bg-accent/40 transition-colors cursor-pointer group"
+          onClick={() => setIsOpen((v) => !v)}
+        >
+          <div className="flex items-center gap-2">
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+            <Plus className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">Demandas Avulsas</span>
+            <Badge variant="secondary" className="ml-1">
+              {rows.length}
+            </Badge>
           </div>
+          {isOpen && (
+            <Button
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditing(null);
+                setDialogOpen(true);
+              }}
+            >
+              <Plus className="mr-1 h-3 w-3" />
+              Nova demanda
+            </Button>
+          )}
+        </div>
 
-          <div className="p-6 space-y-4">
+        {isOpen && (
+          <>
+            <div className="px-6 py-3 border-t border-border/60 bg-muted/20">
+              <p className="text-xs text-muted-foreground">
+                Contexto separado de <span className="font-medium">Projetos do Runrun.it</span> — demandas manuais, sem vínculo com o Runrun.it, com formulário e regras próprias.
+              </p>
+            </div>
+            <div className="p-6 space-y-4">
             <div className="flex flex-wrap gap-2 items-end">
               <div className="relative w-full sm:w-72">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1402,7 +1420,8 @@ function SelecionarProjetosPage() {
               onDelete={handleDelete}
             />
           </div>
-        </div>
+          </>
+        )}
       </div>
     );
   }
