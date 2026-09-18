@@ -1544,6 +1544,52 @@ function AssigneeBoard({
           setCorrectionReview(null);
         }}
       />
+
+      <Dialog open={isBoardSettingsOpen} onOpenChange={setIsBoardSettingsOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Configurações do quadro
+            </DialogTitle>
+            <DialogDescription>
+              Defina a antecedência para o quadro de <span className="font-medium text-foreground">{assignee}</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-3">
+              <label className="text-sm font-medium whitespace-nowrap">Antecedência para posicionamento:</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={boardAntecedenceDraft}
+                  onChange={(e) => setBoardAntecedenceDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                  className="w-20 h-9 text-center"
+                  placeholder="0"
+                />
+                <span className="text-sm text-muted-foreground">dias</span>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
+              Os cards deste quadro serão posicionados{" "}
+              <span className="font-medium text-foreground">{boardAntecedenceDraft || "0"} dias</span> antes da data de entrega desejada.
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Exemplo: entrega 03/07/2026 com 30 dias → posicionamento 03/06/2026 (fila JUNHO/2026). A data exibida no card continua 03/07/2026.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsBoardSettingsOpen(false)} disabled={boardAntecedenceSaving}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveBoardAntecedence} disabled={boardAntecedenceSaving}>
+              {boardAntecedenceSaving ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
