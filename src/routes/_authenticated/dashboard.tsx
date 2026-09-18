@@ -543,7 +543,7 @@ function DashboardPage() {
           {/* Painel flutuante inferior — [ Busca ] | [ < responsáveis > ] | [ modo ] */}
           <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4">
             <div className="pointer-events-auto flex w-full max-w-[min(96vw,1180px)] items-center gap-1.5 sm:gap-2 rounded-full border border-border/40 bg-card/95 px-2 sm:px-2.5 py-1.5 shadow-lg backdrop-blur-md">
-              {/* Busca — placeholder descritivo restaurado, busca instantânea */}
+              {/* Busca — compacta, placeholder completo em tooltip */}
               <div className="relative shrink-0">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
                 <Input
@@ -551,7 +551,7 @@ function DashboardPage() {
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Buscar por título, processo, OS, cliente ou responsável"
                   title="Buscar por título, processo, OS, cliente ou responsável"
-                  className="h-7 w-[200px] sm:w-[280px] lg:w-[360px] pl-7 pr-7 text-[13px] bg-background border-border/60 focus-visible:ring-1 rounded-full placeholder:text-muted-foreground/70 placeholder:truncate"
+                  className="h-7 w-[128px] sm:w-[168px] lg:w-[195px] pl-7 pr-7 text-[13px] bg-background border-border/60 focus-visible:ring-1 rounded-full placeholder:text-muted-foreground/70 placeholder:truncate"
                 />
                 {search && (
                   <button
@@ -1271,6 +1271,17 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
+        {/* Barra de rolagem horizontal contínua — acima do cabeçalho, discreta e sincronizada */}
+        {isActive && kanbanContentWidth > 0 && (
+          <div
+            ref={kanbanProxyRef}
+            onScroll={onKanbanProxyScroll}
+            className="sticky top-0 z-20 w-full shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/80 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+            aria-label="Rolagem horizontal do Kanban"
+          >
+            <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+          </div>
+        )}
         <div
           ref={mainScrollRef}
           onScroll={onMainScroll}
@@ -1349,20 +1360,6 @@ function AssigneeBoard({
             )}
           </div>
         </div>
-
-        {/* Barra horizontal flutuante do Kanban — controle sincronizado, sempre acessível na viewport */}
-        {isActive && kanbanContentWidth > 0 && (
-          <div className="pointer-events-none fixed bottom-[62px] left-1/2 z-20 flex w-full -translate-x-1/2 justify-center px-4">
-            <div
-              ref={kanbanProxyRef}
-              onScroll={onKanbanProxyScroll}
-              className="pointer-events-auto w-full max-w-[min(88vw,720px)] overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/90 px-1 py-1 backdrop-blur-md shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
-              aria-label="Barra de rolagem horizontal do Kanban"
-            >
-              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
-            </div>
-          </div>
-        )}
 
         <DragOverlay>
           {activeCard ? (
@@ -1523,7 +1520,7 @@ function LaneColumn({
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="px-2.5 flex items-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px]"
+        className="sticky top-0 z-10 px-2.5 flex shrink-0 items-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px]"
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
