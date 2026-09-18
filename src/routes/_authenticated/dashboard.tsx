@@ -1609,20 +1609,34 @@ function LaneColumn({
               </Tooltip>
             </TooltipProvider>
             {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
-              <div className="flex items-center gap-2 text-[10px] leading-none text-muted-foreground/65">
-                <span className="inline-flex items-center gap-1 tabular-nums">
-                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
-                  Capacidade {capacity != null ? formatHoursCompact(capacity) : "—"}
-                </span>
-                <span className="text-muted-foreground/30">•</span>
-                <span className={cn("inline-flex items-center gap-1 tabular-nums", overCapacity ? "text-amber-600 dark:text-amber-400" : "")}>
-                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
-                  Planejado {formatHoursCompact(plannedHours)}
-                  {overCapacity && (
-                    <span className="ml-0.5 tabular-nums">+{formatHoursCompact(excess)}</span>
-                  )}
-                </span>
-              </div>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "text-[11px] font-normal leading-none tracking-wide tabular-nums cursor-default select-none",
+                        overCapacity
+                          ? "text-red-600 dark:text-red-400"
+                          : "text-muted-foreground/55"
+                      )}
+                    >
+                      {capacity != null ? formatHoursCompact(capacity) : "—"} / {formatHoursCompact(plannedHours)}
+                      {overCapacity && (
+                        <span className="ml-1 tabular-nums text-red-600 dark:text-red-400">
+                          (+{formatHoursCompact(excess)})
+                        </span>
+                      )}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="text-xs bg-neutral-900 text-white border-neutral-800"
+                  >
+                    <p>Capacidade: {capacity != null ? formatHoursCompact(capacity) : "—"}</p>
+                    <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
             <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
               <DialogContent className="sm:max-w-[425px]">
