@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -41,6 +41,8 @@ import {
   GripHorizontal,
   CalendarDays,
   Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -130,6 +132,87 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 const UNASSIGNED = "Sem responsável";
 
+/**
+ * Gera rótulos compactos para responsáveis.
+ * - Usa primeiro nome quando não há ambiguidade.
+ * - Quando há colisão de primeiro nome, adiciona inicial do segundo nome (Camila → Camila P.)
+ *   e, se ainda colidir, usa segundo nome completo e assim por diante.
+ * - Mantém nome completo em tooltip.
+ */
+function getCompactAssigneeDisplayNames(assignees: string[]): Map<string, string> {
+  const result = new Map<string, string>();
+  type Item = { original: string; tokens: string[] };
+  const items: Item[] = assignees.map((a) => ({
+    original: a,
+    tokens: a.trim().split(/\s+/).filter(Boolean),
+  }));
+
+  // UNASSIGNED fica com rótulo completo — não entra no agrupamento por primeiro nome
+  const toGroup: Item[] = [];
+  for (const it of items) {
+    if (it.original === UNASSIGNED) {
+      result.set(it.original, it.original);
+    } else {
+      toGroup.push(it);
+    }
+  }
+
+  const groups = new Map<string, Item[]>();
+  for (const it of toGroup) {
+    const key = (it.tokens[0] ?? "").toLowerCase();
+    const arr = groups.get(key);
+    if (arr) arr.push(it);
+    else groups.set(key, [it]);
+  }
+
+  for (const [, group] of groups) {
+    if (group.length === 1) {
+      const it = group[0];
+      result.set(it.original, it.tokens[0] ?? it.original);
+      continue;
+    }
+    // Candidatos progressivos por nível de desambiguação
+    const candidateLists = new Map<string, string[]>();
+    for (const it of group) {
+      const t = it.tokens;
+      const cands: string[] = [];
+      cands.push(t[0] ?? "");
+      if (t.length >= 2) {
+        cands.push(`${t[0]} ${t[1].charAt(0).toUpperCase()}.`);
+        cands.push(`${t[0]} ${t[1]}`);
+        if (t.length >= 3) {
+          cands.push(`${t[0]} ${t[1]} ${t[2].charAt(0).toUpperCase()}.`);
+          cands.push(`${t[0]} ${t[1]} ${t[2]}`);
+        }
+        cands.push(it.original);
+      } else {
+        cands.push(it.original);
+      }
+      candidateLists.set(it.original, cands);
+    }
+    for (const it of group) {
+      const cands = candidateLists.get(it.original)!;
+      let picked = it.original;
+      for (let lvl = 0; lvl < cands.length; lvl++) {
+        const cand = cands[lvl];
+        let collisions = 0;
+        for (const other of group) {
+          const otherCands = candidateLists.get(other.original)!;
+          const otherCand = otherCands[lvl] ?? otherCands[otherCands.length - 1];
+          if (otherCand === cand) collisions++;
+        }
+        if (collisions === 1) {
+          picked = cand;
+          break;
+        }
+      }
+      result.set(it.original, picked);
+    }
+  }
+
+  return result;
+}
+
 type DashboardCard = {
   key: string;
   runrunit_project_id: number;
@@ -218,6 +301,89 @@ function DashboardPage() {
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
   const [search, setSearch] = useState<string>("");
+
+  // Densidade global do Kanban (controlada na barra flutuante inferior)
+  const { density, setDensity, vars: densityVars } = useKanbanDensity();
+
+  // Nomes compactos + contadores por responsável (para a barra inferior)
+  const assigneeCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of assignees) {
+      const ids = new Set(
+        projects
+          .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
+          .map((p) => p.runrunit_project_id)
+      );
+      m[a] = ids.size;
+    }
+    return m;
+  }, [assignees, projects]);
+
+  const compactNames = useMemo(
+    () => getCompactAssigneeDisplayNames(assignees),
+    [assignees]
+  );
+
+  // ---- Controle de rolagem horizontal do seletor de responsáveis (barra inferior) ----
+  const assigneeScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateAssigneeEdges = useCallback(() => {
+    const el = assigneeScrollRef.current;
+    if (!el) return;
+    const max = el.scrollWidth - el.clientWidth;
+    setCanScrollLeft(el.scrollLeft > 2);
+    setCanScrollRight(el.scrollLeft < max - 2);
+  }, []);
+
+  useEffect(() => {
+    updateAssigneeEdges();
+    const el = assigneeScrollRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(updateAssigneeEdges);
+    ro.observe(el);
+    el.addEventListener("scroll", updateAssigneeEdges);
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", updateAssigneeEdges);
+    };
+  }, [updateAssigneeEdges, assignees.length]);
+
+  // Rolagem horizontal com roda / touchpad sem prejudicar scroll vertical do Kanban
+  useEffect(() => {
+    const el = assigneeScrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const max = el.scrollWidth - el.clientWidth;
+      if (max <= 0) return;
+      const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+      if (delta === 0) return;
+      e.preventDefault();
+      el.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Mantém o responsável ativo sempre visível / centralizado
+  useEffect(() => {
+    const el = assigneeScrollRef.current;
+    if (!el || !activeAssignee) return;
+    const esc = typeof CSS !== "undefined" && (CSS as unknown as { escape?: (s: string) => string }).escape
+      ? (CSS as unknown as { escape: (s: string) => string }).escape!(activeAssignee)
+      : activeAssignee.replace(/[^a-zA-Z0-9]/g, "\\$&");
+    const target = el.querySelector<HTMLElement>(`[data-assignee-chip="${esc}"]`);
+    if (!target) return;
+    const left = target.offsetLeft - el.clientWidth / 2 + target.offsetWidth / 2;
+    el.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+  }, [activeAssignee, assignees.length]);
+
+  const nudgeAssignee = (dir: -1 | 1) => {
+    const el = assigneeScrollRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(160, el.clientWidth * 0.6), behavior: "smooth" });
+  };
 
   // Restaura o último responsável aberto do localStorage (persistência
   // entre trocas de aba/página). Só cai no primeiro alfabético como
@@ -325,7 +491,8 @@ function DashboardPage() {
         <Tabs
           value={activeAssignee}
           onValueChange={setActiveAssignee}
-          className="flex-1 flex flex-col min-h-0 relative pb-14"
+          className="flex-1 flex flex-col min-h-0 relative pb-[112px] sm:pb-[72px]"
+          style={densityVars as React.CSSProperties}
         >
           {assignees.map((a) => (
             <TabsContent
@@ -347,36 +514,130 @@ function DashboardPage() {
                 readOnly={readOnly}
                 isActive={a === activeAssignee}
                 search={search}
+                densityVars={densityVars}
               />
             </TabsContent>
           ))}
-          {/* Filtro flutuante de responsáveis — compacto e discreto na base do Painel */}
-          <div className="pointer-events-none fixed bottom-4 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4">
-            <div className="pointer-events-auto inline-flex max-w-[min(90vw,600px)] items-center gap-1 rounded-full border border-border/50 bg-card/80 px-2 py-1.5 shadow-md backdrop-blur-md">
-              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                <TabsList className="flex h-auto w-max items-center gap-1 bg-transparent p-0">
-                  {assignees.map((a) => {
-                    const count = new Set(
-                      projects
-                        .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
-                        .map((p) => p.runrunit_project_id)
-                    ).size;
-                    return (
-                      <TabsTrigger
-                        key={a}
-                        value={a}
-                        title={a}
-                        className="group flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-background px-2.5 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
-                      >
-                        <span className="max-w-[110px] truncate">{a}</span>
-                        <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] leading-none text-muted-foreground group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground">
-                          {count}
-                        </span>
-                      </TabsTrigger>
-                    );
-                  })}
-                </TabsList>
+          {/* Barra flutuante inferior unificada: busca + seletor de responsáveis + densidade */}
+          <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4">
+            <div className="pointer-events-auto flex w-full max-w-[min(96vw,980px)] items-center gap-2 rounded-full border border-border/50 bg-card/95 px-2.5 py-1.5 shadow-lg backdrop-blur-md">
+              {/* Busca compacta */}
+              <div className="relative shrink-0">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar…"
+                  title="Buscar por título, processo, OS, cliente ou responsável"
+                  className="h-7 w-[148px] sm:w-[220px] pl-7 pr-7 text-[13px] bg-background border-border/60 focus-visible:ring-1 rounded-full"
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                    aria-label="Limpar busca"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </div>
+
+              <div className="hidden sm:block h-6 w-px shrink-0 bg-border/60" aria-hidden="true" />
+
+              {/* Seletor de responsáveis com rolagem horizontal, setas e barra fina */}
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="Rolar responsáveis para a esquerda"
+                  onClick={() => nudgeAssignee(-1)}
+                  disabled={!canScrollLeft}
+                  className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+
+                <div className="relative min-w-0 flex-1">
+                  {/* fade lateral quando há overflow */}
+                  {canScrollLeft && (
+                    <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-card to-transparent rounded-l-full" />
+                  )}
+                  {canScrollRight && (
+                    <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-card to-transparent rounded-r-full" />
+                  )}
+                  <div
+                    ref={assigneeScrollRef}
+                    className="overflow-x-auto overflow-y-hidden [scrollbar-width:thin] [-ms-overflow-style:auto] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent py-1"
+                  >
+                    <TabsList className="flex h-auto w-max items-center gap-1 bg-transparent p-0">
+                      {assignees.map((a) => {
+                        const count = assigneeCounts[a] ?? 0;
+                        const short = compactNames.get(a) ?? a;
+                        return (
+                          <TabsTrigger
+                            key={a}
+                            value={a}
+                            title={a}
+                            data-assignee-chip={a}
+                            className="group flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-background px-2.5 text-[11px] font-medium leading-none text-muted-foreground transition-colors hover:bg-accent hover:text-foreground data-[state=active]:border-primary/20 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+                          >
+                            <span className="max-w-[92px] truncate">{short}</span>
+                            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-1 text-[10px] leading-none text-muted-foreground group-data-[state=active]:bg-primary-foreground/20 group-data-[state=active]:text-primary-foreground">
+                              {count}
+                            </span>
+                          </TabsTrigger>
+                        );
+                      })}
+                    </TabsList>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  aria-label="Rolar responsáveis para a direita"
+                  onClick={() => nudgeAssignee(1)}
+                  disabled={!canScrollRight}
+                  className="hidden sm:flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/40 bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Controles móveis alternativos (setas sempre visíveis em telas muito pequenas via scroll) */}
+              <div className="flex sm:hidden items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  aria-label="Rolar responsáveis para a esquerda"
+                  onClick={() => nudgeAssignee(-1)}
+                  disabled={!canScrollLeft}
+                  className="flex h-7 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Rolar responsáveis para a direita"
+                  onClick={() => nudgeAssignee(1)}
+                  disabled={!canScrollRight}
+                  className="flex h-7 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground disabled:opacity-30"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="hidden sm:block h-6 w-px shrink-0 bg-border/60" aria-hidden="true" />
+
+              {/* Controle de densidade compacto */}
+              <div className="shrink-0 hidden sm:flex">
+                <DensityControl value={density} onChange={setDensity} />
+              </div>
+              {/* Em telas muito estreitas, densidade vira menu compacto mas mantém funcionalidade — exibe só no desktop para não poluir */}
+            </div>
+          </div>
+          {/* Densidade para mobile: linha discreta abaixo da barra principal quando necessário */}
+          <div className="pointer-events-none fixed bottom-[56px] left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-4 sm:hidden">
+            <div className="pointer-events-auto">
+              <DensityControl value={density} onChange={setDensity} className="shadow-md backdrop-blur-md bg-card/95" />
             </div>
           </div>
         </Tabs>
@@ -399,6 +660,7 @@ function AssigneeBoard({
   readOnly = false,
   isActive = true,
   search = "",
+  densityVars,
 }: {
   assignee: string;
   projects: DashboardProject[];
@@ -413,6 +675,7 @@ function AssigneeBoard({
   readOnly?: boolean;
   isActive?: boolean;
   search?: string;
+  densityVars?: React.CSSProperties;
 }) {
   const projectMap = useMemo(() => {
     const m = new Map<number, DashboardProject>();
@@ -579,26 +842,12 @@ function AssigneeBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
 
-  // ---- Scroll persistence + top scrollbar sync ----
+  // ---- Persistência de scroll (sem barra superior — topo liberado) ----
   const mainScrollRef = useRef<HTMLDivElement>(null);
-  const topScrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const [contentWidth, setContentWidth] = useState(0);
-  const syncingRef = useRef(false);
   const scrollStorageKey = `dashboard:scroll:${assignee}`;
 
-  // Track content width for the top proxy scrollbar
-  useEffect(() => {
-    if (!innerRef.current) return;
-    const el = innerRef.current;
-    const update = () => setContentWidth(el.scrollWidth);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  // Restore saved scroll (horizontal and vertical) when tab becomes active
+  // Restaura scroll salvo quando a aba fica ativa
   useLayoutEffect(() => {
     if (!isActive) return;
     try {
@@ -609,9 +858,6 @@ function AssigneeBoard({
           if (typeof saved.x === "number") mainScrollRef.current.scrollLeft = saved.x;
           if (typeof saved.y === "number") mainScrollRef.current.scrollTop = saved.y;
         }
-        if (topScrollRef.current && typeof saved.x === "number") {
-          topScrollRef.current.scrollLeft = saved.x;
-        }
         if (typeof saved.winY === "number") {
           window.scrollTo({ top: saved.winY });
         }
@@ -619,9 +865,9 @@ function AssigneeBoard({
     } catch {
       /* ignore */
     }
-  }, [isActive, scrollStorageKey, contentWidth]);
+  }, [isActive, scrollStorageKey]);
 
-  // Save on window scroll too (vertical page position)
+  // Salva posição vertical da página também
   useEffect(() => {
     if (!isActive) return;
     const save = () => {
@@ -643,42 +889,19 @@ function AssigneeBoard({
     return () => window.removeEventListener("scroll", save);
   }, [isActive, scrollStorageKey]);
 
-  const persistScroll = (x: number, y: number) => {
+  const onMainScroll = () => {
+    const el = mainScrollRef.current;
+    if (!el) return;
     try {
       localStorage.setItem(
         scrollStorageKey,
-        JSON.stringify({ x, y, winY: window.scrollY })
+        JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
       );
     } catch {
       /* ignore */
     }
   };
-
-  const onTopScroll = () => {
-    if (syncingRef.current) return;
-    syncingRef.current = true;
-    if (mainScrollRef.current && topScrollRef.current) {
-      mainScrollRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-      persistScroll(topScrollRef.current.scrollLeft, mainScrollRef.current.scrollTop);
-    }
-    // release next frame
-    requestAnimationFrame(() => {
-      syncingRef.current = false;
-    });
-  };
-
-  const onMainScroll = () => {
-    if (syncingRef.current) return;
-    syncingRef.current = true;
-    if (mainScrollRef.current && topScrollRef.current) {
-      topScrollRef.current.scrollLeft = mainScrollRef.current.scrollLeft;
-      persistScroll(mainScrollRef.current.scrollLeft, mainScrollRef.current.scrollTop);
-    }
-    requestAnimationFrame(() => {
-      syncingRef.current = false;
-    });
-  };
-  // ---- end scroll persistence ----
+  // ---- fim persistência ----
 
   // Modal states
   const [openCard, setOpenCard] = useState<DashboardCard | null>(null);
@@ -977,14 +1200,14 @@ function AssigneeBoard({
     }
   };
 
-  const { density, setDensity, vars: densityVars } = useKanbanDensity();
-
+  // Usa vars repassadas pelo DashboardPage (fonte única de verdade para densidade)
+  const effectiveDensityVars = densityVars ?? undefined;
 
   return (
     <>
       <div
         className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}
-        style={densityVars}
+        style={effectiveDensityVars}
       >
       <DndContext
         sensors={sensors}
@@ -998,38 +1221,6 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
-        {/* Busca + controle de densidade */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 pt-2">
-          <div className="relative w-full max-w-[300px]">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por título, processo, OS, cliente ou responsável..."
-              className="h-7 pl-7 pr-7 text-[13px] bg-card/80 border-border/60 focus-visible:ring-1"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
-                aria-label="Limpar busca"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-          <DensityControl value={density} onChange={setDensity} />
-        </div>
-        {/* Top proxy scrollbar synced with the main Kanban scroll */}
-        <div
-          ref={topScrollRef}
-          onScroll={onTopScroll}
-          className="overflow-x-auto overflow-y-hidden px-4 pt-2"
-          aria-hidden="true"
-        >
-          <div style={{ width: contentWidth, height: 1 }} />
-        </div>
         <div
           ref={mainScrollRef}
           onScroll={onMainScroll}
