@@ -790,6 +790,56 @@ function AssigneeBoard({
     return m;
   }, [reviews, localLanes, normalizedSearch, projectNameById]);
 
+  // ---- Antecedência do quadro (por responsável) ----
+  const [boardAntecedence, setBoardAntecedence] = useState<number>(0);
+  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
+  const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
+  const [boardAntecedenceSaving, setBoardAntecedenceSaving] = useState(false);
+
+  useEffect(() => {
+    if (!assignee || assignee === UNASSIGNED) return;
+    fetchBoardAntecedence(assignee)
+      .then((v) => {
+        const safe = Number.isFinite(v) && (v as number) >= 0 ? Math.floor(v as number) : 0;
+        setBoardAntecedence(safe);
+        setBoardAntecedenceDraft(String(safe));
+      })
+      .catch(() => {
+        setBoardAntecedence(0);
+        setBoardAntecedenceDraft("0");
+      });
+  }, [assignee]);
+
+  const handleSaveBoardAntecedence = async () => {
+    const days = parseInt(boardAntecedenceDraft, 10);
+    if (isNaN(days) || days < 0) {
+      toast.error("Informe um número inteiro positivo (0 ou maior).");
+      return;
+    }
+    setBoardAntecedenceSaving(true);
+    try {
+      await upsertBoardAntecedence(assignee, days);
+      setBoardAntecedence(days);
+      setIsBoardSettingsOpen(false);
+      toast.success(`Antecedência do quadro "${assignee}" atualizada para ${days} dias.`);
+      try {
+        const moved = await reallocateBoardCardsForAntecedence(assignee);
+        if (moved > 0) {
+          toast.info(`${moved} card(s) reposicionado(s) conforme nova antecedência.`);
+        }
+      } catch (e) {
+        console.warn("Reallocate after antecedence change failed:", e);
+      }
+      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+    } catch (e) {
+      toast.error("Falha ao salvar antecedência: " + (e as Error).message);
+    } finally {
+      setBoardAntecedenceSaving(false);
+    }
+  };
+
+
   // Demandas Avulsas agrupadas pela fila mensal derivada de `desired_date`.
   // Sem fila correspondente, o card cai em "Sem fila" (nunca some).
   const demandsByLane = useMemo(() => {
@@ -918,55 +968,7 @@ function AssigneeBoard({
     return m;
   }, [items, localLanes, normalizedSearch]);
 
-  // ---- Antecedência do quadro (por responsável) ----
-  const [boardAntecedence, setBoardAntecedence] = useState<number>(0);
-  const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
-  const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
-  const [boardAntecedenceSaving, setBoardAntecedenceSaving] = useState(false);
-
-  useEffect(() => {
-    if (!assignee || assignee === UNASSIGNED) return;
-    fetchBoardAntecedence(assignee)
-      .then((v) => {
-        const safe = Number.isFinite(v) && (v as number) >= 0 ? Math.floor(v as number) : 0;
-        setBoardAntecedence(safe);
-        setBoardAntecedenceDraft(String(safe));
-      })
-      .catch(() => {
-        setBoardAntecedence(0);
-        setBoardAntecedenceDraft("0");
-      });
-  }, [assignee]);
-
-  const handleSaveBoardAntecedence = async () => {
-    const days = parseInt(boardAntecedenceDraft, 10);
-    if (isNaN(days) || days < 0) {
-      toast.error("Informe um número inteiro positivo (0 ou maior).");
-      return;
-    }
-    setBoardAntecedenceSaving(true);
-    try {
-      await upsertBoardAntecedence(assignee, days);
-      setBoardAntecedence(days);
-      setIsBoardSettingsOpen(false);
-      toast.success(`Antecedência do quadro "${assignee}" atualizada para ${days} dias.`);
-      try {
-        const moved = await reallocateBoardCardsForAntecedence(assignee);
-        if (moved > 0) {
-          toast.info(`${moved} card(s) reposicionado(s) conforme nova antecedência.`);
-        }
-      } catch (e) {
-        console.warn("Reallocate after antecedence change failed:", e);
-      }
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-    } catch (e) {
-      toast.error("Falha ao salvar antecedência: " + (e as Error).message);
-    } finally {
-      setBoardAntecedenceSaving(false);
-    }
-  };
-
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
 
