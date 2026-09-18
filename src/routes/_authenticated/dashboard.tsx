@@ -1271,12 +1271,12 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
-        {/* Barra de rolagem horizontal contínua — acima do cabeçalho, discreta e sincronizada */}
+        {/* Barra de rolagem horizontal contínua — acima do cabeçalho interno, discreta e sincronizada */}
         {isActive && kanbanContentWidth > 0 && (
           <div
             ref={kanbanProxyRef}
             onScroll={onKanbanProxyScroll}
-            className="sticky top-0 z-20 w-full shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/80 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+            className="sticky top-[3.5rem] z-20 w-full shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/80 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
             aria-label="Rolagem horizontal do Kanban"
           >
             <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
@@ -1520,7 +1520,7 @@ function LaneColumn({
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="sticky top-0 z-10 px-2.5 flex shrink-0 items-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px]"
+        className="sticky top-[calc(3.5rem+12px)] z-10 px-2.5 flex shrink-0 items-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px]"
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
