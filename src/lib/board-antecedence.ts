@@ -80,43 +80,35 @@ export async function fetchBoardAntecedence(assigneeName: string): Promise<numbe
 
 /**
  * Salva ou atualiza a antecedência de um quadro.
+ * Em caso de falha no Supabase (ex.: tabela inexistente), persiste em localStorage
+ * mas propaga o erro para que a UI possa informar o usuário e manter o modal aberto.
  */
 export async function upsertBoardAntecedence(assigneeName: string, days: number): Promise<void> {
   const name = assigneeName?.trim();
   if (!name) throw new Error("Assignee name required");
   const antecedence_days = Math.max(0, Math.floor(Number(days) || 0));
 
-  // Tenta persistir no Supabase
-  let supabaseSuccess = false;
-  try {
-    const { error } = await (supabase as any)
-      .from("dashboard_board_settings")
-      .upsert(
-        {
-          assignee_name: name,
-          antecedence_days,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "assignee_name" }
-      );
-    if (!error) supabaseSuccess = true;
-    else throw error;
-  } catch (e) {
-    console.warn("upsertBoardAntecedence supabase failed, fallback to localStorage:", e);
-  }
-
-  // Sempre persiste em localStorage como cache/fallback
+  // Persiste em localStorage como cache/fallback (sempre)
   try {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(`board_antecedence:${name}`, String(antecedence_days));
     }
   } catch {}
 
-  if (!supabaseSuccess) {
-    // Se a tabela não existir, ainda considera sucesso via localStorage
-    // Mas verifica se o erro foi por tabela inexistente para não lançar falso erro
-    // Para compatibilidade, não lança erro se localStorage funcionou
-    return;
+  // Tenta persistir no Supabase - se falhar, propaga erro para UI
+  const { error } = await (supabase as any)
+    .from("dashboard_board_settings")
+    .upsert(
+      {
+        assignee_name: name,
+        antecedence_days,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "assignee_name" }
+    );
+  if (error) {
+    console.warn("upsertBoardAntecedence supabase failed:", error);
+    throw error;
   }
 }
 

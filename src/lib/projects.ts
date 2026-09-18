@@ -221,17 +221,29 @@ export async function allocateProjectToMonthlyLanes(runrunit_project_id: number)
   );
 
   for (const assignee of assignees) {
-    // Aplica antecedência do quadro para cálculo da data de posicionamento
+    // Aplica antecedência do quadro para cálculo da data de posicionamento — seguro
     let antecedence = 0;
     try {
-      antecedence = await fetchBoardAntecedence(assignee);
+      const v = await fetchBoardAntecedence(assignee);
+      antecedence = Number.isFinite(v) && (v as number) >= 0 ? Math.floor(v as number) : 0;
     } catch {
       antecedence = 0;
     }
-    const positioningDate =
-      calculatePositioningDate(proj.desired_delivery_date as string, antecedence) ??
-      (proj.desired_delivery_date as string);
-    const laneTitle = monthlyLaneTitle(positioningDate);
+    const desired = proj.desired_delivery_date as string | null | undefined;
+    if (!desired) continue;
+    let positioningDate: string | null = null;
+    try {
+      positioningDate = calculatePositioningDate(desired, antecedence);
+    } catch {
+      positioningDate = null;
+    }
+    const dateToUse = positioningDate ?? desired;
+    let laneTitle: string | null = null;
+    try {
+      laneTitle = monthlyLaneTitle(dateToUse);
+    } catch {
+      laneTitle = null;
+    }
     if (!laneTitle) continue;
 
     const { data: lanes } = await (supabase as any)
@@ -324,12 +336,25 @@ export async function reallocateBoardCardsForAntecedence(assigneeName: string): 
     }
   }
 
+  // Sanitiza antecedência
+  const ante = Number.isFinite(antecedence) && antecedence >= 0 ? Math.floor(antecedence) : 0;
   let moved = 0;
   for (const card of toProcess) {
     const desired = desiredMap.get(card.runrunit_project_id);
     if (!desired) continue;
-    const positioningDate = calculatePositioningDate(desired, antecedence) ?? desired;
-    const laneTitle = monthlyLaneTitle(positioningDate);
+    let positioningDate: string | null = null;
+    try {
+      positioningDate = calculatePositioningDate(desired, ante);
+    } catch {
+      positioningDate = null;
+    }
+    const dateToUse = positioningDate ?? desired;
+    let laneTitle: string | null = null;
+    try {
+      laneTitle = monthlyLaneTitle(dateToUse);
+    } catch {
+      laneTitle = null;
+    }
     if (!laneTitle) continue;
     const targetLaneId = laneMap.get(laneTitle.toLowerCase());
     // Se a fila de destino não existir, mantém onde está (ou poderia ir para Sem fila = null,

@@ -812,10 +812,24 @@ function AssigneeBoard({
           .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
-      // Aplica antecedência do quadro também para demandas
-      const posDate = calculatePositioningDate(d.demand.desired_date, boardAntecedence);
-      const posLaneTitle = posDate ? monthlyLaneTitle(posDate) : d.laneTitle;
-      const laneId = laneIdByTitle.get((posLaneTitle ?? d.laneTitle).trim().toLowerCase());
+      // Aplica antecedência do quadro também para demandas — seguro contra null/inválido
+      let laneId: string | undefined;
+      const desired = d.demand.desired_date as string | null | undefined;
+      const ante = Number.isFinite(boardAntecedence) && (boardAntecedence as number) >= 0 ? Math.floor(boardAntecedence as number) : 0;
+      if (!desired) {
+        laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
+      } else {
+        const posDate = calculatePositioningDate(desired, ante);
+        let posLaneTitle: string | null = null;
+        if (posDate) {
+          try {
+            const t = monthlyLaneTitle(posDate);
+            if (t) posLaneTitle = t;
+          } catch {}
+        }
+        const titleToUse = posLaneTitle ?? d.laneTitle;
+        laneId = laneIdByTitle.get(titleToUse.trim().toLowerCase());
+      }
       m.get(laneId && m.has(laneId) ? laneId : UNASSIGNED_LANE)!.push(d);
     }
     for (const [, arr] of m) {
@@ -912,10 +926,16 @@ function AssigneeBoard({
 
   useEffect(() => {
     if (!assignee || assignee === UNASSIGNED) return;
-    fetchBoardAntecedence(assignee).then((v) => {
-      setBoardAntecedence(v);
-      setBoardAntecedenceDraft(String(v));
-    });
+    fetchBoardAntecedence(assignee)
+      .then((v) => {
+        const safe = Number.isFinite(v) && (v as number) >= 0 ? Math.floor(v as number) : 0;
+        setBoardAntecedence(safe);
+        setBoardAntecedenceDraft(String(safe));
+      })
+      .catch(() => {
+        setBoardAntecedence(0);
+        setBoardAntecedenceDraft("0");
+      });
   }, [assignee]);
 
   const handleSaveBoardAntecedence = async () => {
