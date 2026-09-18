@@ -136,6 +136,7 @@ function PlanningPage() {
 
   // Filters
   const [search, setSearch] = useState("");
+  const [selectedClients, setSelectedClients] = useState<Set<string>>(new Set());
   const [selectedGroups, setSelectedGroups] = useState<Set<string>>(new Set());
   const [selectedSubgroups, setSelectedSubgroups] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("__all__");
@@ -145,6 +146,12 @@ function PlanningPage() {
     t.setHours(0, 0, 0, 0);
     return t;
   });
+
+  const clients = useMemo(() => {
+    const s = new Set<string>();
+    for (const p of all) if (p.client_name) s.add(p.client_name);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [all]);
 
   const groups = useMemo(() => {
     const s = new Set<string>();
@@ -173,6 +180,10 @@ function PlanningPage() {
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
+      if (selectedClients.size > 0) {
+        const c = p.client_name ?? "";
+        if (!c || !selectedClients.has(c)) return false;
+      }
       if (selectedGroups.size > 0) {
         const g = p.project_group_name ?? "";
         if (!g || !selectedGroups.has(g)) return false;
@@ -184,7 +195,7 @@ function PlanningPage() {
       if (statusFilter !== "__all__" && normalizePlanningStatus(p.planning_status) !== statusFilter) return false;
       return true;
     });
-  }, [all, search, selectedGroups, selectedSubgroups, statusFilter]);
+  }, [all, search, selectedClients, selectedGroups, selectedSubgroups, statusFilter]);
 
   // Index planned items by date
   const byDate = useMemo(() => {
@@ -242,6 +253,7 @@ function PlanningPage() {
               className="pl-8 h-9 w-56"
             />
           </div>
+          <CalendarMultiSelect label="Cliente" placeholder="Todos os clientes" options={clients} selected={selectedClients} onChange={setSelectedClients} />
           <CalendarMultiSelect label="Grupo" placeholder="Todos os grupos" options={groups} selected={selectedGroups} onChange={setSelectedGroups} />
           <CalendarMultiSelect label="Subgrupo" placeholder="Todos os subgrupos" options={subgroups} selected={selectedSubgroups} onChange={setSelectedSubgroups} />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
