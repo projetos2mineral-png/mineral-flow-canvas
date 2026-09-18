@@ -544,7 +544,7 @@ function DashboardPage() {
             </TabsContent>
           ))}
           {/* Painel flutuante inferior — [ Busca ] | [ < responsáveis > ] | [ modo ] */}
-          <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4">
+          <div className="pointer-events-none fixed bottom-3 left-1/2 z-50 flex w-full -translate-x-1/2 justify-center px-3 sm:px-4">
             <div className="pointer-events-auto flex w-full max-w-[min(96vw,1180px)] items-center gap-1.5 sm:gap-2 rounded-full border border-border/40 bg-card/95 px-2 sm:px-2.5 py-1.5 shadow-lg backdrop-blur-md">
               {/* Busca — compacta, placeholder completo em tooltip */}
               <div className="relative shrink-0">
@@ -1362,7 +1362,7 @@ function AssigneeBoard({
             <div
               ref={kanbanProxyRef}
               onScroll={onKanbanProxyScroll}
-              className="absolute bottom-3 left-3 right-3 z-20 overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/95 backdrop-blur-md shadow-lg [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+              className="absolute bottom-3 left-3 right-3 z-10 overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/95 backdrop-blur-md shadow-lg [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
               aria-label="Rolagem horizontal do Kanban"
             >
               <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
