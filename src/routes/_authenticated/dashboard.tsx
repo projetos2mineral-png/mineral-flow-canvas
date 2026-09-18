@@ -1276,27 +1276,17 @@ function AssigneeBoard({
           interval: 5,
         }}
       >
-        {/* Barra de rolagem horizontal contínua — acima do cabeçalho interno, discreta e sincronizada */}
-        {isActive && kanbanContentWidth > 0 && (
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
           <div
-            ref={kanbanProxyRef}
-            onScroll={onKanbanProxyScroll}
-            className="sticky top-[3.5rem] z-20 w-full shrink-0 overflow-x-auto overflow-y-hidden border-b border-border/20 bg-background/80 backdrop-blur-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
-            aria-label="Rolagem horizontal do Kanban"
+            ref={mainScrollRef}
+            onScroll={onMainScroll}
+            className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
           >
-            <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
-          </div>
-        )}
-        <div
-          ref={mainScrollRef}
-          onScroll={onMainScroll}
-          className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
-        >
-          <div
-            ref={innerRef}
-            className="flex h-full min-w-max"
-            style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
-          >
+            <div
+              ref={innerRef}
+              className="flex h-full min-w-max"
+              style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)", paddingBottom: "2.5rem" }}
+            >
 
             <LaneColumn
               key="__unassigned__"
@@ -1366,6 +1356,18 @@ function AssigneeBoard({
               </button>
             )}
           </div>
+        </div>
+          {/* Barra horizontal flutuante — inferior da viewport do Kanban, overlay, sincronizada com o container horizontal */}
+          {isActive && kanbanContentWidth > 0 && (
+            <div
+              ref={kanbanProxyRef}
+              onScroll={onKanbanProxyScroll}
+              className="absolute bottom-3 left-3 right-3 z-20 overflow-x-auto overflow-y-hidden rounded-full border border-border/40 bg-card/95 backdrop-blur-md shadow-lg [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/70 [&::-webkit-scrollbar-track]:bg-transparent"
+              aria-label="Rolagem horizontal do Kanban"
+            >
+              <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+            </div>
+          )}
         </div>
 
         <DragOverlay>
