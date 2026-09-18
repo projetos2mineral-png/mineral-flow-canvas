@@ -44,6 +44,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ListChecks,
+  Settings,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -1689,6 +1690,25 @@ function LaneColumn({
                       {overCapacity && (
                         <p>Excedente: {formatHoursCompact(excess)}</p>
                       )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {isUnassigned && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="Configurações do quadro"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                      <p>Configurações do quadro</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
