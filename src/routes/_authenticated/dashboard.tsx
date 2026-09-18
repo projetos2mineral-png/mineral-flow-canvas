@@ -235,8 +235,8 @@ type DashboardCard = {
 function DashboardPage() {
   const qc = useQueryClient();
   const { level } = useCurrentDashboardUser();
-  const readOnly = level === "comum";
-  const isAdmin = level === "administrador";
+  const readOnly = (level ?? "").toLowerCase() === "comum";
+  const isAdmin = (level ?? "").toLowerCase() === "administrador";
 
   const projectsQ = useQuery({
     queryKey: ["dashboard", "projects"],
@@ -1919,20 +1919,21 @@ function ProjectCardView({
               </div>
             )}
           </div>
-          {isAdmin && (totalTasks != null || rawHours != null) && (
-            <div className="flex items-center gap-3 text-[11px] leading-4 text-muted-foreground/60">
-              {totalTasks != null && (
-                <span className="inline-flex items-center gap-1">
-                  <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
-                  <span className="tabular-nums">{totalTasks} {totalTasks === 1 ? "tarefa" : "tarefas"}</span>
+          {/* Linha visível diretamente na frente do card — apenas para ADMINISTRADOR */}
+          {isAdmin && (
+            <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
+              <span className="inline-flex items-center gap-1">
+                <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
+                <span className="tabular-nums">
+                  {totalTasks != null ? `${totalTasks} ${totalTasks === 1 ? "tarefa" : "tarefas"}` : "— tarefas"}
                 </span>
-              )}
-              {rawHours != null && (
-                <span className="inline-flex items-center gap-1">
-                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
-                  <span className="tabular-nums">{formatHoursCompact(Number(rawHours))}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3 shrink-0 opacity-60" />
+                <span className="tabular-nums">
+                  {rawHours != null ? formatHoursCompact(Number(rawHours)) : "—"}
                 </span>
-              )}
+              </span>
             </div>
           )}
           {card.review_status && card.review_status !== "não enviado" && (
