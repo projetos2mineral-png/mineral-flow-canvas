@@ -1537,7 +1537,7 @@ function LaneColumn({
       </div>
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="px-2.5 flex shrink-0 flex-col items-center justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
+        className="px-2.5 flex shrink-0 flex-col justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
@@ -1578,66 +1578,66 @@ function LaneColumn({
           </div>
         ) : (
           <>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div 
-                    className="relative flex w-full items-center justify-center cursor-pointer rounded-md px-1 -mx-1 transition-colors group hover:bg-muted/20"
-                    onClick={() => {
-                      setCapacityDraft(capacity?.toString() ?? "0");
-                      setIsCapacityDialogOpen(true);
-                    }}
-                  >
-                    {dragHandleProps && (
-                      <button 
-                        type="button"
-                        className="absolute left-1 text-muted-foreground/15 group-hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing shrink-0"
-                        {...dragHandleProps}
-                      >
-                        <GripHorizontal className="h-3 w-3" />
-                      </button>
-                    )}
-                    <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
-                      {isMonthly ? title.toUpperCase() : title}
-                    </h3>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
-                  <p>Cartões: {cards.length}</p>
-                  {!isMonthly && !isUnassigned && <p className="text-[10px] opacity-70 mt-1">Clique para configurar</p>}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
+            <div className="flex w-full flex-row items-center justify-between gap-2">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span
-                      className={cn(
-                        "text-[11px] font-normal leading-none tracking-wide tabular-nums cursor-default select-none",
-                        overCapacity
-                          ? "text-red-600 dark:text-red-400"
-                          : "text-muted-foreground/55"
-                      )}
+                    <div
+                      className="flex min-w-0 flex-1 items-center gap-1.5 cursor-pointer rounded-md px-1 -mx-1 transition-colors hover:bg-muted/20"
+                      onClick={() => {
+                        setCapacityDraft(capacity?.toString() ?? "0");
+                        setIsCapacityDialogOpen(true);
+                      }}
                     >
-                      {capacity != null ? formatHoursCompact(capacity) : "—"} / {formatHoursCompact(plannedHours)}
-                      {overCapacity && (
-                        <span className="ml-1 tabular-nums text-red-600 dark:text-red-400">
-                          (+{formatHoursCompact(excess)})
-                        </span>
+                      {dragHandleProps && (
+                        <button
+                          type="button"
+                          className="shrink-0 text-muted-foreground/15 hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
+                          {...dragHandleProps}
+                        >
+                          <GripHorizontal className="h-3 w-3" />
+                        </button>
                       )}
-                    </span>
+                      <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
+                        {isMonthly ? title.toUpperCase() : title}
+                      </h3>
+                    </div>
                   </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    className="text-xs bg-neutral-900 text-white border-neutral-800"
-                  >
-                    <p>Capacidade: {capacity != null ? formatHoursCompact(capacity) : "—"}</p>
-                    <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                  <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                    <p>Cartões: {cards.length}</p>
+                    {!isMonthly && !isUnassigned && <p className="text-[10px] opacity-70 mt-1">Clique para configurar</p>}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            )}
+              {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className={cn(
+                          "shrink-0 whitespace-nowrap tabular-nums tracking-wide cursor-default select-none font-normal leading-none text-[7px]",
+                          overCapacity
+                            ? "text-red-600 dark:text-red-400"
+                            : "text-muted-foreground/55"
+                        )}
+                      >
+                        {capacity != null ? formatHoursCompact(capacity) : "—"} / {formatHoursCompact(plannedHours)}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="text-xs bg-neutral-900 text-white border-neutral-800"
+                    >
+                      <p>Capacidade: {capacity != null ? formatHoursCompact(capacity) : "—"}</p>
+                      <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                      {overCapacity && (
+                        <p>Excedente: {formatHoursCompact(excess)}</p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
             <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
