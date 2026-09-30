@@ -1402,7 +1402,7 @@ function AssigneeBoard({
         <div
           ref={kanbanProxyRef}
           onScroll={onKanbanProxyScroll}
-          className="fixed top-[3.5rem] left-1/2 -translate-x-1/2 z-20 w-[calc(100%-2rem)] max-w-[1600px] overflow-x-auto overflow-y-hidden border border-border/20 bg-background/95 backdrop-blur-sm rounded-full shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent"
+          className="fixed top-[calc(3.5rem+1px)] left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-[1600px] overflow-x-auto overflow-y-hidden border border-border/20 bg-background rounded-full shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent"
           aria-label="Rolagem horizontal do Kanban"
         >
           <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
