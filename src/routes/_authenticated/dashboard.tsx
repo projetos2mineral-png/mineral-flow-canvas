@@ -750,7 +750,12 @@ function AssigneeBoard({
 
   const cardByProject = useMemo(() => {
     const m = new Map<number, ProjectCardRow>();
-    for (const c of cards) m.set(c.runrunit_project_id, c);
+    for (const c of cards) {
+      const existing = m.get(c.runrunit_project_id);
+      if (!existing || (existing.total_estimated_hours == null && c.total_estimated_hours != null)) {
+        m.set(c.runrunit_project_id, c);
+      }
+    }
     return m;
   }, [cards]);
 
