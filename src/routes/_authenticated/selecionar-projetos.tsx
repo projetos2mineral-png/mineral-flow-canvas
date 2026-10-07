@@ -36,7 +36,7 @@ import {
 } from "@/lib/manual-demands";
 import { DemandDialog } from "@/components/demands/DemandDialog";
 import { exportProjectsToExcel } from "@/lib/export-projects";
-import { startBatchUpdate, useBatchUpdate } from "@/lib/batch-update-store";
+import { startBatchUpdate, useBatchUpdate, BATCH_BLOCKED_TITLE, guardBatchConflict } from "@/lib/batch-update-store";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -137,6 +137,7 @@ function SelecionarProjetosPage() {
   const [tasksLoading, setTasksLoading] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
   const batch = useBatchUpdate();
+  const batchBlocked = batch.status === "running";
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -173,6 +174,7 @@ function SelecionarProjetosPage() {
   });
 
   const handleImportSingle = async () => {
+    if (guardBatchConflict()) return;
     const idNum = Number(importId.trim());
     if (!Number.isFinite(idNum) || idNum <= 0) {
       toast.error("Informe um ID numérico válido do projeto no Runrun.it");
@@ -286,6 +288,7 @@ function SelecionarProjetosPage() {
   // lotes de 30, concorrência 3, invokeSyncSingleProject + allocateProjectToMonthlyLanes.
   // Vive fora do ciclo de vida desta página — continua durante a navegação.
   const handleUpdateSelected = () => {
+    if (guardBatchConflict()) return;
     const ids = Array.from(selected);
     if (ids.length === 0) return;
     void startBatchUpdate(ids, qc);
@@ -328,6 +331,8 @@ function SelecionarProjetosPage() {
     busyIds.has(id) || batch.activeIds.includes(id);
 
   const toggle = async (project: RunrunitProject, next: boolean) => {
+    // Ativar exibição dispara sincronização do projeto (conflito com o lote).
+    if (next && guardBatchConflict()) return;
     qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
       (prev ?? []).map((p) =>
         p.runrunit_project_id === project.runrunit_project_id
@@ -367,6 +372,8 @@ function SelecionarProjetosPage() {
   };
 
   const bulkSet = async (value: boolean) => {
+    // Ativação dispara sincronização em background (conflito com o lote).
+    if (value && guardBatchConflict()) return;
     const ids = Array.from(selected);
     if (ids.length === 0) return;
 
@@ -451,6 +458,7 @@ function SelecionarProjetosPage() {
   };
 
   const handleEnableFromCandidate = async (project: RunrunitProject) => {
+    if (guardBatchConflict()) return;
     markBusy(project.runrunit_project_id, true);
     try {
       await setProjectTracking(project.runrunit_project_id, true);
@@ -513,6 +521,7 @@ function SelecionarProjetosPage() {
   };
 
   const handleDiscover = async () => {
+    if (guardBatchConflict()) return;
     setDiscoverLoading(true);
     try {
       await invokeDiscoverProjects("Manual");
@@ -536,6 +545,7 @@ function SelecionarProjetosPage() {
   };
 
   const handleSyncSingleRow = async (project: RunrunitProject) => {
+    if (guardBatchConflict()) return;
     markBusy(project.runrunit_project_id, true);
     try {
       await invokeSyncSingleProject(project.runrunit_project_id);
@@ -636,7 +646,11 @@ function SelecionarProjetosPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => setIsImportModalOpen(true)}>
+                <DropdownMenuItem
+                  onClick={() => setIsImportModalOpen(true)}
+                  disabled={batchBlocked}
+                  title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
+                >
                   <Download className="mr-2 h-4 w-4" />
                   <span>Importar projeto por ID</span>
                 </DropdownMenuItem>
@@ -664,7 +678,8 @@ function SelecionarProjetosPage() {
                   <Button
                     variant="default"
                     onClick={handleDiscover}
-                    disabled={discoverLoading}
+                    disabled={discoverLoading || batchBlocked}
+                    title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
                     className="h-9 px-4 shadow-sm"
                   >
                     {discoverLoading ? (
@@ -677,7 +692,9 @@ function SelecionarProjetosPage() {
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs">
-                    Busca projetos abertos e com data desejada no Runrun.it.
+                    {batchBlocked
+                      ? BATCH_BLOCKED_TITLE
+                      : "Busca projetos abertos e com data desejada no Runrun.it."}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -723,7 +740,8 @@ function SelecionarProjetosPage() {
                 />
                 <Button 
                   onClick={handleImportSingle} 
-                  disabled={importLoading || !importId}
+                  disabled={importLoading || !importId || batchBlocked}
+                  title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
                 >
                   {importLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Importar"}
                 </Button>
@@ -854,11 +872,12 @@ function SelecionarProjetosPage() {
                           </div>
                         </div>
                         <div className="inline-flex gap-2 shrink-0">
-                          <Button
-                            size="sm"
-                            disabled={isRowBusy(p.runrunit_project_id)}
-                            onClick={() => handleEnableFromCandidate(p)}
-                          >
+                            <Button
+                              size="sm"
+                              disabled={isRowBusy(p.runrunit_project_id) || batchBlocked}
+                              title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
+                              onClick={() => handleEnableFromCandidate(p)}
+                            >
                             {isRowBusy(p.runrunit_project_id) && (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             )}
@@ -982,19 +1001,32 @@ function SelecionarProjetosPage() {
             <Button
               size="sm"
               onClick={() => handleUpdateSelected()}
-              disabled={batch.status === "running"}
-              title={batch.status === "running" ? `Atualizando ${batch.done} de ${batch.total}` : "Atualizar dados e estimativas dos projetos selecionados"}
+              disabled={batchBlocked}
+              title={batchBlocked ? BATCH_BLOCKED_TITLE : "Atualizar dados e estimativas dos projetos selecionados"}
             >
-              {batch.status === "running" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {batchBlocked && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Atualizar selecionados
             </Button>
-            <Button size="sm" onClick={() => bulkSet(true)} disabled={batch.status === "running"}>
+            <Button
+              size="sm"
+              onClick={() => bulkSet(true)}
+              disabled={batchBlocked}
+              title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
+            >
               Exibir selecionados na Central de Planejamento
             </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkSet(false)} disabled={batch.status === "running"}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => bulkSet(false)}
+            >
               Remover selecionados da Central de Planejamento
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={batch.status === "running"}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelected(new Set())}
+            >
               Cancelar
             </Button>
           </div>
@@ -1109,9 +1141,9 @@ function SelecionarProjetosPage() {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8"
-                      disabled={isRowBusy(p.runrunit_project_id)}
+                      disabled={isRowBusy(p.runrunit_project_id) || batchBlocked}
                       onClick={() => handleSyncSingleRow(p)}
-                      title="Atualizar projeto"
+                      title={batchBlocked ? BATCH_BLOCKED_TITLE : "Atualizar projeto"}
                     >
                       {isRowBusy(p.runrunit_project_id) ? (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -1122,7 +1154,8 @@ function SelecionarProjetosPage() {
                     <Switch
                       checked={!!p.is_tracking_enabled}
                       onCheckedChange={(v) => toggle(p, v)}
-                      disabled={isRowBusy(p.runrunit_project_id)}
+                      disabled={isRowBusy(p.runrunit_project_id) || batchBlocked}
+                      title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
                       aria-label="Exibir na Central de Planejamento"
                     />
                   </div>

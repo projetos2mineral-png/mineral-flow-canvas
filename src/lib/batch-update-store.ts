@@ -79,6 +79,29 @@ export function dismissBatchUpdate() {
   if (state.status === "done") replaceState(initialState);
 }
 
+/** Tooltip/title padrão para ações bloqueadas durante o lote. */
+export const BATCH_BLOCKED_TITLE = "Indisponível durante uma atualização em massa.";
+
+/** Mensagem única exibida quando o usuário tenta uma ação conflitante. */
+const CONFLICT_MESSAGE = "Outra atualização está em andamento.";
+
+export function isBatchUpdateRunning(): boolean {
+  return state.status === "running";
+}
+
+/**
+ * Proteção de concorrência: aborta a ação (avisando o usuário) enquanto um
+ * lote "Atualizar selecionados" está em execução. Retorna true se BLOQUEADO.
+ * Sem progresso na mensagem — o indicador global já exibe o andamento.
+ */
+export function guardBatchConflict(): boolean {
+  if (state.status === "running") {
+    toast.error(CONFLICT_MESSAGE);
+    return true;
+  }
+  return false;
+}
+
 const BATCH_SIZE = 30;
 const CONCURRENCY = 3;
 
@@ -90,7 +113,7 @@ const CONCURRENCY = 3;
  */
 export async function startBatchUpdate(ids: number[], queryClient: QueryClient): Promise<void> {
   if (ids.length === 0) return;
-  if (state.status === "running") return; // impede segunda execução simultânea
+  if (guardBatchConflict()) return; // impede segunda execução simultânea
 
   replaceState({
     status: "running",
