@@ -135,6 +135,9 @@ function SelecionarProjetosPage() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
+  const [updatingSelected, setUpdatingSelected] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState({ total: 0, done: 0 });
+  const [updateErrors, setUpdateErrors] = useState<Array<{ id: number; error: string }>>([]);
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -278,6 +281,62 @@ function SelecionarProjetosPage() {
       }
       return next;
     });
+  };
+
+  const handleUpdateSelected = async () => {
+    const ids = Array.from(selected);
+    if (ids.length === 0) return;
+    if (updatingSelected) return;
+    setUpdatingSelected(true);
+    setUpdateErrors([]);
+    setUpdateProgress({ total: ids.length, done: 0 });
+    const BATCH_SIZE = 30;
+    const CONCURRENCY = 3;
+    const results: Array<{ id: number; ok: boolean; error?: string }> = [];
+    try {
+      for (let b = 0; b < ids.length; b += BATCH_SIZE) {
+        const batch = ids.slice(b, b + BATCH_SIZE);
+        const chunks: number[][] = [];
+        for (let i = 0; i < batch.length; i += CONCURRENCY) {
+          chunks.push(batch.slice(i, i + CONCURRENCY));
+        }
+        for (const chunk of chunks) {
+          await Promise.all(
+            chunk.map(async (id) => {
+              markBusy(id, true);
+              try {
+                await invokeSyncSingleProject(id);
+                await allocateProjectToMonthlyLanes(id);
+                results.push({ id, ok: true });
+              } catch (e) {
+                const err = e instanceof Error ? e.message : String(e);
+                results.push({ id, ok: false, error: err });
+                setUpdateErrors((prev) => [...prev, { id, error: err }]);
+              } finally {
+                markBusy(id, false);
+                setUpdateProgress((prev) => ({ total: prev.total, done: prev.done + 1 }));
+              }
+            })
+          );
+        }
+      }
+      const success = results.filter((r) => r.ok).length;
+      const failed = results.length - success;
+      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      if (failed === 0) {
+        toast.success(`Atualização concluída: ${success} de ${results.length} projetos atualizados.`);
+      } else {
+        const desc = results
+          .filter((r) => !r.ok)
+          .slice(0, 20)
+          .map((r) => `${r.id}: ${r.error}`)
+          .join("; ");
+        toast.error(`${success} atualizados, ${failed} falharam.`, { description: desc, duration: 8000 });
+      }
+    } finally {
+      setUpdatingSelected(false);
+    }
   };
 
   const handleExportExcel = () => {
@@ -956,14 +1015,29 @@ function SelecionarProjetosPage() {
           <span className="text-sm font-medium">
             {selected.size} projeto(s) selecionado(s)
           </span>
+          {updatingSelected && (
+            <span className="flex items-center gap-2 text-sm text-muted-foreground" role="status" aria-live="polite">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Atualizando {updateProgress.done} de {updateProgress.total}
+            </span>
+          )}
           <div className="ml-auto flex gap-2">
-            <Button size="sm" onClick={() => bulkSet(true)}>
+            <Button
+              size="sm"
+              onClick={() => handleUpdateSelected()}
+              disabled={updatingSelected}
+              title={updatingSelected ? `Atualizando ${updateProgress.done} de ${updateProgress.total}` : "Atualizar dados e estimativas dos projetos selecionados"}
+            >
+              {updatingSelected && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Atualizar selecionados
+            </Button>
+            <Button size="sm" onClick={() => bulkSet(true)} disabled={updatingSelected}>
               Exibir selecionados na Central de Planejamento
             </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkSet(false)}>
+            <Button size="sm" variant="outline" onClick={() => bulkSet(false)} disabled={updatingSelected}>
               Remover selecionados da Central de Planejamento
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={updatingSelected}>
               Cancelar
             </Button>
           </div>
