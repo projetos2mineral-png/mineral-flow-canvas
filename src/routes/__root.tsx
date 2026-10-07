@@ -13,6 +13,7 @@ import {
 import appCss from "../styles.css?url";
 
 import { Toaster } from "@/components/ui/sonner";
+import { BatchUpdateIndicator } from "@/components/BatchUpdateIndicator";
 import { Gauge, LayoutDashboard, ListChecks, LogOut, CalendarDays, Moon, Sun, HelpCircle, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState, useMemo } from "react";
@@ -144,6 +145,7 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AppShell />
       <Toaster richColors position="top-right" />
+      <BatchUpdateIndicator />
     </QueryClientProvider>
   );
 }

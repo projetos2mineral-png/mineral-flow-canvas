@@ -36,6 +36,7 @@ import {
 } from "@/lib/manual-demands";
 import { DemandDialog } from "@/components/demands/DemandDialog";
 import { exportProjectsToExcel } from "@/lib/export-projects";
+import { startBatchUpdate, useBatchUpdate } from "@/lib/batch-update-store";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -135,9 +136,7 @@ function SelecionarProjetosPage() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
-  const [updatingSelected, setUpdatingSelected] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState({ total: 0, done: 0 });
-  const [updateErrors, setUpdateErrors] = useState<Array<{ id: number; error: string }>>([]);
+  const batch = useBatchUpdate();
   const [newOpen, setNewOpen] = useState(false);
   const [newPeriod, setNewPeriod] = useState<"7" | "30" | "all">("7");
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -283,60 +282,13 @@ function SelecionarProjetosPage() {
     });
   };
 
-  const handleUpdateSelected = async () => {
+  // Processamento em lote orquestrado pelo store global (batch-update-store):
+  // lotes de 30, concorrência 3, invokeSyncSingleProject + allocateProjectToMonthlyLanes.
+  // Vive fora do ciclo de vida desta página — continua durante a navegação.
+  const handleUpdateSelected = () => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
-    if (updatingSelected) return;
-    setUpdatingSelected(true);
-    setUpdateErrors([]);
-    setUpdateProgress({ total: ids.length, done: 0 });
-    const BATCH_SIZE = 30;
-    const CONCURRENCY = 3;
-    const results: Array<{ id: number; ok: boolean; error?: string }> = [];
-    try {
-      for (let b = 0; b < ids.length; b += BATCH_SIZE) {
-        const batch = ids.slice(b, b + BATCH_SIZE);
-        const chunks: number[][] = [];
-        for (let i = 0; i < batch.length; i += CONCURRENCY) {
-          chunks.push(batch.slice(i, i + CONCURRENCY));
-        }
-        for (const chunk of chunks) {
-          await Promise.all(
-            chunk.map(async (id) => {
-              markBusy(id, true);
-              try {
-                await invokeSyncSingleProject(id);
-                await allocateProjectToMonthlyLanes(id);
-                results.push({ id, ok: true });
-              } catch (e) {
-                const err = e instanceof Error ? e.message : String(e);
-                results.push({ id, ok: false, error: err });
-                setUpdateErrors((prev) => [...prev, { id, error: err }]);
-              } finally {
-                markBusy(id, false);
-                setUpdateProgress((prev) => ({ total: prev.total, done: prev.done + 1 }));
-              }
-            })
-          );
-        }
-      }
-      const success = results.filter((r) => r.ok).length;
-      const failed = results.length - success;
-      qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      if (failed === 0) {
-        toast.success(`Atualização concluída: ${success} de ${results.length} projetos atualizados.`);
-      } else {
-        const desc = results
-          .filter((r) => !r.ok)
-          .slice(0, 20)
-          .map((r) => `${r.id}: ${r.error}`)
-          .join("; ");
-        toast.error(`${success} atualizados, ${failed} falharam.`, { description: desc, duration: 8000 });
-      }
-    } finally {
-      setUpdatingSelected(false);
-    }
+    void startBatchUpdate(ids, qc);
   };
 
   const handleExportExcel = () => {
@@ -369,6 +321,11 @@ function SelecionarProjetosPage() {
       else next.delete(id);
       return next;
     });
+
+  // Ocupado se estiver em operação local (busyIds) ou em processamento do
+  // lote global "Atualizar selecionados" (activeIds vindo do store).
+  const isRowBusy = (id: number) =>
+    busyIds.has(id) || batch.activeIds.includes(id);
 
   const toggle = async (project: RunrunitProject, next: boolean) => {
     qc.setQueryData<RunrunitProject[]>(["runrunit_projects", sortAsc ? "asc" : "desc"], (prev) =>
@@ -899,10 +856,10 @@ function SelecionarProjetosPage() {
                         <div className="inline-flex gap-2 shrink-0">
                           <Button
                             size="sm"
-                            disabled={busyIds.has(p.runrunit_project_id)}
+                            disabled={isRowBusy(p.runrunit_project_id)}
                             onClick={() => handleEnableFromCandidate(p)}
                           >
-                            {busyIds.has(p.runrunit_project_id) && (
+                            {isRowBusy(p.runrunit_project_id) && (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             )}
                             Exibir na Central de Planejamento
@@ -910,7 +867,7 @@ function SelecionarProjetosPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            disabled={busyIds.has(p.runrunit_project_id)}
+                            disabled={isRowBusy(p.runrunit_project_id)}
                             onClick={() => handleIgnoreCandidate(p)}
                           >
                             Ignorar
@@ -1015,29 +972,29 @@ function SelecionarProjetosPage() {
           <span className="text-sm font-medium">
             {selected.size} projeto(s) selecionado(s)
           </span>
-          {updatingSelected && (
+          {batch.status === "running" && (
             <span className="flex items-center gap-2 text-sm text-muted-foreground" role="status" aria-live="polite">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Atualizando {updateProgress.done} de {updateProgress.total}
+              Atualizando {batch.done} de {batch.total}
             </span>
           )}
           <div className="ml-auto flex gap-2">
             <Button
               size="sm"
               onClick={() => handleUpdateSelected()}
-              disabled={updatingSelected}
-              title={updatingSelected ? `Atualizando ${updateProgress.done} de ${updateProgress.total}` : "Atualizar dados e estimativas dos projetos selecionados"}
+              disabled={batch.status === "running"}
+              title={batch.status === "running" ? `Atualizando ${batch.done} de ${batch.total}` : "Atualizar dados e estimativas dos projetos selecionados"}
             >
-              {updatingSelected && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {batch.status === "running" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Atualizar selecionados
             </Button>
-            <Button size="sm" onClick={() => bulkSet(true)} disabled={updatingSelected}>
+            <Button size="sm" onClick={() => bulkSet(true)} disabled={batch.status === "running"}>
               Exibir selecionados na Central de Planejamento
             </Button>
-            <Button size="sm" variant="outline" onClick={() => bulkSet(false)} disabled={updatingSelected}>
+            <Button size="sm" variant="outline" onClick={() => bulkSet(false)} disabled={batch.status === "running"}>
               Remover selecionados da Central de Planejamento
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={updatingSelected}>
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} disabled={batch.status === "running"}>
               Cancelar
             </Button>
           </div>
@@ -1152,11 +1109,11 @@ function SelecionarProjetosPage() {
                       size="icon"
                       variant="ghost"
                       className="h-8 w-8"
-                      disabled={busyIds.has(p.runrunit_project_id)}
+                      disabled={isRowBusy(p.runrunit_project_id)}
                       onClick={() => handleSyncSingleRow(p)}
                       title="Atualizar projeto"
                     >
-                      {busyIds.has(p.runrunit_project_id) ? (
+                      {isRowBusy(p.runrunit_project_id) ? (
                         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                       ) : (
                         <RefreshCw className="h-4 w-4 text-muted-foreground" />
@@ -1165,7 +1122,7 @@ function SelecionarProjetosPage() {
                     <Switch
                       checked={!!p.is_tracking_enabled}
                       onCheckedChange={(v) => toggle(p, v)}
-                      disabled={busyIds.has(p.runrunit_project_id)}
+                      disabled={isRowBusy(p.runrunit_project_id)}
                       aria-label="Exibir na Central de Planejamento"
                     />
                   </div>
