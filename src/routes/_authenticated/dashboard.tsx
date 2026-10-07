@@ -2140,9 +2140,6 @@ function ProjectCardView({
               </div>
             )}
           </div>
-          <div className="text-[10px] leading-3 text-muted-foreground">
-            {p.project_name} — ESTIMADO: {card.card?.total_estimated_hours ?? "NULL"}
-          </div>
           {/* Linha visível diretamente na frente do card — apenas para ADMINISTRADOR */}
           {(isAdmin || rawHours != null) && (
             <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
