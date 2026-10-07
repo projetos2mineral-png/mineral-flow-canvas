@@ -2136,14 +2136,16 @@ function ProjectCardView({
             )}
           </div>
           {/* Linha visível diretamente na frente do card — apenas para ADMINISTRADOR */}
-          {isAdmin && (
+          {(isAdmin || rawHours != null) && (
             <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
-              <span className="inline-flex items-center gap-1">
-                <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
-                <span className="tabular-nums">
-                  {totalTasks != null ? `${totalTasks}` : "—"}
+              {isAdmin && (
+                <span className="inline-flex items-center gap-1">
+                  <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
+                  <span className="tabular-nums">
+                    {totalTasks != null ? `${totalTasks}` : "—"}
+                  </span>
                 </span>
-              </span>
+              )}
               <span className="inline-flex items-center gap-1">
                 <Clock className="h-3 w-3 shrink-0 opacity-60" />
                 <span className="tabular-nums">
