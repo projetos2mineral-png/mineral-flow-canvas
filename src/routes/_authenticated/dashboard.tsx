@@ -1714,6 +1714,11 @@ function LaneColumn({
   const qc = useQueryClient();
 
   const isMonthly = isMonthlyLaneTitle(title);
+  // Mês atual (data local do browser): borda vermelha discreta, mesmo
+  // destaque visual da semana atual na WeeklyPlanView. Sem persistência.
+  const now = new Date();
+  const currentMonthISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const isCurrentMonth = monthlyTitleToDateISO(title) === currentMonthISO;
   const [capacity, setCapacity] = useState<number | null>(null);
   const [isCapacityDialogOpen, setIsCapacityDialogOpen] = useState(false);
   const [capacityDraft, setCapacityDraft] = useState("");
@@ -1777,6 +1782,7 @@ function LaneColumn({
       className={cn(
         "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
         isLaneDragging && "opacity-50",
+        isCurrentMonth && "border-red-600/50",
       )}
     >
       <div
