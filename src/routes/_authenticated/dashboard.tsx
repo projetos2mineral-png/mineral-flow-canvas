@@ -70,6 +70,11 @@ import {
 import { fetchReviews, createReview, updateReview, type ReviewRow } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DensityCycleButton, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
+import { OrientationToggle } from "@/components/dashboard/OrientationToggle";
+import {
+  useKanbanOrientation,
+  type KanbanOrientation,
+} from "@/components/dashboard/KanbanOrientation";
 
 import { useCurrentDashboardUser } from "@/lib/auth";
 import {
@@ -319,6 +324,9 @@ function DashboardPage() {
 
   // Densidade global do Kanban (controlada na barra flutuante inferior)
   const { density, setDensity, vars: densityVars } = useKanbanDensity();
+
+  // Orientação das filas (vertical = padrão; horizontal = raias em linhas)
+  const { orientation, setOrientation } = useKanbanOrientation();
 
   // Nomes compactos + contadores por responsável (para a barra inferior)
   const assigneeCounts = useMemo(() => {
@@ -594,6 +602,7 @@ function DashboardPage() {
                 isActive={a === activeAssignee}
                 search={search}
                 densityVars={densityVars}
+                orientation={orientation}
               />
             </TabsContent>
           ))}
@@ -702,6 +711,11 @@ function DashboardPage() {
               <div className="shrink-0">
                 <DensityCycleButton value={density} onChange={setDensity} />
               </div>
+
+              {/* Orientação das filas — disposição visual apenas */}
+              <div className="shrink-0">
+                <OrientationToggle value={orientation} onChange={setOrientation} />
+              </div>
             </div>
           </div>
         </Tabs>
@@ -726,6 +740,7 @@ function AssigneeBoard({
   isActive = true,
   search = "",
   densityVars,
+  orientation = "vertical",
 }: {
   assignee: string;
   projects: DashboardProject[];
@@ -742,7 +757,9 @@ function AssigneeBoard({
   isActive?: boolean;
   search?: string;
   densityVars?: React.CSSProperties;
+  orientation?: KanbanOrientation;
 }) {
+  const horizontal = orientation === "horizontal";
   const projectMap = useMemo(() => {
     const m = new Map<number, DashboardProject>();
     for (const p of projects) {
@@ -1430,7 +1447,7 @@ function AssigneeBoard({
         style={effectiveDensityVars}
       >
         {/* Barra horizontal compacta — topo do Kanban, fixed fora do container vertical, proxy da rolagem horizontal real */}
-        {isActive && kanbanContentWidth > 0 && (
+        {isActive && !horizontal && kanbanContentWidth > 0 && (
           <div
             ref={kanbanProxyRef}
             onScroll={onKanbanProxyScroll}
@@ -1457,11 +1474,15 @@ function AssigneeBoard({
             <div
               ref={mainScrollRef}
               onScroll={onMainScroll}
-              className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
+              className={`flex-1 min-h-0 ${
+                horizontal
+                  ? "overflow-x-hidden overflow-y-auto [scrollbar-width:thin]"
+                  : "overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+              } ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
             >
               <div
                 ref={innerRef}
-                className="flex h-full min-w-max"
+                className={horizontal ? "flex flex-col w-full min-w-0" : "flex h-full min-w-max"}
                 style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
               >
                 <LaneColumn
@@ -1483,6 +1504,7 @@ function AssigneeBoard({
                     setBoardAntecedenceDraft(String(boardAntecedence));
                     setIsBoardSettingsOpen(true);
                   }}
+                  orientation={orientation}
                 />
 
                 <SortableContext
@@ -1523,14 +1545,18 @@ function AssigneeBoard({
                         }
                       }}
                       onOpenWeekly={() => setWeeklyLane(lane)}
+                      orientation={orientation}
                     />
                   ))}
                 </SortableContext>
                 {!readOnly && (
                   <button
                     onClick={handleAddLane}
-                    style={{ width: "var(--kb-col)" }}
-                    className="shrink-0 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+                    style={horizontal ? undefined : { width: "var(--kb-col)" }}
+                    className={cn(
+                      "rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12",
+                      horizontal ? "w-full" : "shrink-0",
+                    )}
                   >
                     <Plus className="h-4 w-4" /> Adicionar fila
                   </button>
@@ -1680,6 +1706,7 @@ function LaneColumn({
   isAdmin = false,
   onOpenBoardSettings,
   onOpenWeekly,
+  orientation = "vertical",
 }: {
   lane?: Lane;
   laneId: string;
@@ -1705,7 +1732,9 @@ function LaneColumn({
   isAdmin?: boolean;
   onOpenBoardSettings?: () => void;
   onOpenWeekly?: () => void;
+  orientation?: KanbanOrientation;
 }) {
+  const horizontal = orientation === "horizontal";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   useEffect(() => setDraft(title), [title]);
@@ -1778,9 +1807,10 @@ function LaneColumn({
   return (
     <div
       ref={laneSetNodeRef}
-      style={{ width: "var(--kb-col)", ...laneStyle }}
+      style={{ width: horizontal ? undefined : "var(--kb-col)", ...laneStyle }}
       className={cn(
         "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
+        horizontal && "w-full",
         isLaneDragging && "opacity-50",
         isCurrentMonth && "border-red-600/50",
       )}
@@ -2015,7 +2045,7 @@ function LaneColumn({
       <SortableContext
         id={`lane:${laneId}`}
         items={cards.map((c) => c.key)}
-        strategy={verticalListSortingStrategy}
+        strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
       >
         <DroppableLaneBody
           laneId={laneId}
@@ -2028,6 +2058,7 @@ function LaneColumn({
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
           isAdmin={isAdmin}
+          horizontal={horizontal}
         />
       </SortableContext>
     </div>
@@ -2048,6 +2079,7 @@ function SortableLaneColumn(props: {
   onDelete: () => void | Promise<void>;
   isAdmin?: boolean;
   onOpenWeekly?: () => void;
+  orientation?: KanbanOrientation;
 }) {
   const { lane } = props;
   const {
@@ -2084,6 +2116,7 @@ function SortableLaneColumn(props: {
       assigneeName={lane.assignee_name}
       isAdmin={props.isAdmin}
       onOpenWeekly={props.onOpenWeekly}
+      orientation={props.orientation}
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
@@ -2104,6 +2137,7 @@ function DroppableLaneBody({
   onStatusChange,
   onOpenCard,
   isAdmin = false,
+  horizontal = false,
 }: {
   laneId: string;
   cards: DashboardCard[];
@@ -2115,39 +2149,48 @@ function DroppableLaneBody({
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
   isAdmin?: boolean;
+  horizontal?: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `lane:${laneId}` });
+  // Orientação horizontal: itens lado a lado, largura fixa por card
+  const itemShell = horizontal ? "shrink-0 w-[var(--kb-col)]" : "";
   return (
     <div
       ref={setNodeRef}
       style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
       className={cn(
-        "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
+        horizontal
+          ? "flex-1 flex flex-row overflow-x-auto overflow-y-hidden min-h-[100px] transition-colors"
+          : "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
         isOver && "bg-primary/5",
       )}
     >
       {reviews.map((r) => (
-        <ReviewItemView
-          key={`rev:${r.id}`}
-          review={r}
-          projectName={
-            projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
-          }
-          onApprove={() => onApproveReview(r)}
-          onRequestCorrection={() => onRequestCorrectionReview(r)}
-        />
+        <div key={`rev:${r.id}`} className={itemShell}>
+          <ReviewItemView
+            review={r}
+            projectName={
+              projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
+            }
+            onApprove={() => onApproveReview(r)}
+            onRequestCorrection={() => onRequestCorrectionReview(r)}
+          />
+        </div>
       ))}
       {cards.map((c) => (
-        <SortableCard
-          key={c.key}
-          card={c}
-          onStatusChange={onStatusChange}
-          onOpenCard={onOpenCard}
-          isAdmin={isAdmin}
-        />
+        <div key={c.key} className={itemShell}>
+          <SortableCard
+            card={c}
+            onStatusChange={onStatusChange}
+            onOpenCard={onOpenCard}
+            isAdmin={isAdmin}
+          />
+        </div>
       ))}
       {demands.map((d) => (
-        <DemandCardView key={d.key} card={d} />
+        <div key={d.key} className={itemShell}>
+          <DemandCardView card={d} />
+        </div>
       ))}
       {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
         <div className="text-center text-xs text-muted-foreground py-6">Arraste cards para cá</div>
