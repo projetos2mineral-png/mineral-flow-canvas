@@ -119,6 +119,7 @@ function WeeklyRow({
   onStatusChange,
   disabled = false,
   isAdmin = false,
+  isCurrentWeek = false,
   emptyLabel,
 }: {
   bucket: number;
@@ -130,6 +131,7 @@ function WeeklyRow({
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   disabled?: boolean;
   isAdmin?: boolean;
+  isCurrentWeek?: boolean;
   emptyLabel?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: rowIdForBucket(bucket) });
@@ -138,6 +140,7 @@ function WeeklyRow({
       className={cn(
         "flex items-start gap-3 px-3 py-2 rounded-lg bg-muted/40",
         variant === "backlog" && "border border-dashed border-border/70",
+        isCurrentWeek && "border border-red-600/50",
       )}
     >
       <div className="w-[124px] shrink-0 pt-1">
@@ -214,6 +217,17 @@ export function WeeklyPlanView({
     const [y, m] = referenceMonth.split("-").map(Number);
     return computeMonthWeeks(y, m - 1);
   }, [referenceMonth]);
+
+  /**
+   * Semana destacada: a que contém a data local de hoje. `null` quando o
+   * mês selecionado não inclui a data atual → nenhum destaque.
+   */
+  const currentWeekBucket = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const idx = weeks.findIndex((w) => today >= w.start && today <= w.end);
+    return idx >= 0 ? idx + 1 : null;
+  }, [weeks]);
 
   // Ausência de registro = Backlog. Nenhuma distribuição por data.
   const { data: rows } = useQuery({
@@ -340,7 +354,7 @@ export function WeeklyPlanView({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-[1080px] w-[95vw] gap-0 p-0 overflow-hidden">
+      <DialogContent className="w-[96vw] max-w-[1650px] h-[92vh] gap-0 p-0 overflow-hidden flex flex-col">
         <DndContext
           sensors={sensors}
           collisionDetection={weeklyCollisionDetection}
@@ -365,7 +379,7 @@ export function WeeklyPlanView({
             </div>
           </DialogHeader>
 
-          <div className="max-h-[74vh] overflow-y-auto px-4 py-3 space-y-2">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 py-3 space-y-2">
             <WeeklyRow
               bucket={BUCKET_BACKLOG}
               title="Backlog"
@@ -392,6 +406,7 @@ export function WeeklyPlanView({
                   onStatusChange={onStatusChange}
                   disabled={readOnly}
                   isAdmin={isAdmin}
+                  isCurrentWeek={i + 1 === currentWeekBucket}
                 />
               ))}
             </div>
