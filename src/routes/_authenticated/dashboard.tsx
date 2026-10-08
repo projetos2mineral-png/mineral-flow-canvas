@@ -45,6 +45,7 @@ import {
   ChevronRight,
   ListChecks,
   Settings,
+  ArrowUpRight,
 } from "lucide-react";
 import {
   fetchDashboardProjects,
@@ -121,6 +122,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchManualDemands } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
+import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -218,7 +220,7 @@ function getCompactAssigneeDisplayNames(assignees: string[]): Map<string, string
   return result;
 }
 
-type DashboardCard = {
+export type DashboardCard = {
   key: string;
   runrunit_project_id: number;
   assignee_name: string;
@@ -800,6 +802,9 @@ function AssigneeBoard({
   const [isBoardSettingsOpen, setIsBoardSettingsOpen] = useState(false);
   const [boardAntecedenceDraft, setBoardAntecedenceDraft] = useState("0");
   const [boardAntecedenceSaving, setBoardAntecedenceSaving] = useState(false);
+
+  // ---- Planejamento semanal (aberto pelo ↗ no cabeçalho da fila mensal) ----
+  const [weeklyLane, setWeeklyLane] = useState<Lane | null>(null);
 
   useEffect(() => {
     if (!assignee || assignee === UNASSIGNED) return;
@@ -1496,6 +1501,7 @@ function AssigneeBoard({
                       toast.error("Falha ao excluir: " + (e as Error).message);
                     }
                   }}
+                  onOpenWeekly={() => setWeeklyLane(lane)}
                 />
               ))}
             </SortableContext>
@@ -1596,6 +1602,17 @@ function AssigneeBoard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {weeklyLane && (
+        <WeeklyPlanView
+          open
+          onClose={() => setWeeklyLane(null)}
+          assigneeName={assignee}
+          monthTitle={weeklyLane.title}
+          cards={grouped.get(weeklyLane.id) ?? []}
+          onOpenCard={setOpenCard}
+        />
+      )}
     </>
   );
 }
@@ -1622,6 +1639,7 @@ function LaneColumn({
   assigneeName,
   isAdmin = false,
   onOpenBoardSettings,
+  onOpenWeekly,
 }: {
   lane?: Lane;
   laneId: string;
@@ -1644,6 +1662,7 @@ function LaneColumn({
   assigneeName: string;
   isAdmin?: boolean;
   onOpenBoardSettings?: () => void;
+  onOpenWeekly?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
@@ -1722,7 +1741,7 @@ function LaneColumn({
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="px-2.5 flex shrink-0 flex-col justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
+        className="group px-2.5 flex shrink-0 flex-col justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
@@ -1794,6 +1813,28 @@ function LaneColumn({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {isMonthly && onOpenWeekly && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Ver planejamento semanal"
+                        className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground/45 hover:text-foreground hover:bg-muted/30 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenWeekly();
+                        }}
+                      >
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                      <p>Ver planejamento semanal</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
                 <TooltipProvider>
                   <Tooltip>
@@ -1945,6 +1986,7 @@ function SortableLaneColumn(props: {
   onRename: (next: string) => void | Promise<void>;
   onDelete: () => void | Promise<void>;
   isAdmin?: boolean;
+  onOpenWeekly?: () => void;
 }) {
   const { lane } = props;
   const {
@@ -1980,6 +2022,7 @@ function SortableLaneColumn(props: {
       isLaneDragging={isDragging}
       assigneeName={lane.assignee_name}
       isAdmin={props.isAdmin}
+      onOpenWeekly={props.onOpenWeekly}
       dragHandleProps={{
         ref: setActivatorNodeRef as unknown as (el: HTMLElement | null) => void,
         ...attributes,
