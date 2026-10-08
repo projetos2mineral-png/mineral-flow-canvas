@@ -57,7 +57,6 @@ import {
   deleteLane,
   upsertCard,
   bulkUpdateCardPositions,
-  STATUSES,
   STATUS_LABEL,
   STATUS_CARD_CLASS,
   STATUS_DOT_CLASS,
@@ -123,6 +122,7 @@ import { fetchManualDemands } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
+import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -1611,6 +1611,8 @@ function AssigneeBoard({
           monthTitle={weeklyLane.title}
           cards={grouped.get(weeklyLane.id) ?? []}
           onOpenCard={setOpenCard}
+          onStatusChange={handleStatusChange}
+          readOnly={readOnly}
         />
       )}
     </>
@@ -2142,8 +2144,6 @@ function ProjectCardView({
   const estimatedHours =
     rawHours == null ? null : Number(rawHours) % 1 === 0 ? Number(rawHours) : Number(rawHours).toFixed(1);
   const sourceLabel = estimateSourceLabel(card.card?.calculation_details ?? null);
-  // Selectable statuses exclude "em revisão" (only set by send-for-review action)
-  const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
   return (
     <div
       style={{ padding: "var(--kb-card-pad)" }}
@@ -2225,31 +2225,11 @@ function ProjectCardView({
           )}
         </div>
       </div>
-      <div
+      <CardStatusSelect
+        card={card}
+        onStatusChange={onStatusChange}
         className="mt-3 flex flex-col"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
-        <Select value={card.status} onValueChange={(v) => onStatusChange(card, v as CardStatus)}>
-          <SelectTrigger className="h-6 text-[10px] leading-none px-2 py-0 bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/30 hover:text-foreground/80 data-[state=open]:bg-muted/30 focus:ring-0 focus:ring-offset-0 shadow-none">
-            <SelectValue>
-              <span className="inline-flex items-center gap-1.5">
-                <span className={cn("h-1.5 w-1.5 rounded-full opacity-70", STATUS_DOT_CLASS[card.status])} />
-                {STATUS_LABEL[card.status]}
-              </span>
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {selectableStatuses.map((s) => (
-              <SelectItem key={s} value={s} className="text-[11px]">
-                <span className="inline-flex items-center gap-1.5">
-                  <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[s])} />
-                  {STATUS_LABEL[s]}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      />
     </div>
   );
 }
