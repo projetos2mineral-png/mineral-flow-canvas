@@ -7,9 +7,11 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  closestCenter,
   DragOverlay,
   useDroppable,
+  type CollisionDetection,
   type DragStartEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
@@ -55,6 +57,17 @@ import type { DashboardCard } from "@/routes/_authenticated/dashboard";
 const BUCKET_BACKLOG = 0;
 
 const rowIdForBucket = (bucket: number) => `wrow:${bucket}`;
+
+/**
+ * Linhas são largas e baixas: `closestCorners` acaba preferindo cards
+ * próximo ao ponteiro em vez da linha que o contém (drops nas semanas
+ * 1-3 eram roubados por cards do Backlog). `pointerWithin` resolve a
+ * linha sob o ponteiro; o fallback cobre os gaps entre linhas.
+ */
+const weeklyCollisionDetection: CollisionDetection = (args) => {
+  const collisions = pointerWithin(args);
+  return collisions.length > 0 ? collisions : closestCenter(args);
+};
 
 function WeeklyCardChip({
   card,
@@ -354,7 +367,7 @@ export function WeeklyPlanView({
       <DialogContent className="max-w-[1080px] w-[95vw] gap-0 p-0 overflow-hidden">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={weeklyCollisionDetection}
           onDragStart={readOnly ? undefined : onDragStart}
           onDragEnd={readOnly ? undefined : onDragEnd}
         >
