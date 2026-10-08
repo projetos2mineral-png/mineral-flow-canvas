@@ -58,7 +58,6 @@ import {
   upsertCard,
   bulkUpdateCardPositions,
   STATUS_LABEL,
-  STATUS_CARD_CLASS,
   STATUS_DOT_CLASS,
   normalizeStatus,
   findLaneByTitle as findLaneByTitleLib,
@@ -68,15 +67,9 @@ import {
   type CardStatus,
   type DashboardUser,
 } from "@/lib/dashboard";
-import {
-  fetchReviews,
-  createReview,
-  updateReview,
-  type ReviewRow,
-} from "@/lib/dashboard";
+import { fetchReviews, createReview, updateReview, type ReviewRow } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { DensityCycleButton, useKanbanDensity } from "@/components/dashboard/KanbanDensity";
-
 
 import { useCurrentDashboardUser } from "@/lib/auth";
 import {
@@ -108,20 +101,28 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { sumLaneEstimatedHours, formatHoursCompact, isOverCapacity, getCapacityExcess } from "@/lib/kanban-capacity";
+import {
+  sumLaneEstimatedHours,
+  formatHoursCompact,
+  isOverCapacity,
+  getCapacityExcess,
+} from "@/lib/kanban-capacity";
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
-import { fetchBoardAntecedence, upsertBoardAntecedence, calculatePositioningDate } from "@/lib/board-antecedence";
+import {
+  fetchBoardAntecedence,
+  upsertBoardAntecedence,
+  calculatePositioningDate,
+} from "@/lib/board-antecedence";
 import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
 
-
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
 
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManualDemands } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
+import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -130,7 +131,8 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       { title: "Central de Planejamento" },
       {
         name: "description",
-        content: "Central de Planejamento — Kanban interno de acompanhamento dos projetos abertos no Runrun.it.",
+        content:
+          "Central de Planejamento — Kanban interno de acompanhamento dos projetos abertos no Runrun.it.",
       },
     ],
   }),
@@ -297,7 +299,7 @@ function DashboardPage() {
   // Cards de Demandas Avulsas visíveis, já resolvidos por responsável e mês.
   const demandCards = useMemo(
     () => buildDemandBoardCards(demandsQ.data ?? [], users),
-    [demandsQ.data, users]
+    [demandsQ.data, users],
   );
 
   const assignees = useMemo(() => {
@@ -325,17 +327,14 @@ function DashboardPage() {
       const ids = new Set(
         projects
           .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
-          .map((p) => p.runrunit_project_id)
+          .map((p) => p.runrunit_project_id),
       );
       m[a] = ids.size;
     }
     return m;
   }, [assignees, projects]);
 
-  const compactNames = useMemo(
-    () => getCompactAssigneeDisplayNames(assignees),
-    [assignees]
-  );
+  const compactNames = useMemo(() => getCompactAssigneeDisplayNames(assignees), [assignees]);
 
   // ---- Controle de rolagem horizontal do seletor de responsáveis (barra inferior) ----
   const assigneeScrollRef = useRef<HTMLDivElement>(null);
@@ -397,9 +396,10 @@ function DashboardPage() {
   useEffect(() => {
     const el = assigneeScrollRef.current;
     if (!el || !activeAssignee) return;
-    const esc = typeof CSS !== "undefined" && (CSS as unknown as { escape?: (s: string) => string }).escape
-      ? (CSS as unknown as { escape: (s: string) => string }).escape!(activeAssignee)
-      : activeAssignee.replace(/[^a-zA-Z0-9]/g, "\\$&");
+    const esc =
+      typeof CSS !== "undefined" && (CSS as unknown as { escape?: (s: string) => string }).escape
+        ? (CSS as unknown as { escape: (s: string) => string }).escape!(activeAssignee)
+        : activeAssignee.replace(/[^a-zA-Z0-9]/g, "\\$&");
     const target = el.querySelector<HTMLElement>(`[data-assignee-chip="${esc}"]`);
     if (!target) return;
     const left = target.offsetLeft - el.clientWidth / 2 + target.offsetWidth / 2;
@@ -417,7 +417,7 @@ function DashboardPage() {
       // Garante atualização das setas mesmo se scroll suave não disparar imediatamente
       window.setTimeout(() => updateAssigneeEdges(), 350);
     },
-    [updateAssigneeEdges]
+    [updateAssigneeEdges],
   );
 
   const handleControlsPointerDown = useCallback(
@@ -459,7 +459,7 @@ function DashboardPage() {
       document.body.style.cursor = "grabbing";
       document.body.style.userSelect = "none";
     },
-    [controlsBottom]
+    [controlsBottom],
   );
 
   // Restaura o último responsável aberto do localStorage (persistência
@@ -470,9 +470,10 @@ function DashboardPage() {
     if (activeAssignee && assignees.includes(activeAssignee)) return;
     let saved: string | null = null;
     try {
-      saved = typeof window !== "undefined"
-        ? window.localStorage.getItem("last_dashboard_assignee")
-        : null;
+      saved =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("last_dashboard_assignee")
+          : null;
     } catch {
       /* ignore */
     }
@@ -524,7 +525,7 @@ function DashboardPage() {
         qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignees.join("|"), readOnly]);
 
   // Reviewer choices: prefer dashboard_users.name (active), else assignees
@@ -552,15 +553,13 @@ function DashboardPage() {
         </div>
       )}
 
-      {loading && (
-        <div className="p-6 text-sm text-muted-foreground">Carregando…</div>
-      )}
+      {loading && <div className="p-6 text-sm text-muted-foreground">Carregando…</div>}
 
       {!loading && assignees.length === 0 && (
         <div className="p-10 text-center text-sm text-muted-foreground">
           Nenhum projeto marcado para exibição.{" "}
-          <span className="underline">Selecione projetos</span> na página
-          “Selecionar Projetos” para começar.
+          <span className="underline">Selecione projetos</span> na página “Selecionar Projetos” para
+          começar.
         </div>
       )}
 
@@ -582,7 +581,9 @@ function DashboardPage() {
                 projects={projects.filter((p) => (p.assignee_name ?? UNASSIGNED) === a)}
                 lanes={lanes.filter((l) => l.assignee_name === a)}
                 cards={cards.filter((c) => c.assignee_name === a)}
-                reviews={reviews.filter((r) => r.reviewer_name === a && r.review_status === "aguardando revisão")}
+                reviews={reviews.filter(
+                  (r) => r.reviewer_name === a && r.review_status === "aguardando revisão",
+                )}
                 demandCards={demandCards.filter((d) => d.assigneeName === a)}
                 allLanes={lanes}
                 reviewerOptions={reviewerOptions}
@@ -754,7 +755,10 @@ function AssigneeBoard({
     const m = new Map<number, ProjectCardRow>();
     for (const c of cards) {
       const existing = m.get(c.runrunit_project_id);
-      if (!existing || (existing.total_estimated_hours == null && c.total_estimated_hours != null)) {
+      if (
+        !existing ||
+        (existing.total_estimated_hours == null && c.total_estimated_hours != null)
+      ) {
         m.set(c.runrunit_project_id, c);
       }
     }
@@ -771,10 +775,7 @@ function AssigneeBoard({
   const UNASSIGNED_LANE = "__unassigned__";
   const normalizedSearch = (search ?? "").trim().toLowerCase();
 
-  const lanesSorted = useMemo(
-    () => [...lanes].sort((a, b) => a.position - b.position),
-    [lanes]
-  );
+  const lanesSorted = useMemo(() => [...lanes].sort((a, b) => a.position - b.position), [lanes]);
 
   // Local lane order (for optimistic horizontal drag)
   const [localLanes, setLocalLanes] = useState<Lane[]>(lanesSorted);
@@ -788,7 +789,15 @@ function AssigneeBoard({
     for (const r of reviews) {
       if (normalizedSearch) {
         const projectName = projectNameById.get(r.runrunit_project_id) ?? "";
-        const haystack = [projectName, r.original_assignee_name, r.reviewer_name, r.requested_by_name, String(r.runrunit_project_id)].join(" ").toLowerCase();
+        const haystack = [
+          projectName,
+          r.original_assignee_name,
+          r.reviewer_name,
+          r.requested_by_name,
+          String(r.runrunit_project_id),
+        ]
+          .join(" ")
+          .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
       const key = r.lane_id && m.has(r.lane_id) ? r.lane_id : UNASSIGNED_LANE;
@@ -849,16 +858,13 @@ function AssigneeBoard({
     }
   };
 
-
   // Demandas Avulsas agrupadas pela fila mensal derivada de `desired_date`.
   // Sem fila correspondente, o card cai em "Sem fila" (nunca some).
   const demandsByLane = useMemo(() => {
     const m = new Map<string, DemandBoardCard[]>();
     m.set(UNASSIGNED_LANE, []);
     for (const l of localLanes) m.set(l.id, []);
-    const laneIdByTitle = new Map(
-      localLanes.map((l) => [l.title.trim().toLowerCase(), l.id])
-    );
+    const laneIdByTitle = new Map(localLanes.map((l) => [l.title.trim().toLowerCase(), l.id]));
     for (const d of demandCards) {
       if (normalizedSearch) {
         const haystack = [
@@ -875,7 +881,10 @@ function AssigneeBoard({
       // Aplica antecedência do quadro também para demandas — seguro contra null/inválido
       let laneId: string | undefined;
       const desired = d.demand.desired_date as string | null | undefined;
-      const ante = Number.isFinite(boardAntecedence) && (boardAntecedence as number) >= 0 ? Math.floor(boardAntecedence as number) : 0;
+      const ante =
+        Number.isFinite(boardAntecedence) && (boardAntecedence as number) >= 0
+          ? Math.floor(boardAntecedence as number)
+          : 0;
       if (!desired) {
         laneId = laneIdByTitle.get(d.laneTitle.trim().toLowerCase());
       } else {
@@ -898,12 +907,11 @@ function AssigneeBoard({
           ? a.demand.name.localeCompare(b.demand.name, "pt-BR")
           : a.demand.desired_date < b.demand.desired_date
             ? -1
-            : 1
+            : 1,
       );
     }
     return m;
   }, [demandCards, localLanes, normalizedSearch, boardAntecedence]);
-
 
   const hydrated: DashboardCard[] = useMemo(() => {
     const out: DashboardCard[] = [];
@@ -968,10 +976,7 @@ function AssigneeBoard({
         const da = a.project.desired_delivery_date ?? "9999-12-31";
         const db = b.project.desired_delivery_date ?? "9999-12-31";
         if (da !== db) return da < db ? -1 : 1;
-        return a.project.project_name.localeCompare(
-          b.project.project_name,
-          "pt-BR"
-        );
+        return a.project.project_name.localeCompare(b.project.project_name, "pt-BR");
       });
       m.set(laneId, [...manual, ...auto]);
     }
@@ -980,7 +985,7 @@ function AssigneeBoard({
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
-  const activeCard = activeId ? items.find((i) => i.key === activeId) ?? null : null;
+  const activeCard = activeId ? (items.find((i) => i.key === activeId) ?? null) : null;
 
   // ---- Persistência + barra horizontal flutuante do Kanban (sincronizada) ----
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -1041,7 +1046,7 @@ function AssigneeBoard({
             x: el?.scrollLeft ?? 0,
             y: el?.scrollTop ?? 0,
             winY: window.scrollY,
-          })
+          }),
         );
       } catch {
         /* ignore */
@@ -1066,7 +1071,7 @@ function AssigneeBoard({
       try {
         localStorage.setItem(
           scrollStorageKey,
-          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
+          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY }),
         );
       } catch {
         /* ignore */
@@ -1089,7 +1094,7 @@ function AssigneeBoard({
       try {
         localStorage.setItem(
           scrollStorageKey,
-          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY })
+          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY }),
         );
       } catch {
         /* ignore */
@@ -1170,7 +1175,8 @@ function AssigneeBoard({
     const activeCard = items.find((i) => i.key === activeKey);
     if (!activeCard) return;
 
-    const fromLane = activeCard.lane_id && grouped.has(activeCard.lane_id) ? activeCard.lane_id : UNASSIGNED_LANE;
+    const fromLane =
+      activeCard.lane_id && grouped.has(activeCard.lane_id) ? activeCard.lane_id : UNASSIGNED_LANE;
 
     // Ordem exibida da fila destino (manual prevalece + auto por data) — é exatamente o que o usuário vê
     const destDisplayed = grouped.get(toLane) ?? [];
@@ -1196,12 +1202,23 @@ function AssigneeBoard({
       reordered = [...destDisplayed.slice(0, toIdx), activeCard, ...destDisplayed.slice(toIdx)];
     }
 
-    const updates: { id: string | null; runrunit_project_id: number; lane_id: string | null; position: number; updated_by?: string | null }[] = [];
+    const updates: {
+      id: string | null;
+      runrunit_project_id: number;
+      lane_id: string | null;
+      position: number;
+      updated_by?: string | null;
+    }[] = [];
     reordered.forEach((it, idx) => {
       const lane_id = toLane === UNASSIGNED_LANE ? null : toLane;
       // Preserva exatamente onde foi solto: atualiza posição sequencial conforme ordem visual.
       // bulkUpdate marcará como manually_positioned=true, garantindo prevalência manual.
-      if (it.position !== idx || it.lane_id !== lane_id || it.card == null || it.key === activeKey) {
+      if (
+        it.position !== idx ||
+        it.lane_id !== lane_id ||
+        it.card == null ||
+        it.key === activeKey
+      ) {
         updates.push({
           id: it.card?.id ?? null,
           runrunit_project_id: it.runrunit_project_id,
@@ -1225,8 +1242,13 @@ function AssigneeBoard({
         const stubCard = !it.card
           ? ({ manually_positioned: true, position: u.position } as unknown as ProjectCardRow)
           : nextCard;
-        return { ...it, lane_id: u.lane_id, position: u.position, card: stubCard as ProjectCardRow };
-      })
+        return {
+          ...it,
+          lane_id: u.lane_id,
+          position: u.position,
+          card: stubCard as ProjectCardRow,
+        };
+      }),
     );
 
     try {
@@ -1279,8 +1301,8 @@ function AssigneeBoard({
       prev.map((i) =>
         i.key === it.key
           ? { ...i, status, lane_id: targetLaneId !== undefined ? targetLaneId : i.lane_id }
-          : i
-      )
+          : i,
+      ),
     );
     try {
       await upsertCard({
@@ -1407,124 +1429,128 @@ function AssigneeBoard({
         className={readOnly ? "contents [&_*]:!cursor-default" : "contents"}
         style={effectiveDensityVars}
       >
-      {/* Barra horizontal compacta — topo do Kanban, fixed fora do container vertical, proxy da rolagem horizontal real */}
-      {isActive && kanbanContentWidth > 0 && (
-        <div
-          ref={kanbanProxyRef}
-          onScroll={onKanbanProxyScroll}
-          className="fixed top-[calc(3.5rem+1px)] left-1/2 -translate-x-1/2 z-20 w-[calc(100%-2rem)] max-w-[1600px] overflow-x-auto overflow-y-hidden border border-border/20 bg-background/95 backdrop-blur-sm rounded-full shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent"
-          aria-label="Rolagem horizontal do Kanban"
-        >
-          <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
-        </div>
-      )}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={readOnly ? undefined : onDragStart}
-        onDragOver={readOnly ? undefined : onDragOver}
-        onDragEnd={readOnly ? undefined : onDragEnd}
-        autoScroll={{
-          threshold: { x: 0.18, y: 0.15 },
-          acceleration: 8,
-          interval: 5,
-        }}
-      >
-        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
-          <div aria-hidden="true" className="h-3 shrink-0" />
+        {/* Barra horizontal compacta — topo do Kanban, fixed fora do container vertical, proxy da rolagem horizontal real */}
+        {isActive && kanbanContentWidth > 0 && (
           <div
-            ref={mainScrollRef}
-            onScroll={onMainScroll}
-            className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
+            ref={kanbanProxyRef}
+            onScroll={onKanbanProxyScroll}
+            className="fixed top-[calc(3.5rem+1px)] left-1/2 -translate-x-1/2 z-20 w-[calc(100%-2rem)] max-w-[1600px] overflow-x-auto overflow-y-hidden border border-border/20 bg-background/95 backdrop-blur-sm rounded-full shadow-sm [scrollbar-width:thin] [&::-webkit-scrollbar]:h-[6px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border/60 [&::-webkit-scrollbar-track]:bg-transparent"
+            aria-label="Rolagem horizontal do Kanban"
           >
+            <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
+          </div>
+        )}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={readOnly ? undefined : onDragStart}
+          onDragOver={readOnly ? undefined : onDragOver}
+          onDragEnd={readOnly ? undefined : onDragEnd}
+          autoScroll={{
+            threshold: { x: 0.18, y: 0.15 },
+            acceleration: 8,
+            interval: 5,
+          }}
+        >
+          <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+            <div aria-hidden="true" className="h-3 shrink-0" />
             <div
-              ref={innerRef}
-              className="flex h-full min-w-max"
-              style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
+              ref={mainScrollRef}
+              onScroll={onMainScroll}
+              className={`flex-1 min-h-0 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden ${readOnly ? "[&_button]:pointer-events-none" : ""}`}
             >
-
-            <LaneColumn
-              key="__unassigned__"
-              laneId="__unassigned__"
-              title="Sem fila"
-              cards={grouped.get("__unassigned__") ?? []}
-              reviews={reviewsByLane.get("__unassigned__") ?? []}
-              demands={demandsByLane.get("__unassigned__") ?? []}
-              projectNameById={projectNameById}
-              onApproveReview={handleApproveReview}
-              onRequestCorrectionReview={(r) => setCorrectionReview(r)}
-              onStatusChange={handleStatusChange}
-              onOpenCard={setOpenCard}
-              isUnassigned
-              assigneeName={assignee}
-              isAdmin={isAdmin}
-              onOpenBoardSettings={() => {
-                setBoardAntecedenceDraft(String(boardAntecedence));
-                setIsBoardSettingsOpen(true);
-              }}
-            />
-
-            <SortableContext
-              id="lanes-horizontal"
-              items={localLanes.map((l) => `laneItem:${l.id}`)}
-              strategy={horizontalListSortingStrategy}
-            >
-              {localLanes.map((lane) => (
-                <SortableLaneColumn
-                  key={lane.id}
-                  lane={lane}
-                  cards={grouped.get(lane.id) ?? []}
-                  reviews={reviewsByLane.get(lane.id) ?? []}
-                  demands={demandsByLane.get(lane.id) ?? []}
+              <div
+                ref={innerRef}
+                className="flex h-full min-w-max"
+                style={{ gap: "var(--kb-gap)", padding: "var(--kb-pad)" }}
+              >
+                <LaneColumn
+                  key="__unassigned__"
+                  laneId="__unassigned__"
+                  title="Sem fila"
+                  cards={grouped.get("__unassigned__") ?? []}
+                  reviews={reviewsByLane.get("__unassigned__") ?? []}
+                  demands={demandsByLane.get("__unassigned__") ?? []}
                   projectNameById={projectNameById}
                   onApproveReview={handleApproveReview}
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                   onStatusChange={handleStatusChange}
                   onOpenCard={setOpenCard}
+                  isUnassigned
+                  assigneeName={assignee}
                   isAdmin={isAdmin}
-                  onRename={async (newTitle) => {
-                    try {
-                      await updateLane(lane.id, { title: newTitle });
-                      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-                    } catch (e) {
-                      toast.error("Falha ao renomear: " + (e as Error).message);
-                    }
+                  onOpenBoardSettings={() => {
+                    setBoardAntecedenceDraft(String(boardAntecedence));
+                    setIsBoardSettingsOpen(true);
                   }}
-                  onDelete={async () => {
-                    if (!window.confirm(`Excluir a fila "${lane.title}"?`)) return;
-                    try {
-                      await deleteLane(lane.id);
-                      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-                      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-                      toast.success("Fila excluída");
-                    } catch (e) {
-                      toast.error("Falha ao excluir: " + (e as Error).message);
-                    }
-                  }}
-                  onOpenWeekly={() => setWeeklyLane(lane)}
                 />
-              ))}
-            </SortableContext>
-            {!readOnly && (
-              <button
-                onClick={handleAddLane}
-                style={{ width: "var(--kb-col)" }}
-                className="shrink-0 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
 
-              >
-                <Plus className="h-4 w-4" /> Adicionar fila
-              </button>
-            )}
+                <SortableContext
+                  id="lanes-horizontal"
+                  items={localLanes.map((l) => `laneItem:${l.id}`)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  {localLanes.map((lane) => (
+                    <SortableLaneColumn
+                      key={lane.id}
+                      lane={lane}
+                      cards={grouped.get(lane.id) ?? []}
+                      reviews={reviewsByLane.get(lane.id) ?? []}
+                      demands={demandsByLane.get(lane.id) ?? []}
+                      projectNameById={projectNameById}
+                      onApproveReview={handleApproveReview}
+                      onRequestCorrectionReview={(r) => setCorrectionReview(r)}
+                      onStatusChange={handleStatusChange}
+                      onOpenCard={setOpenCard}
+                      isAdmin={isAdmin}
+                      onRename={async (newTitle) => {
+                        try {
+                          await updateLane(lane.id, { title: newTitle });
+                          qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+                        } catch (e) {
+                          toast.error("Falha ao renomear: " + (e as Error).message);
+                        }
+                      }}
+                      onDelete={async () => {
+                        if (!window.confirm(`Excluir a fila "${lane.title}"?`)) return;
+                        try {
+                          await deleteLane(lane.id);
+                          qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+                          qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+                          toast.success("Fila excluída");
+                        } catch (e) {
+                          toast.error("Falha ao excluir: " + (e as Error).message);
+                        }
+                      }}
+                      onOpenWeekly={() => setWeeklyLane(lane)}
+                    />
+                  ))}
+                </SortableContext>
+                {!readOnly && (
+                  <button
+                    onClick={handleAddLane}
+                    style={{ width: "var(--kb-col)" }}
+                    className="shrink-0 rounded-lg border-2 border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors flex items-center justify-center gap-2 text-sm h-12"
+                  >
+                    <Plus className="h-4 w-4" /> Adicionar fila
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-        </div>
 
-        <DragOverlay>
-          {activeCard ? (
-            <ProjectCardView card={activeCard} onStatusChange={() => {}} onOpenCard={() => {}} dragging isAdmin={isAdmin} />
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+          <DragOverlay>
+            {activeCard ? (
+              <ProjectCardView
+                card={activeCard}
+                onStatusChange={() => {}}
+                onOpenCard={() => {}}
+                dragging
+                isAdmin={isAdmin}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </div>
 
       {/* Card details modal */}
@@ -1565,12 +1591,15 @@ function AssigneeBoard({
               Configurações do quadro
             </DialogTitle>
             <DialogDescription>
-              Defina a antecedência para o quadro de <span className="font-medium text-foreground">{assignee}</span>.
+              Defina a antecedência para o quadro de{" "}
+              <span className="font-medium text-foreground">{assignee}</span>.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="flex items-center gap-3">
-              <label className="text-sm font-medium whitespace-nowrap">Antecedência para posicionamento:</label>
+              <label className="text-sm font-medium whitespace-nowrap">
+                Antecedência para posicionamento:
+              </label>
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -1586,14 +1615,22 @@ function AssigneeBoard({
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground bg-muted/30 rounded-md px-3 py-2">
               Os cards deste quadro serão posicionados{" "}
-              <span className="font-medium text-foreground">{boardAntecedenceDraft || "0"} dias</span> antes da data de entrega desejada.
+              <span className="font-medium text-foreground">
+                {boardAntecedenceDraft || "0"} dias
+              </span>{" "}
+              antes da data de entrega desejada.
             </p>
             <p className="text-[11px] text-muted-foreground">
-              Exemplo: entrega 03/07/2026 com 30 dias → posicionamento 03/06/2026 (fila JUNHO/2026). A data exibida no card continua 03/07/2026.
+              Exemplo: entrega 03/07/2026 com 30 dias → posicionamento 03/06/2026 (fila JUNHO/2026).
+              A data exibida no card continua 03/07/2026.
             </p>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsBoardSettingsOpen(false)} disabled={boardAntecedenceSaving}>
+            <Button
+              variant="ghost"
+              onClick={() => setIsBoardSettingsOpen(false)}
+              disabled={boardAntecedenceSaving}
+            >
               Cancelar
             </Button>
             <Button onClick={handleSaveBoardAntecedence} disabled={boardAntecedenceSaving}>
@@ -1613,6 +1650,7 @@ function AssigneeBoard({
           onOpenCard={setOpenCard}
           onStatusChange={handleStatusChange}
           readOnly={readOnly}
+          isAdmin={isAdmin}
         />
       )}
     </>
@@ -1657,7 +1695,9 @@ function LaneColumn({
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
   isUnassigned?: boolean;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> & { ref?: (el: HTMLElement | null) => void };
+  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> & {
+    ref?: (el: HTMLElement | null) => void;
+  };
   laneSetNodeRef?: (el: HTMLElement | null) => void;
   laneStyle?: React.CSSProperties;
   isLaneDragging?: boolean;
@@ -1690,22 +1730,23 @@ function LaneColumn({
     });
   }, [isMonthly, assigneeName, title]);
 
-
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
   // Demandas Avulsas somam apenas as horas INDIVIDUAIS do responsável desta
   // fila — as horas nunca são divididas entre as pessoas da demanda.
   const plannedHours = useMemo(
     () =>
-      sumLaneEstimatedHours(cards) +
-      demands.reduce((acc, d) => acc + (Number(d.ownHours) || 0), 0),
-    [cards, demands]
+      sumLaneEstimatedHours(cards) + demands.reduce((acc, d) => acc + (Number(d.ownHours) || 0), 0),
+    [cards, demands],
   );
 
-  const capacitySummary = useMemo(() => ({
-    plannedHours,
-    capacityHours: capacity
-  }), [plannedHours, capacity]);
+  const capacitySummary = useMemo(
+    () => ({
+      plannedHours,
+      capacityHours: capacity,
+    }),
+    [plannedHours, capacity],
+  );
 
   const overCapacity = isOverCapacity(capacitySummary);
   const excess = getCapacityExcess(capacitySummary);
@@ -1727,10 +1768,7 @@ function LaneColumn({
     } catch (err) {
       toast.error("Erro ao salvar capacidade.");
     }
-
   };
-
-
 
   return (
     <div
@@ -1738,7 +1776,7 @@ function LaneColumn({
       style={{ width: "var(--kb-col)", ...laneStyle }}
       className={cn(
         "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
-        isLaneDragging && "opacity-50"
+        isLaneDragging && "opacity-50",
       )}
     >
       <div
@@ -1809,9 +1847,14 @@ function LaneColumn({
                       </h3>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                  <TooltipContent
+                    side="top"
+                    className="text-xs bg-neutral-900 text-white border-neutral-800"
+                  >
                     <p>Cartões: {cards.length}</p>
-                    {!isMonthly && !isUnassigned && <p className="text-[10px] opacity-70 mt-1">Clique para configurar</p>}
+                    {!isMonthly && !isUnassigned && (
+                      <p className="text-[10px] opacity-70 mt-1">Clique para configurar</p>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -1831,7 +1874,10 @@ function LaneColumn({
                         <ArrowUpRight className="h-3.5 w-3.5" />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                    <TooltipContent
+                      side="top"
+                      className="text-xs bg-neutral-900 text-white border-neutral-800"
+                    >
                       <p>Ver planejamento semanal</p>
                     </TooltipContent>
                   </Tooltip>
@@ -1846,10 +1892,11 @@ function LaneColumn({
                           "shrink-0 whitespace-nowrap tabular-nums tracking-wide cursor-default select-none font-normal leading-none text-[7px]",
                           overCapacity
                             ? "text-red-600 dark:text-red-400"
-                            : "text-muted-foreground/55"
+                            : "text-muted-foreground/55",
                         )}
                       >
-                        {capacity != null ? formatHoursCompact(capacity) : "—"} / {formatHoursCompact(plannedHours)}
+                        {capacity != null ? formatHoursCompact(capacity) : "—"} /{" "}
+                        {formatHoursCompact(plannedHours)}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent
@@ -1858,9 +1905,7 @@ function LaneColumn({
                     >
                       <p>Capacidade: {capacity != null ? formatHoursCompact(capacity) : "—"}</p>
                       <p>Planejado: {formatHoursCompact(plannedHours)}</p>
-                      {overCapacity && (
-                        <p>Excedente: {formatHoursCompact(excess)}</p>
-                      )}
+                      {overCapacity && <p>Excedente: {formatHoursCompact(excess)}</p>}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1879,7 +1924,10 @@ function LaneColumn({
                         <Settings className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent side="top" className="text-xs bg-neutral-900 text-white border-neutral-800">
+                    <TooltipContent
+                      side="top"
+                      className="text-xs bg-neutral-900 text-white border-neutral-800"
+                    >
                       <p>Configurações do quadro</p>
                     </TooltipContent>
                   </Tooltip>
@@ -1899,8 +1947,8 @@ function LaneColumn({
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
                     <label className="text-right text-sm font-medium">Título</label>
-                    <Input 
-                      value={draft} 
+                    <Input
+                      value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       className="col-span-3"
                     />
@@ -1908,21 +1956,21 @@ function LaneColumn({
                   {isAdmin && isMonthly && (
                     <div className="grid grid-cols-4 items-center gap-4">
                       <label className="text-right text-sm font-medium">Capacidade (h)</label>
-                      <Input 
+                      <Input
                         type="number"
                         step="0.5"
-                        value={capacityDraft} 
+                        value={capacityDraft}
                         onChange={(e) => setCapacityDraft(e.target.value)}
-                        className="col-span-3" 
+                        className="col-span-3"
                       />
                     </div>
                   )}
                 </div>
                 <DialogFooter className="flex justify-between sm:justify-between items-center w-full">
                   {!isUnassigned && onDelete && (
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       className="text-destructive hover:text-destructive hover:bg-destructive/10"
                       onClick={() => {
                         onDelete();
@@ -1933,17 +1981,23 @@ function LaneColumn({
                     </Button>
                   )}
                   <div className="flex gap-2 ml-auto">
-                    <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>Cancelar</Button>
-                    <Button onClick={async () => {
-                      if (draft.trim() !== title && onRename) {
-                        await onRename(draft.trim());
-                      }
-                      if (isAdmin && isMonthly) {
-                        await handleSaveCapacity();
-                      } else {
-                        setIsCapacityDialogOpen(false);
-                      }
-                    }}>Salvar</Button>
+                    <Button variant="outline" onClick={() => setIsCapacityDialogOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        if (draft.trim() !== title && onRename) {
+                          await onRename(draft.trim());
+                        }
+                        if (isAdmin && isMonthly) {
+                          await handleSaveCapacity();
+                        } else {
+                          setIsCapacityDialogOpen(false);
+                        }
+                      }}
+                    >
+                      Salvar
+                    </Button>
                   </div>
                 </DialogFooter>
               </DialogContent>
@@ -1951,7 +2005,6 @@ function LaneColumn({
           </>
         )}
       </div>
-
 
       <SortableContext
         id={`lane:${laneId}`}
@@ -2034,7 +2087,6 @@ function SortableLaneColumn(props: {
   );
 }
 
-
 function DroppableLaneBody({
   laneId,
   cards,
@@ -2065,15 +2117,16 @@ function DroppableLaneBody({
       style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
       className={cn(
         "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
-        isOver && "bg-primary/5"
+        isOver && "bg-primary/5",
       )}
     >
-
       {reviews.map((r) => (
         <ReviewItemView
           key={`rev:${r.id}`}
           review={r}
-          projectName={projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`}
+          projectName={
+            projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
+          }
           onApprove={() => onApproveReview(r)}
           onRequestCorrection={() => onRequestCorrectionReview(r)}
         />
@@ -2091,9 +2144,7 @@ function DroppableLaneBody({
         <DemandCardView key={d.key} card={d} />
       ))}
       {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
-        <div className="text-center text-xs text-muted-foreground py-6">
-          Arraste cards para cá
-        </div>
+        <div className="text-center text-xs text-muted-foreground py-6">Arraste cards para cá</div>
       )}
     </div>
   );
@@ -2110,8 +2161,9 @@ function SortableCard({
   onOpenCard: (c: DashboardCard) => void;
   isAdmin?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: card.key });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: card.key,
+  });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -2119,116 +2171,11 @@ function SortableCard({
   };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ProjectCardView card={card} onStatusChange={onStatusChange} onOpenCard={onOpenCard} isAdmin={isAdmin} />
-    </div>
-  );
-}
-
-function ProjectCardView({
-  card,
-  onStatusChange,
-  onOpenCard,
-  dragging,
-  isAdmin = false,
-}: {
-  card: DashboardCard;
-  onStatusChange: (c: DashboardCard, s: CardStatus) => void;
-  onOpenCard: (c: DashboardCard) => void;
-  dragging?: boolean;
-  isAdmin?: boolean;
-}) {
-  const p = card.project;
-  const hasNote = !!(card.internal_note && card.internal_note.trim());
-  const totalTasks = card.card?.total_tasks ?? null;
-  const rawHours = card.card?.total_estimated_hours ?? null;
-  const estimatedHours =
-    rawHours == null ? null : Number(rawHours) % 1 === 0 ? Number(rawHours) : Number(rawHours).toFixed(1);
-  const sourceLabel = estimateSourceLabel(card.card?.calculation_details ?? null);
-  return (
-    <div
-      style={{ padding: "var(--kb-card-pad)" }}
-      className={cn(
-        "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card",
-        isAdmin ? "min-h-[158px]" : "min-h-[158px] h-[158px]",
-        STATUS_CARD_CLASS[card.status],
-        dragging ? "shadow-md" : ""
-      )}
-    >
-      <div className="flex items-start gap-2 flex-1 min-h-0">
-        <GripVertical className="h-3 w-3 mt-1 text-muted-foreground/25 shrink-0" />
-        <div className="min-w-0 flex-1 flex flex-col gap-1.5">
-          <TooltipProvider>
-            <Tooltip delayDuration={300}>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => onOpenCard(card)}
-                  className="w-full text-left font-semibold text-[13px] leading-[1.3] tracking-[-0.015em] line-clamp-3 break-words [overflow-wrap:anywhere] hover:text-primary transition-colors cursor-pointer"
-                  style={{ fontFamily: "var(--font-sans)" }}
-                >
-                  {p.project_name}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="top"
-                sideOffset={6}
-                className="max-w-[280px] whitespace-normal break-words bg-white text-neutral-900 border border-neutral-200 shadow-sm dark:bg-neutral-800 dark:text-neutral-100 dark:border-neutral-700"
-              >
-                {p.project_name}
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/80">
-              <Building2 className="h-3 w-3 shrink-0 opacity-60" />
-              <span className="truncate font-normal">{p.client_name ?? "Sem cliente"}</span>
-            </div>
-            {p.desired_delivery_date && (
-              <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/70">
-                <CalendarDays className="h-3 w-3 shrink-0 opacity-50" />
-                <span className="font-mono tabular-nums tracking-tight">
-                  {new Date(
-                    (p.desired_delivery_date as string).length <= 10
-                      ? `${p.desired_delivery_date}T00:00:00Z`
-                      : (p.desired_delivery_date as string)
-                  ).toLocaleDateString("pt-BR", { timeZone: "UTC" })}
-                </span>
-              </div>
-            )}
-          </div>
-          {/* Linha visível diretamente na frente do card — apenas para ADMINISTRADOR */}
-          {(isAdmin || rawHours != null) && (
-            <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
-              {isAdmin && (
-                <span className="inline-flex items-center gap-1">
-                  <ListChecks className="h-3 w-3 shrink-0 opacity-60" />
-                  <span className="tabular-nums">
-                    {totalTasks != null ? `${totalTasks}` : "—"}
-                  </span>
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3 shrink-0 opacity-60" />
-                <span className="tabular-nums">
-                  {rawHours != null ? formatHoursCompact(Number(rawHours)) : "—"}
-                </span>
-              </span>
-            </div>
-          )}
-          {card.review_status && card.review_status !== "não enviado" && (
-            <div className="text-[10px] leading-3 text-muted-foreground/60 truncate">
-              {card.review_status === "aguardando revisão" &&
-                `Revisão: ${card.review_requested_to ?? "—"}`}
-              {card.review_status === "correção solicitada" && "Correção solicitada"}
-              {card.review_status === "aprovado" && "Aprovado"}
-            </div>
-          )}
-        </div>
-      </div>
-      <CardStatusSelect
+      <ProjectCardView
         card={card}
         onStatusChange={onStatusChange}
-        className="mt-3 flex flex-col"
+        onOpenCard={onOpenCard}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -2267,7 +2214,7 @@ function CardDetailsDialog({
     ? new Date(
         (p.desired_delivery_date as string).length <= 10
           ? `${p.desired_delivery_date}T00:00:00Z`
-          : (p.desired_delivery_date as string)
+          : (p.desired_delivery_date as string),
       ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
     : null;
 
@@ -2332,19 +2279,27 @@ function CardDetailsDialog({
             {/* Informações agrupadas — metadados secundários */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Projeto</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Projeto
+                </div>
                 <div className="space-y-2.5">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] text-muted-foreground">Cliente</span>
-                    <span className="text-sm text-foreground/80 truncate">{p.client_name ?? "—"}</span>
+                    <span className="text-sm text-foreground/80 truncate">
+                      {p.client_name ?? "—"}
+                    </span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] text-muted-foreground">Grupo</span>
-                    <span className="text-sm text-foreground/80 truncate">{p.project_group_name ?? "—"}</span>
+                    <span className="text-sm text-foreground/80 truncate">
+                      {p.project_group_name ?? "—"}
+                    </span>
                   </div>
                   {card.card?.calculation_details ? (
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">Origem da estimativa</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Origem da estimativa
+                      </span>
                       <span className="text-xs text-foreground/70 leading-snug">
                         {estimateSourceLabel(card.card.calculation_details as any) || "—"}
                       </span>
@@ -2353,7 +2308,9 @@ function CardDetailsDialog({
                 </div>
               </div>
               <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Responsáveis</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Responsáveis
+                </div>
                 <div className="space-y-2.5">
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] text-muted-foreground">Responsável</span>
@@ -2372,7 +2329,9 @@ function CardDetailsDialog({
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[11px] text-muted-foreground">Status</span>
                     <span className="inline-flex items-center gap-1.5 text-sm">
-                      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
+                      <span
+                        className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])}
+                      />
                       {STATUS_LABEL[card.status]}
                     </span>
                   </div>
@@ -2396,7 +2355,9 @@ function CardDetailsDialog({
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <h4 className="text-sm font-semibold">Observações internas</h4>
-                <span className="text-[11px] text-muted-foreground">· visível apenas internamente</span>
+                <span className="text-[11px] text-muted-foreground">
+                  · visível apenas internamente
+                </span>
               </div>
               <Textarea
                 value={note}
@@ -2415,7 +2376,8 @@ function CardDetailsDialog({
             {/* Sincronização / alteração — discreto */}
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3 text-[11px] leading-none text-muted-foreground/70 font-mono tabular-nums">
               <span>
-                Sincronizado: {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
+                Sincronizado:{" "}
+                {p.last_synced_at ? new Date(p.last_synced_at).toLocaleString("pt-BR") : "—"}
               </span>
               {card.updated_at ? (
                 <span>
@@ -2434,7 +2396,8 @@ function CardDetailsDialog({
             Fechar
           </Button>
           <Button onClick={() => onSendForReview(card)} disabled={isAwaitingReview}>
-            <Send className="h-4 w-4" /> {isAwaitingReview ? "Aguardando revisão" : "Enviar para revisão"}
+            <Send className="h-4 w-4" />{" "}
+            {isAwaitingReview ? "Aguardando revisão" : "Enviar para revisão"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2480,15 +2443,16 @@ function ReviewItemView({
         <Row icon={<Send className="h-3.5 w-3.5" />}>
           Solicitado por: {review.requested_by_name}
         </Row>
-        <Row icon={<ShieldCheck className="h-3.5 w-3.5" />}>
-          Revisor: {review.reviewer_name}
-        </Row>
-        <Row icon={<Clock className="h-3.5 w-3.5" />}>
-          Status: {review.review_status}
-        </Row>
+        <Row icon={<ShieldCheck className="h-3.5 w-3.5" />}>Revisor: {review.reviewer_name}</Row>
+        <Row icon={<Clock className="h-3.5 w-3.5" />}>Status: {review.review_status}</Row>
       </div>
       <div className="mt-3 pt-2 border-t border-purple-200 dark:border-purple-900 flex gap-2">
-        <Button size="sm" variant="outline" className="h-7 text-xs flex-1 bg-white dark:bg-black/30 dark:border-white/15 dark:text-neutral-100 dark:hover:bg-black/50" onClick={onRequestCorrection}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs flex-1 bg-white dark:bg-black/30 dark:border-white/15 dark:text-neutral-100 dark:hover:bg-black/50"
+          onClick={onRequestCorrection}
+        >
           <AlertTriangle className="h-3 w-3 mr-1" /> Correção
         </Button>
         <Button size="sm" className="h-7 text-xs flex-1" onClick={onApprove}>
@@ -2572,9 +2536,7 @@ function RequestCorrectionDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Solicitar correção</DialogTitle>
-          <DialogDescription>
-            Descreva o motivo da correção para o projeto.
-          </DialogDescription>
+          <DialogDescription>Descreva o motivo da correção para o projeto.</DialogDescription>
         </DialogHeader>
         <Textarea
           value={note}

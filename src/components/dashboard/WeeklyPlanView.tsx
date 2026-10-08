@@ -29,7 +29,7 @@ import {
 import { computeMonthWeeks } from "@/lib/weekly-weeks";
 import { planWeeklyMove } from "@/lib/weekly-move";
 import { monthlyTitleToDateISO, type CardStatus } from "@/lib/dashboard";
-import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
+import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { cn } from "@/lib/utils";
 import type { DashboardCard } from "@/routes/_authenticated/dashboard";
 
@@ -69,54 +69,18 @@ const weeklyCollisionDetection: CollisionDetection = (args) => {
   return collisions.length > 0 ? collisions : closestCenter(args);
 };
 
-function WeeklyCardChip({
-  card,
-  onOpenCard,
-  onStatusChange,
-  disabled = false,
-}: {
-  card: DashboardCard;
-  onOpenCard?: (c: DashboardCard) => void;
-  onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div
-      onClick={() => onOpenCard?.(card)}
-      className="w-[210px] shrink-0 rounded-[8px] border border-border/60 bg-card shadow-sm px-2.5 py-2 text-left flex flex-col gap-1 hover:border-primary/40 hover:bg-accent/40 transition-colors cursor-pointer"
-    >
-      {onStatusChange && (
-        <CardStatusSelect
-          card={card}
-          onStatusChange={onStatusChange}
-          className=""
-          triggerClassName="w-full"
-          disabled={disabled}
-        />
-      )}
-      <button
-        type="button"
-        className="text-[12px] font-semibold leading-[1.25] tracking-[-0.01em] line-clamp-2 break-words [overflow-wrap:anywhere] text-left hover:text-primary transition-colors"
-      >
-        {card.project.project_name}
-      </button>
-      <div className="text-[10px] leading-none text-muted-foreground/60 truncate">
-        {card.project.client_name ?? "Sem cliente"}
-      </div>
-    </div>
-  );
-}
-
 function WeeklySortableCard({
   card,
   onOpenCard,
   onStatusChange,
   disabled = false,
+  isAdmin = false,
 }: {
   card: DashboardCard;
   onOpenCard?: (c: DashboardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   disabled?: boolean;
+  isAdmin?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.key,
@@ -127,12 +91,19 @@ function WeeklySortableCard({
     opacity: isDragging ? 0.4 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <WeeklyCardChip
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="shrink-0 w-[var(--kb-col,260px)]"
+    >
+      <ProjectCardView
         card={card}
-        onOpenCard={onOpenCard}
-        onStatusChange={onStatusChange}
+        onStatusChange={onStatusChange ?? (() => {})}
+        onOpenCard={onOpenCard ?? (() => {})}
         disabled={disabled}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -147,6 +118,7 @@ function WeeklyRow({
   onOpenCard,
   onStatusChange,
   disabled = false,
+  isAdmin = false,
   emptyLabel,
 }: {
   bucket: number;
@@ -157,14 +129,15 @@ function WeeklyRow({
   onOpenCard?: (c: DashboardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   disabled?: boolean;
+  isAdmin?: boolean;
   emptyLabel?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: rowIdForBucket(bucket) });
   return (
     <div
       className={cn(
-        "flex items-start gap-3 px-3 py-2 rounded-lg",
-        variant === "backlog" && "bg-muted/40 border border-dashed border-border/70",
+        "flex items-start gap-3 px-3 py-2 rounded-lg bg-muted/40",
+        variant === "backlog" && "border border-dashed border-border/70",
       )}
     >
       <div className="w-[124px] shrink-0 pt-1">
@@ -199,6 +172,7 @@ function WeeklyRow({
                   onOpenCard={onOpenCard}
                   onStatusChange={onStatusChange}
                   disabled={disabled}
+                  isAdmin={isAdmin}
                 />
               ))
             ) : (
@@ -220,6 +194,7 @@ export function WeeklyPlanView({
   onOpenCard,
   onStatusChange,
   readOnly = false,
+  isAdmin = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -229,6 +204,7 @@ export function WeeklyPlanView({
   onOpenCard?: (c: DashboardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   readOnly?: boolean;
+  isAdmin?: boolean;
 }) {
   const referenceMonth = monthlyTitleToDateISO(monthTitle);
   const qc = useQueryClient();
@@ -398,6 +374,7 @@ export function WeeklyPlanView({
               onOpenCard={onOpenCard}
               onStatusChange={onStatusChange}
               disabled={readOnly}
+              isAdmin={isAdmin}
               emptyLabel="Nenhum card"
             />
 
@@ -414,6 +391,7 @@ export function WeeklyPlanView({
                   onOpenCard={onOpenCard}
                   onStatusChange={onStatusChange}
                   disabled={readOnly}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
@@ -421,12 +399,13 @@ export function WeeklyPlanView({
 
           <DragOverlay>
             {activeCard ? (
-              <div className="pointer-events-none opacity-95 shadow-lg">
-                <WeeklyCardChip
+              <div className="pointer-events-none w-[var(--kb-col,260px)]">
+                <ProjectCardView
                   card={activeCard}
-                  onOpenCard={onOpenCard}
-                  onStatusChange={onStatusChange}
-                  disabled={readOnly}
+                  onStatusChange={() => {}}
+                  onOpenCard={() => {}}
+                  dragging
+                  isAdmin={isAdmin}
                 />
               </div>
             ) : null}
