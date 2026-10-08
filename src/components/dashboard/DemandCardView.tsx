@@ -2,6 +2,7 @@ import { Building2, CalendarDays, Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
 import { formatHoursHHMM } from "@/lib/manual-demands";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface DemandCardViewProps {
   card: DemandBoardCard;
@@ -37,9 +38,22 @@ export function DemandCardView({ card, className }: DemandCardViewProps) {
               Demanda avulsa
             </span>
           </div>
-          <p className="mt-1 line-clamp-2 text-[14px] font-semibold leading-snug">
-            {demand.name}
-          </p>
+          <TooltipProvider>
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <p className="mt-1 line-clamp-2 text-[14px] font-semibold leading-snug">
+                  {demand.name}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={6}
+                className="max-w-[280px] whitespace-normal break-words bg-white text-neutral-900 border border-neutral-200 shadow-sm dark:bg-neutral-800 dark:text-neutral-100 dark:border-neutral-700"
+              >
+                {demand.name}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
 
           <div className="mt-1 space-y-0.5 text-[12px] opacity-80">
             <div className="flex items-center gap-1.5">
