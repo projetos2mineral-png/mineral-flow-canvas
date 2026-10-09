@@ -47,7 +47,7 @@ export function ProjectCardView({
       style={{ padding: "var(--kb-card-pad, 0.625rem)" }}
       className={cn(
         "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card",
-        isAdmin ? "min-h-[158px]" : "min-h-[158px] h-[158px]",
+        "h-[176px] min-h-[176px] overflow-hidden",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-md" : "",
       )}
@@ -60,7 +60,7 @@ export function ProjectCardView({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => onOpenCard(card)}
-                  className="w-full text-left font-semibold text-[13px] leading-[1.3] tracking-[-0.015em] line-clamp-3 break-words [overflow-wrap:anywhere] hover:text-primary transition-colors cursor-pointer"
+                  className="w-full shrink-0 h-[3.9em] self-start text-left font-semibold text-[13px] leading-[1.3] tracking-[-0.015em] line-clamp-3 break-words [overflow-wrap:anywhere] hover:text-primary transition-colors cursor-pointer"
                   style={{ fontFamily: "var(--font-sans)" }}
                 >
                   {p.project_name}
@@ -125,7 +125,7 @@ export function ProjectCardView({
         card={card}
         onStatusChange={onStatusChange}
         disabled={disabled}
-        className="mt-3 flex flex-col"
+        className="mt-auto pt-2 flex flex-col shrink-0"
       />
     </div>
   );
