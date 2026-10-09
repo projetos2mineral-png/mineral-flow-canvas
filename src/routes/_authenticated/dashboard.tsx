@@ -1925,7 +1925,8 @@ function LaneColumn({
                     <TooltipTrigger asChild>
                       <span
                         className={cn(
-                          "shrink-0 whitespace-nowrap tabular-nums tracking-wide cursor-default select-none font-normal leading-none text-[7px]",
+                          "shrink-0 whitespace-nowrap tabular-nums tracking-wide cursor-default select-none font-normal leading-none",
+                          horizontal ? "text-[10.5px]" : "text-[7px]",
                           overCapacity
                             ? "text-red-600 dark:text-red-400"
                             : "text-muted-foreground/55",
