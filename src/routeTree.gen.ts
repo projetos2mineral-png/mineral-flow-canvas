@@ -9,25 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
-import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as AuthenticatedCapacidadeRouteImport } from './routes/_authenticated/capacidade'
-import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
-import { Route as AuthenticatedDemandasAvulsasRouteImport } from './routes/_authenticated/demandas-avulsas'
-import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_authenticated/gerenciar-usuarios'
-import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authenticated/planejamento'
-import { Route as AuthenticatedQuemFazOQueRouteImport } from './routes/_authenticated/quem-faz-o-que'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSelecionarProjetosRouteImport } from './routes/_authenticated/selecionar-projetos'
+import { Route as AuthenticatedQuemFazOQueRouteImport } from './routes/_authenticated/quem-faz-o-que'
+import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authenticated/planejamento'
+import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_authenticated/gerenciar-usuarios'
+import { Route as AuthenticatedDemandasAvulsasRouteImport } from './routes/_authenticated/demandas-avulsas'
+import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCapacidadeRouteImport } from './routes/_authenticated/capacidade'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
-  id: '/_authenticated',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -35,37 +31,19 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedCapacidadeRoute = AuthenticatedCapacidadeRouteImport.update({
-  id: '/capacidade',
-  path: '/capacidade',
-  getParentRoute: () => AuthenticatedRouteRoute,
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const AuthenticatedDemandasAvulsasRoute =
-  AuthenticatedDemandasAvulsasRouteImport.update({
-    id: '/demandas-avulsas',
-    path: '/demandas-avulsas',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedGerenciarUsuariosRoute =
-  AuthenticatedGerenciarUsuariosRouteImport.update({
-    id: '/gerenciar-usuarios',
-    path: '/gerenciar-usuarios',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
-const AuthenticatedPlanejamentoRoute =
-  AuthenticatedPlanejamentoRouteImport.update({
-    id: '/planejamento',
-    path: '/planejamento',
+const AuthenticatedSelecionarProjetosRoute =
+  AuthenticatedSelecionarProjetosRouteImport.update({
+    id: '/selecionar-projetos',
+    path: '/selecionar-projetos',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedQuemFazOQueRoute =
@@ -74,12 +52,34 @@ const AuthenticatedQuemFazOQueRoute =
     path: '/quem-faz-o-que',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
-const AuthenticatedSelecionarProjetosRoute =
-  AuthenticatedSelecionarProjetosRouteImport.update({
-    id: '/selecionar-projetos',
-    path: '/selecionar-projetos',
+const AuthenticatedPlanejamentoRoute =
+  AuthenticatedPlanejamentoRouteImport.update({
+    id: '/planejamento',
+    path: '/planejamento',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedGerenciarUsuariosRoute =
+  AuthenticatedGerenciarUsuariosRouteImport.update({
+    id: '/gerenciar-usuarios',
+    path: '/gerenciar-usuarios',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDemandasAvulsasRoute =
+  AuthenticatedDemandasAvulsasRouteImport.update({
+    id: '/demandas-avulsas',
+    path: '/demandas-avulsas',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCapacidadeRoute = AuthenticatedCapacidadeRouteImport.update({
+  id: '/capacidade',
+  path: '/capacidade',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -168,18 +168,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -189,46 +182,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/capacidade': {
-      id: '/_authenticated/capacidade'
-      path: '/capacidade'
-      fullPath: '/capacidade'
-      preLoaderRoute: typeof AuthenticatedCapacidadeRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/dashboard': {
-      id: '/_authenticated/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/demandas-avulsas': {
-      id: '/_authenticated/demandas-avulsas'
-      path: '/demandas-avulsas'
-      fullPath: '/demandas-avulsas'
-      preLoaderRoute: typeof AuthenticatedDemandasAvulsasRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/gerenciar-usuarios': {
-      id: '/_authenticated/gerenciar-usuarios'
-      path: '/gerenciar-usuarios'
-      fullPath: '/gerenciar-usuarios'
-      preLoaderRoute: typeof AuthenticatedGerenciarUsuariosRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/planejamento': {
-      id: '/_authenticated/planejamento'
-      path: '/planejamento'
-      fullPath: '/planejamento'
-      preLoaderRoute: typeof AuthenticatedPlanejamentoRouteImport
+    '/_authenticated/selecionar-projetos': {
+      id: '/_authenticated/selecionar-projetos'
+      path: '/selecionar-projetos'
+      fullPath: '/selecionar-projetos'
+      preLoaderRoute: typeof AuthenticatedSelecionarProjetosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/quem-faz-o-que': {
@@ -238,11 +210,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedQuemFazOQueRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
-    '/_authenticated/selecionar-projetos': {
-      id: '/_authenticated/selecionar-projetos'
-      path: '/selecionar-projetos'
-      fullPath: '/selecionar-projetos'
-      preLoaderRoute: typeof AuthenticatedSelecionarProjetosRouteImport
+    '/_authenticated/planejamento': {
+      id: '/_authenticated/planejamento'
+      path: '/planejamento'
+      fullPath: '/planejamento'
+      preLoaderRoute: typeof AuthenticatedPlanejamentoRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/gerenciar-usuarios': {
+      id: '/_authenticated/gerenciar-usuarios'
+      path: '/gerenciar-usuarios'
+      fullPath: '/gerenciar-usuarios'
+      preLoaderRoute: typeof AuthenticatedGerenciarUsuariosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/demandas-avulsas': {
+      id: '/_authenticated/demandas-avulsas'
+      path: '/demandas-avulsas'
+      fullPath: '/demandas-avulsas'
+      preLoaderRoute: typeof AuthenticatedDemandasAvulsasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/dashboard': {
+      id: '/_authenticated/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/capacidade': {
+      id: '/_authenticated/capacidade'
+      path: '/capacidade'
+      fullPath: '/capacidade'
+      preLoaderRoute: typeof AuthenticatedCapacidadeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
   }
