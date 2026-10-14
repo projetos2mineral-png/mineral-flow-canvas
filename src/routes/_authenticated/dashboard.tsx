@@ -12,7 +12,6 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
   DragOverlay,
   useDroppable,
   type DragStartEvent,
