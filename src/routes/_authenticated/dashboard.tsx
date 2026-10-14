@@ -1,4 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  kanbanCollisionDetection,
+  resolveCardDropLane,
+  isLaneLevelTarget,
+} from "@/lib/kanban-dnd";
 import { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -1128,12 +1133,16 @@ function AssigneeBoard({
   const [reviewCard, setReviewCard] = useState<DashboardCard | null>(null);
   const [correctionReview, setCorrectionReview] = useState<ReviewRow | null>(null);
 
-  const findContainer = (id: string): string | null => {
-    if (id.startsWith("lane:")) return id.slice(5);
-    if (id.startsWith("laneItem:")) return null;
-    const it = items.find((i) => i.key === id);
+  const laneOfCard = (key: string): string | null => {
+    const it = items.find((i) => i.key === key);
     if (!it) return null;
     return it.lane_id && grouped.has(it.lane_id) ? it.lane_id : UNASSIGNED_LANE;
+  };
+  // Usado apenas no arraste de CARDS: aqui `laneItem:` significa "solto sobre a coluna".
+  const findContainer = (id: string): string | null => {
+    const lane = resolveCardDropLane(id, laneOfCard);
+    if (lane && lane !== UNASSIGNED_LANE && !grouped.has(lane)) return null;
+    return lane;
   };
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
@@ -1199,7 +1208,7 @@ function AssigneeBoard({
     const destDisplayed = grouped.get(toLane) ?? [];
 
     let toIdx: number;
-    if (overKey.startsWith("lane:")) {
+    if (isLaneLevelTarget(overKey)) {
       toIdx = destDisplayed.length;
     } else {
       toIdx = destDisplayed.findIndex((c) => c.key === overKey);
@@ -1459,7 +1468,7 @@ function AssigneeBoard({
         )}
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={kanbanCollisionDetection}
           onDragStart={readOnly ? undefined : onDragStart}
           onDragOver={readOnly ? undefined : onDragOver}
           onDragEnd={readOnly ? undefined : onDragEnd}
