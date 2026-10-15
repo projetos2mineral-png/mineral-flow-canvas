@@ -246,9 +246,12 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
     if (rows.length < pageSize) break;
     from += pageSize;
   }
+  // Lotes pequenos: `.in("id", ids)` vai na URL; 1000 UUIDs (~37 KB) excedem o
+  // limite do gateway e retornam HTTP 400 "Bad Request".
+  const ID_CHUNK = 150;
   const flagsById = new Map<string, { is_tec: boolean; is_geo: boolean }>();
-  for (let from = 0; from < all.length; from += pageSize) {
-    const ids = all.slice(from, from + pageSize).map((card) => card.id);
+  for (let from = 0; from < all.length; from += ID_CHUNK) {
+    const ids = all.slice(from, from + ID_CHUNK).map((card) => card.id);
     const { data, error } = await supabase
       .from("dashboard_project_cards")
       .select("id,is_tec,is_geo")
@@ -367,8 +370,8 @@ export async function upsertCard(input: {
     if (error) throw error;
     return {
       ...(data as ProjectCardRow),
-      is_tec: input.is_tec ?? existing.is_tec ?? false,
-      is_geo: input.is_geo ?? existing.is_geo ?? false,
+      is_tec: (data as any).is_tec ?? false,
+      is_geo: (data as any).is_geo ?? false,
     };
   }
 
@@ -400,8 +403,8 @@ export async function upsertCard(input: {
   if (error) throw error;
   return {
     ...(data as ProjectCardRow),
-    is_tec: input.is_tec ?? false,
-    is_geo: input.is_geo ?? false,
+    is_tec: (data as any).is_tec ?? false,
+    is_geo: (data as any).is_geo ?? false,
   };
 }
 
