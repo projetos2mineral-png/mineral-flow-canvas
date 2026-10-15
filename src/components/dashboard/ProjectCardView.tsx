@@ -77,24 +77,6 @@ export function ProjectCardView({
             </Tooltip>
           </TooltipProvider>
 
-          {(card.card?.is_tec === true || card.card?.is_geo === true) && (
-            <div
-              aria-label="Classificações do projeto"
-              className="flex items-center gap-1.5 text-[11px] leading-4"
-            >
-              {card.card.is_tec === true && (
-                <span className="rounded-sm bg-blue-100 px-1.5 py-0.5 font-medium text-blue-700">
-                  TEC
-                </span>
-              )}
-              {card.card.is_geo === true && (
-                <span className="rounded-sm bg-green-100 px-1.5 py-0.5 font-medium text-green-700">
-                  GEO
-                </span>
-              )}
-            </div>
-          )}
-
           <div className="space-y-1">
             <div className="flex items-center gap-1.5 text-[11px] leading-4 text-muted-foreground/80">
               <Building2 className="h-3 w-3 shrink-0 opacity-60" />
@@ -128,6 +110,23 @@ export function ProjectCardView({
                   {rawHours != null ? formatHoursCompact(Number(rawHours)) : "—"}
                 </span>
               </span>
+            </div>
+          )}
+          {(card.card?.is_tec === true || card.card?.is_geo === true) && (
+            <div
+              aria-label="Classificações do projeto"
+              className="flex items-center gap-1 text-[9px] leading-3"
+            >
+              {card.card.is_tec === true && (
+                <span className="rounded-[3px] bg-blue-100 px-1 py-px font-semibold tracking-wide text-blue-700">
+                  TEC
+                </span>
+              )}
+              {card.card.is_geo === true && (
+                <span className="rounded-[3px] bg-green-100 px-1 py-px font-semibold tracking-wide text-green-700">
+                  GEO
+                </span>
+              )}
             </div>
           )}
           {card.review_status && card.review_status !== "não enviado" && (
