@@ -94,6 +94,8 @@ export type ProjectCardRow = {
   calculation_details?: CalculationDetails | null;
   updated_by?: string | null;
   updated_at?: string | null;
+  is_tec: boolean;
+  is_geo: boolean;
 };
 
 /**
@@ -244,7 +246,36 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
     if (rows.length < pageSize) break;
     from += pageSize;
   }
-  return all;
+  const flagsById = new Map<string, { is_tec: boolean; is_geo: boolean }>();
+  for (let from = 0; from < all.length; from += pageSize) {
+    const ids = all.slice(from, from + pageSize).map((card) => card.id);
+    const { data, error } = await supabase
+      .from("dashboard_project_cards")
+      .select("id,is_tec,is_geo")
+      .in("id", ids);
+    if (error) {
+      if (isMissingClassificationColumns(error)) break;
+      throw error;
+    }
+    for (const row of data ?? []) flagsById.set(row.id, { is_tec: row.is_tec, is_geo: row.is_geo });
+  }
+  return all.map((card) => ({
+    ...card,
+    is_tec: flagsById.get(card.id)?.is_tec ?? false,
+    is_geo: flagsById.get(card.id)?.is_geo ?? false,
+  }));
+}
+
+function isMissingClassificationColumns(error: unknown): boolean {
+  const value = error as { code?: string; message?: string; details?: string };
+  if (value?.code === "42703" || value?.code === "PGRST204") return true;
+  const message = `${value?.message ?? ""} ${value?.details ?? ""}`.toLowerCase();
+  return (
+    (message.includes("is_tec") || message.includes("is_geo")) &&
+    (message.includes("does not exist") ||
+      message.includes("schema cache") ||
+      message.includes("could not find"))
+  );
 }
 
 export async function createLane(assignee_name: string, title: string, position: number): Promise<Lane> {
@@ -290,6 +321,8 @@ export async function upsertCard(input: {
   review_requested_to?: string | null;
   correction_note?: string | null;
   manually_positioned?: boolean;
+  is_tec?: boolean;
+  is_geo?: boolean;
   updated_by?: string | null;
   updated_at?: string | null;
 }): Promise<ProjectCardRow> {
@@ -314,6 +347,8 @@ export async function upsertCard(input: {
     if (input.review_requested_by !== undefined) patch.review_requested_by = input.review_requested_by;
     if (input.review_requested_to !== undefined) patch.review_requested_to = input.review_requested_to;
     if (input.correction_note !== undefined) patch.correction_note = input.correction_note;
+    if (input.is_tec !== undefined) patch.is_tec = input.is_tec;
+    if (input.is_geo !== undefined) patch.is_geo = input.is_geo;
     if (input.updated_by !== undefined) patch.updated_by = input.updated_by;
     if (input.manually_positioned !== undefined) {
       patch.manually_positioned = input.manually_positioned;
@@ -330,33 +365,44 @@ export async function upsertCard(input: {
       )
       .single();
     if (error) throw error;
-    return data as ProjectCardRow;
+    return {
+      ...(data as ProjectCardRow),
+      is_tec: input.is_tec ?? existing.is_tec ?? false,
+      is_geo: input.is_geo ?? existing.is_geo ?? false,
+    };
   }
 
+  const insertPayload: Record<string, unknown> = {
+    runrunit_project_id: input.runrunit_project_id,
+    assignee_name: input.assignee_name,
+    lane_id: input.lane_id ?? null,
+    status: input.status ?? "a iniciar",
+    position: input.position ?? 0,
+    internal_note: input.internal_note ?? null,
+    review_status: input.review_status ?? "não enviado",
+    review_requested_by: input.review_requested_by ?? null,
+    review_requested_to: input.review_requested_to ?? null,
+    correction_note: input.correction_note ?? null,
+    manually_positioned: input.manually_positioned ?? false,
+    manually_positioned_at: input.manually_positioned ? new Date().toISOString() : null,
+    updated_by: input.updated_by ?? null,
+    updated_at: input.updated_at ?? new Date().toISOString(),
+  };
+  if (input.is_tec !== undefined) insertPayload.is_tec = input.is_tec;
+  if (input.is_geo !== undefined) insertPayload.is_geo = input.is_geo;
   const { data, error } = await (supabase as any)
     .from("dashboard_project_cards")
-    .insert({
-      runrunit_project_id: input.runrunit_project_id,
-      assignee_name: input.assignee_name,
-      lane_id: input.lane_id ?? null,
-      status: input.status ?? "a iniciar",
-      position: input.position ?? 0,
-      internal_note: input.internal_note ?? null,
-      review_status: input.review_status ?? "não enviado",
-      review_requested_by: input.review_requested_by ?? null,
-      review_requested_to: input.review_requested_to ?? null,
-      correction_note: input.correction_note ?? null,
-      manually_positioned: input.manually_positioned ?? false,
-      manually_positioned_at: input.manually_positioned ? new Date().toISOString() : null,
-      updated_by: input.updated_by ?? null,
-      updated_at: input.updated_at ?? new Date().toISOString(),
-    })
+    .insert(insertPayload)
     .select(
       "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,updated_by,updated_at"
     )
     .single();
   if (error) throw error;
-  return data as ProjectCardRow;
+  return {
+    ...(data as ProjectCardRow),
+    is_tec: input.is_tec ?? false,
+    is_geo: input.is_geo ?? false,
+  };
 }
 
 export type DashboardUser = {
@@ -517,14 +563,17 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
 
 export async function updateCard(
   id: string,
-  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at">>
+  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at" | "is_tec" | "is_geo">>
 ) {
   const fullPatch = { ...patch, updated_at: patch.updated_at || new Date().toISOString() };
-  const { error } = await (supabase as any)
+  const { data, error } = await (supabase as any)
     .from("dashboard_project_cards")
     .update(fullPatch)
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new Error("O card não foi atualizado. Verifique suas permissões e tente novamente.");
 }
 
 export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {

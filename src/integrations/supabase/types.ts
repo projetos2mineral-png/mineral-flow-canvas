@@ -48,6 +48,8 @@ export type Database = {
           created_at: string | null
           current_owner: string | null
           id: string
+          is_geo: boolean
+          is_tec: boolean
           internal_note: string | null
           lane_id: string | null
           manually_positioned: boolean | null
@@ -68,6 +70,8 @@ export type Database = {
           created_at?: string | null
           current_owner?: string | null
           id?: string
+          is_geo?: boolean
+          is_tec?: boolean
           internal_note?: string | null
           lane_id?: string | null
           manually_positioned?: boolean | null
@@ -88,6 +92,8 @@ export type Database = {
           created_at?: string | null
           current_owner?: string | null
           id?: string
+          is_geo?: boolean
+          is_tec?: boolean
           internal_note?: string | null
           lane_id?: string | null
           manually_positioned?: boolean | null

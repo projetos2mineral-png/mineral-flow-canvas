@@ -1,7 +1,16 @@
 import { GripVertical, Building2, CalendarDays, ListChecks, Clock } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
-import { estimateSourceLabel, STATUS_CARD_CLASS, type CardStatus } from "@/lib/dashboard";
+import {
+  estimateSourceLabel,
+  STATUS_CARD_CLASS,
+  updateCard,
+  upsertCard,
+  type CardStatus,
+} from "@/lib/dashboard";
 import { formatHoursCompact } from "@/lib/kanban-capacity";
 import { cn } from "@/lib/utils";
 import type { DashboardCard } from "@/routes/_authenticated/dashboard";
@@ -31,6 +40,7 @@ export function ProjectCardView({
   isAdmin?: boolean;
   disabled?: boolean;
 }) {
+  const queryClient = useQueryClient();
   const p = card.project;
   const hasNote = !!(card.internal_note && card.internal_note.trim());
   const totalTasks = card.card?.total_tasks ?? null;
@@ -42,12 +52,30 @@ export function ProjectCardView({
         ? Number(rawHours)
         : Number(rawHours).toFixed(1);
   const sourceLabel = estimateSourceLabel(card.card?.calculation_details ?? null);
+  const setClassification = async (field: "is_tec" | "is_geo", checked: boolean) => {
+    try {
+      const row =
+        card.card ??
+        (await upsertCard({
+          runrunit_project_id: card.runrunit_project_id,
+          assignee_name: card.assignee_name,
+        }));
+      await updateCard(row.id, { [field]: checked });
+      await queryClient.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+    } catch (error) {
+      toast.error(`Falha ao atualizar classificação: ${(error as Error).message}`);
+    }
+  };
   return (
     <div
       style={{ padding: "var(--kb-card-pad, 0.625rem)" }}
       className={cn(
         "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card",
+<<<<<<< Updated upstream
         "h-[176px] min-h-[176px] overflow-hidden",
+=======
+        isAdmin ? "min-h-[178px]" : "min-h-[178px] h-[178px]",
+>>>>>>> Stashed changes
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-md" : "",
       )}
@@ -119,6 +147,34 @@ export function ProjectCardView({
               {card.review_status === "aprovado" && "Aprovado"}
             </div>
           )}
+          <div className="flex items-center gap-3 pt-1 text-[10px] font-medium text-muted-foreground">
+            <label
+              className="inline-flex items-center gap-1.5 cursor-pointer"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Checkbox
+                checked={card.card?.is_tec ?? false}
+                disabled={disabled}
+                onCheckedChange={(value) => void setClassification("is_tec", value === true)}
+                aria-label={`Classificar ${p.project_name} como TEC`}
+              />
+              TEC
+            </label>
+            <label
+              className="inline-flex items-center gap-1.5 cursor-pointer"
+              onClick={(event) => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Checkbox
+                checked={card.card?.is_geo ?? false}
+                disabled={disabled}
+                onCheckedChange={(value) => void setClassification("is_geo", value === true)}
+                aria-label={`Classificar ${p.project_name} como GEO`}
+              />
+              GEO
+            </label>
+          </div>
         </div>
       </div>
       <CardStatusSelect
