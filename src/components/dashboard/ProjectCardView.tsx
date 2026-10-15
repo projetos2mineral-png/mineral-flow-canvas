@@ -71,11 +71,8 @@ export function ProjectCardView({
       style={{ padding: "var(--kb-card-pad, 0.625rem)" }}
       className={cn(
         "rounded-[8px] border border-border/60 shadow-sm flex flex-col justify-between bg-card",
-<<<<<<< Updated upstream
         "h-[176px] min-h-[176px] overflow-hidden",
-=======
-        isAdmin ? "min-h-[178px]" : "min-h-[178px] h-[178px]",
->>>>>>> Stashed changes
+        isAdmin ? "min-h-[178px]" : "",
         STATUS_CARD_CLASS[card.status],
         dragging ? "shadow-md" : "",
       )}
