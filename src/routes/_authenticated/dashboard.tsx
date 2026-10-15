@@ -47,6 +47,7 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ListChecks,
   Settings,
   ArrowUpRight,
@@ -1784,11 +1785,24 @@ function LaneColumn({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
   useEffect(() => setDraft(title), [title]);
+  const isMonthly = isMonthlyLaneTitle(title);
+  const collapsedStorageKey = `dashboard:collapsed-lane:${encodeURIComponent(assigneeName)}:${laneId}`;
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  useEffect(() => {
+    if (!isMonthly) {
+      setIsCollapsed(false);
+      return;
+    }
+    try {
+      setIsCollapsed(window.localStorage.getItem(collapsedStorageKey) === "true");
+    } catch {
+      setIsCollapsed(false);
+    }
+  }, [collapsedStorageKey, isMonthly]);
   void lane;
 
   const qc = useQueryClient();
 
-  const isMonthly = isMonthlyLaneTitle(title);
   // Mês atual (data local do browser): borda vermelha discreta, mesmo
   // destaque visual da semana atual na WeeklyPlanView. Sem persistência.
   const now = new Date();
@@ -1940,6 +1954,42 @@ function LaneColumn({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              {isMonthly && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={isCollapsed ? "Expandir fila" : "Recolher fila"}
+                        aria-expanded={!isCollapsed}
+                        className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground/45 hover:text-foreground hover:bg-muted/30 transition-all"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setIsCollapsed((previous) => {
+                            const next = !previous;
+                            try {
+                              window.localStorage.setItem(collapsedStorageKey, String(next));
+                            } catch {
+                              /* localStorage indisponível — estado fica em memória */
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <ChevronDown
+                          className={cn("h-3.5 w-3.5 transition-transform", isCollapsed && "-rotate-90")}
+                        />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      className="text-xs bg-neutral-900 text-white border-neutral-800"
+                    >
+                      <p>{isCollapsed ? "Expandir fila" : "Recolher fila"}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {isMonthly && onOpenWeekly && (
                 <TooltipProvider>
                   <Tooltip>
@@ -2096,6 +2146,7 @@ function LaneColumn({
       >
         <DroppableLaneBody
           laneId={laneId}
+          collapsed={isMonthly && isCollapsed}
           cards={cards}
           reviews={reviews}
           demands={demands}
@@ -2175,6 +2226,7 @@ function SortableLaneColumn(props: {
 
 function DroppableLaneBody({
   laneId,
+  collapsed = false,
   cards,
   reviews,
   demands = [],
@@ -2187,6 +2239,7 @@ function DroppableLaneBody({
   horizontal = false,
 }: {
   laneId: string;
+  collapsed?: boolean;
   cards: DashboardCard[];
   reviews: ReviewRow[];
   demands?: DemandBoardCard[];
@@ -2206,41 +2259,49 @@ function DroppableLaneBody({
       ref={setNodeRef}
       style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
       className={cn(
-        horizontal
-          ? "flex-1 flex flex-row overflow-x-auto overflow-y-hidden min-h-[100px] transition-colors"
-          : "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
+        collapsed
+          ? "flex-none min-h-[28px] overflow-hidden transition-colors"
+          : horizontal
+            ? "flex-1 flex flex-row overflow-x-auto overflow-y-hidden min-h-[100px] transition-colors"
+            : "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
         isOver && "bg-primary/5",
       )}
     >
-      {reviews.map((r) => (
-        <div key={`rev:${r.id}`} className={itemShell}>
-          <ReviewItemView
-            review={r}
-            projectName={
-              projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
-            }
-            onApprove={() => onApproveReview(r)}
-            onRequestCorrection={() => onRequestCorrectionReview(r)}
-          />
-        </div>
-      ))}
-      {cards.map((c) => (
-        <div key={c.key} className={itemShell}>
-          <SortableCard
-            card={c}
-            onStatusChange={onStatusChange}
-            onOpenCard={onOpenCard}
-            isAdmin={isAdmin}
-          />
-        </div>
-      ))}
-      {demands.map((d) => (
-        <div key={d.key} className={itemShell}>
-          <DemandCardView card={d} />
-        </div>
-      ))}
-      {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
-        <div className="text-center text-xs text-muted-foreground py-6">Arraste cards para cá</div>
+      {collapsed ? (
+        <div aria-hidden="true" className="h-5" />
+      ) : (
+        <>
+          {reviews.map((r) => (
+            <div key={`rev:${r.id}`} className={itemShell}>
+              <ReviewItemView
+                review={r}
+                projectName={
+                  projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
+                }
+                onApprove={() => onApproveReview(r)}
+                onRequestCorrection={() => onRequestCorrectionReview(r)}
+              />
+            </div>
+          ))}
+          {cards.map((c) => (
+            <div key={c.key} className={itemShell}>
+              <SortableCard
+                card={c}
+                onStatusChange={onStatusChange}
+                onOpenCard={onOpenCard}
+                isAdmin={isAdmin}
+              />
+            </div>
+          ))}
+          {demands.map((d) => (
+            <div key={d.key} className={itemShell}>
+              <DemandCardView card={d} />
+            </div>
+          ))}
+          {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
+            <div className="text-center text-xs text-muted-foreground py-6">Arraste cards para cá</div>
+          )}
+        </>
       )}
     </div>
   );
