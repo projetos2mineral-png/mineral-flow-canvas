@@ -95,8 +95,8 @@ export function ProjectCardView({
               </div>
             )}
           </div>
-          {/* Linha visível diretamente na frente do card — apenas para ADMINISTRADOR */}
-          {(isAdmin || rawHours != null) && (
+          {/* Linha de estimativa + etiquetas TEC/GEO fixas à direita */}
+          {(isAdmin || rawHours != null || card.card?.is_tec === true || card.card?.is_geo === true) && (
             <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
               {isAdmin && (
                 <span className="inline-flex items-center gap-1">
@@ -104,27 +104,29 @@ export function ProjectCardView({
                   <span className="tabular-nums">{totalTasks != null ? `${totalTasks}` : "—"}</span>
                 </span>
               )}
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3 shrink-0 opacity-60" />
-                <span className="tabular-nums">
-                  {rawHours != null ? formatHoursCompact(Number(rawHours)) : "—"}
-                </span>
-              </span>
-            </div>
-          )}
-          {(card.card?.is_tec === true || card.card?.is_geo === true) && (
-            <div
-              aria-label="Classificações do projeto"
-              className="flex items-center gap-1 text-[9px] leading-3"
-            >
-              {card.card.is_tec === true && (
-                <span className="rounded-[3px] bg-blue-100 px-1 py-px font-semibold tracking-wide text-blue-700">
-                  TEC
+              {(isAdmin || rawHours != null) && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3 shrink-0 opacity-60" />
+                  <span className="tabular-nums">
+                    {rawHours != null ? formatHoursCompact(Number(rawHours)) : "—"}
+                  </span>
                 </span>
               )}
-              {card.card.is_geo === true && (
-                <span className="rounded-[3px] bg-green-100 px-1 py-px font-semibold tracking-wide text-green-700">
-                  GEO
+              {(card.card?.is_tec === true || card.card?.is_geo === true) && (
+                <span
+                  aria-label="Classificações do projeto"
+                  className="ml-auto inline-flex shrink-0 items-center gap-1 text-[9px] leading-3"
+                >
+                  {card.card.is_tec === true && (
+                    <span className="rounded-[3px] bg-blue-100 px-1 py-px font-semibold tracking-wide text-blue-700">
+                      TEC
+                    </span>
+                  )}
+                  {card.card.is_geo === true && (
+                    <span className="rounded-[3px] bg-green-100 px-1 py-px font-semibold tracking-wide text-green-700">
+                      GEO
+                    </span>
+                  )}
                 </span>
               )}
             </div>
