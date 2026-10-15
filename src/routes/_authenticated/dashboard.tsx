@@ -60,6 +60,7 @@ import {
   updateLane,
   deleteLane,
   upsertCard,
+  updateCard,
   bulkUpdateCardPositions,
   STATUS_LABEL,
   STATUS_DOT_CLASS,
@@ -93,6 +94,7 @@ import {
 import { Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -1358,6 +1360,40 @@ function AssigneeBoard({
     }
   };
 
+  const handleSaveClassifications = async (
+    it: DashboardCard,
+    classifications: { is_tec: boolean; is_geo: boolean },
+  ) => {
+    try {
+      let savedCard: ProjectCardRow;
+      if (it.card?.id) {
+        await updateCard(it.card.id, {
+          ...classifications,
+          updated_by: currentUserName,
+          updated_at: new Date().toISOString(),
+        });
+        savedCard = { ...it.card, ...classifications, updated_by: currentUserName };
+      } else {
+        savedCard = await upsertCard({
+          runrunit_project_id: it.runrunit_project_id,
+          assignee_name: it.assignee_name,
+          ...classifications,
+          updated_by: currentUserName,
+        });
+      }
+      const updatedCard = { ...it, card: savedCard };
+      setItems((previous) =>
+        previous.map((item) => (item.key === it.key ? updatedCard : item)),
+      );
+      setOpenCard((previous) => (previous?.key === it.key ? updatedCard : previous));
+      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      toast.success("Classificações salvas");
+    } catch (e) {
+      toast.error("Falha ao salvar classificações: " + (e as Error).message);
+      throw e;
+    }
+  };
+
   // Find lane by title (case-insensitive) for an assignee
   const findLaneByTitle = (assigneeName: string, titles: string[]): Lane | null =>
     findLaneByTitleLib(allLanes, assigneeName, titles);
@@ -1592,6 +1628,8 @@ function AssigneeBoard({
         card={openCard}
         onClose={() => setOpenCard(null)}
         onSaveNote={handleSaveNote}
+        onSaveClassifications={handleSaveClassifications}
+        readOnly={readOnly}
         onSendForReview={(c) => {
           setOpenCard(null);
           setReviewCard(c);
@@ -2252,16 +2290,28 @@ function CardDetailsDialog({
   card,
   onClose,
   onSaveNote,
+  onSaveClassifications,
+  readOnly,
   onSendForReview,
 }: {
   card: DashboardCard | null;
   onClose: () => void;
   onSaveNote: (c: DashboardCard, note: string) => Promise<void>;
+  onSaveClassifications: (
+    c: DashboardCard,
+    classifications: { is_tec: boolean; is_geo: boolean },
+  ) => Promise<void>;
+  readOnly: boolean;
   onSendForReview: (c: DashboardCard) => void;
 }) {
   const [note, setNote] = useState("");
+  const [isTec, setIsTec] = useState(false);
+  const [isGeo, setIsGeo] = useState(false);
+  const [savingClassifications, setSavingClassifications] = useState(false);
   useEffect(() => {
     setNote(card?.internal_note ?? "");
+    setIsTec(card?.card?.is_tec ?? false);
+    setIsGeo(card?.card?.is_geo ?? false);
   }, [card]);
 
   if (!card) return null;
@@ -2407,6 +2457,54 @@ function CardDetailsDialog({
                 </div>
               </div>
             )}
+
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Classificações</h4>
+                <p className="text-xs text-muted-foreground">
+                  Classificações internas do projeto.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={isTec}
+                    disabled={readOnly || savingClassifications}
+                    onCheckedChange={(checked) => setIsTec(checked === true)}
+                  />
+                  Técnico (TEC)
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={isGeo}
+                    disabled={readOnly || savingClassifications}
+                    onCheckedChange={(checked) => setIsGeo(checked === true)}
+                  />
+                  Geoprocessamento (GEO)
+                </label>
+              </div>
+              {!readOnly && (
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={savingClassifications}
+                    onClick={async () => {
+                      setSavingClassifications(true);
+                      try {
+                        await onSaveClassifications(card, { is_tec: isTec, is_geo: isGeo });
+                      } catch {
+                        // O manipulador exibe o erro e mantém os valores para nova tentativa.
+                      } finally {
+                        setSavingClassifications(false);
+                      }
+                    }}
+                  >
+                    {savingClassifications ? "Salvando…" : "Salvar classificações"}
+                  </Button>
+                </div>
+              )}
+            </div>
 
             {/* Observações */}
             <div className="space-y-3">
