@@ -370,8 +370,8 @@ export async function upsertCard(input: {
     if (error) throw error;
     return {
       ...(data as ProjectCardRow),
-      is_tec: input.is_tec ?? existing.is_tec ?? false,
-      is_geo: input.is_geo ?? existing.is_geo ?? false,
+      is_tec: (data as any).is_tec ?? false,
+      is_geo: (data as any).is_geo ?? false,
     };
   }
 
@@ -403,8 +403,8 @@ export async function upsertCard(input: {
   if (error) throw error;
   return {
     ...(data as ProjectCardRow),
-    is_tec: input.is_tec ?? false,
-    is_geo: input.is_geo ?? false,
+    is_tec: (data as any).is_tec ?? false,
+    is_geo: (data as any).is_geo ?? false,
   };
 }
 
