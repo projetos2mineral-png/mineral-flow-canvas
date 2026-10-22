@@ -96,7 +96,34 @@ export type ProjectCardRow = {
   updated_at?: string | null;
   is_tec: boolean;
   is_geo: boolean;
+  /** Estimativa calculada automaticamente (sincronização), preservada como referência. */
+  auto_estimated_hours?: number | null;
+  /** Ajuste manual; quando preenchido, substitui a estimativa automática. */
+  manual_estimated_hours?: number | null;
 };
+
+/** Horas efetivas do card: ajuste manual tem prioridade sobre a automática. */
+export function effectiveEstimatedHours(
+  auto: number | null | undefined,
+  manual: number | null | undefined,
+): number | null {
+  if (manual != null && Number.isFinite(Number(manual))) return Number(manual);
+  if (auto != null && Number.isFinite(Number(auto))) return Number(auto);
+  return null;
+}
+
+/**
+ * Converte o texto digitado (aceita vírgula ou ponto) em horas.
+ * Vazio => null (remove o ajuste). Retorna undefined quando inválido.
+ */
+export function parseManualHoursInput(raw: string): number | null | undefined {
+  const text = raw.trim().replace(",", ".");
+  if (text === "") return null;
+  if (!/^\d+(\.\d+)?$/.test(text)) return undefined;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0 || value > 10000) return undefined;
+  return Math.round(value * 100) / 100;
+}
 
 /**
  * Deriva a origem predominante da estimativa a partir de `calculation_details`.
@@ -249,24 +276,76 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
   // Lotes pequenos: `.in("id", ids)` vai na URL; 1000 UUIDs (~37 KB) excedem o
   // limite do gateway e retornam HTTP 400 "Bad Request".
   const ID_CHUNK = 150;
-  const flagsById = new Map<string, { is_tec: boolean; is_geo: boolean }>();
+  const flagsById = new Map<
+    string,
+    { is_tec: boolean; is_geo: boolean; manual_estimated_hours: number | null }
+  >();
+  let withManual = true;
   for (let from = 0; from < all.length; from += ID_CHUNK) {
     const ids = all.slice(from, from + ID_CHUNK).map((card) => card.id);
-    const { data, error } = await supabase
+    let { data, error } = await (supabase as any)
       .from("dashboard_project_cards")
-      .select("id,is_tec,is_geo")
+      .select(withManual ? "id,is_tec,is_geo,manual_estimated_hours" : "id,is_tec,is_geo")
       .in("id", ids);
+    // Coluna do ajuste manual ainda não criada no banco: segue sem ela.
+    if (error && withManual && isMissingColumn(error, "manual_estimated_hours")) {
+      withManual = false;
+      ({ data, error } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select("id,is_tec,is_geo")
+        .in("id", ids));
+    }
     if (error) {
       if (isMissingClassificationColumns(error)) break;
       throw error;
     }
-    for (const row of data ?? []) flagsById.set(row.id, { is_tec: row.is_tec, is_geo: row.is_geo });
+    for (const row of (data ?? []) as any[])
+      flagsById.set(row.id, {
+        is_tec: row.is_tec,
+        is_geo: row.is_geo,
+        manual_estimated_hours:
+          row.manual_estimated_hours == null ? null : Number(row.manual_estimated_hours),
+      });
   }
-  return all.map((card) => ({
-    ...card,
-    is_tec: flagsById.get(card.id)?.is_tec ?? false,
-    is_geo: flagsById.get(card.id)?.is_geo ?? false,
-  }));
+  return all.map((card) => {
+    const flags = flagsById.get(card.id);
+    const manual = flags?.manual_estimated_hours ?? null;
+    return {
+      ...card,
+      is_tec: flags?.is_tec ?? false,
+      is_geo: flags?.is_geo ?? false,
+      auto_estimated_hours: card.total_estimated_hours ?? null,
+      manual_estimated_hours: manual,
+      total_estimated_hours: effectiveEstimatedHours(card.total_estimated_hours, manual),
+    };
+  });
+}
+
+function isMissingColumn(error: unknown, column: string): boolean {
+  const value = error as { code?: string; message?: string; details?: string };
+  const message = `${value?.message ?? ""} ${value?.details ?? ""}`.toLowerCase();
+  return (value?.code === "42703" || value?.code === "PGRST204" || message.includes("does not exist") || message.includes("schema cache")) && message.includes(column);
+}
+
+/** Salva (ou remove, com null) o ajuste manual de horas de um card. */
+export async function saveManualEstimate(
+  id: string,
+  hours: number | null,
+  updated_by?: string | null,
+): Promise<number | null> {
+  const { data, error } = await (supabase as any)
+    .from("dashboard_project_cards")
+    .update({ manual_estimated_hours: hours, updated_by, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("id,manual_estimated_hours")
+    .maybeSingle();
+  if (error) {
+    if (isMissingColumn(error, "manual_estimated_hours"))
+      throw new Error("O campo de ajuste manual ainda não foi criado no banco de dados.");
+    throw error;
+  }
+  if (!data) throw new Error("O card não foi atualizado. Verifique suas permissões e tente novamente.");
+  return data.manual_estimated_hours == null ? null : Number(data.manual_estimated_hours);
 }
 
 function isMissingClassificationColumns(error: unknown): boolean {
