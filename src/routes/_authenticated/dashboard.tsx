@@ -56,6 +56,8 @@ import {
   fetchDashboardProjects,
   fetchLanes,
   fetchCards,
+  saveManualEstimate,
+  parseManualHoursInput,
   fetchDashboardUsers,
   createLane,
   updateLane,
@@ -1395,6 +1397,35 @@ function AssigneeBoard({
     }
   };
 
+  const handleSaveManualEstimate = async (it: DashboardCard, hours: number | null) => {
+    try {
+      let baseCard = it.card;
+      if (!baseCard?.id) {
+        baseCard = await upsertCard({
+          runrunit_project_id: it.runrunit_project_id,
+          assignee_name: it.assignee_name,
+          updated_by: currentUserName,
+        });
+      }
+      const saved = await saveManualEstimate(baseCard.id, hours, currentUserName);
+      const auto = baseCard.auto_estimated_hours ?? (it.card?.manual_estimated_hours == null ? it.card?.total_estimated_hours : null) ?? null;
+      const savedCard: ProjectCardRow = {
+        ...baseCard,
+        auto_estimated_hours: auto,
+        manual_estimated_hours: saved,
+        total_estimated_hours: saved ?? auto,
+      };
+      const updatedCard = { ...it, card: savedCard };
+      setItems((previous) => previous.map((item) => (item.key === it.key ? updatedCard : item)));
+      setOpenCard((previous) => (previous?.key === it.key ? updatedCard : previous));
+      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      toast.success(saved == null ? "Estimativa automática restaurada" : "Estimativa manual salva");
+    } catch (e) {
+      toast.error("Falha ao salvar estimativa: " + (e as Error).message);
+      throw e;
+    }
+  };
+
   // Find lane by title (case-insensitive) for an assignee
   const findLaneByTitle = (assigneeName: string, titles: string[]): Lane | null =>
     findLaneByTitleLib(allLanes, assigneeName, titles);
@@ -1630,6 +1661,7 @@ function AssigneeBoard({
         onClose={() => setOpenCard(null)}
         onSaveNote={handleSaveNote}
         onSaveClassifications={handleSaveClassifications}
+        onSaveManualEstimate={handleSaveManualEstimate}
         readOnly={readOnly}
         onSendForReview={(c) => {
           setOpenCard(null);
@@ -2352,6 +2384,7 @@ function CardDetailsDialog({
   onClose,
   onSaveNote,
   onSaveClassifications,
+  onSaveManualEstimate,
   readOnly,
   onSendForReview,
 }: {
@@ -2362,6 +2395,7 @@ function CardDetailsDialog({
     c: DashboardCard,
     classifications: { is_tec: boolean; is_geo: boolean },
   ) => Promise<void>;
+  onSaveManualEstimate: (c: DashboardCard, hours: number | null) => Promise<void>;
   readOnly: boolean;
   onSendForReview: (c: DashboardCard) => void;
 }) {
@@ -2369,7 +2403,11 @@ function CardDetailsDialog({
   const [isTec, setIsTec] = useState(false);
   const [isGeo, setIsGeo] = useState(false);
   const [savingClassifications, setSavingClassifications] = useState(false);
+  const [manualHours, setManualHours] = useState("");
+  const [savingEstimate, setSavingEstimate] = useState(false);
   useEffect(() => {
+    const manual = card?.card?.manual_estimated_hours;
+    setManualHours(manual == null ? "" : String(manual).replace(".", ","));
     setNote(card?.internal_note ?? "");
     setIsTec(card?.card?.is_tec ?? false);
     setIsGeo(card?.card?.is_geo ?? false);
@@ -2566,6 +2604,82 @@ function CardDetailsDialog({
                 </div>
               )}
             </div>
+
+            {/* Estimativa de horas — automática com ajuste manual opcional */}
+            {(() => {
+              const auto = card.card?.auto_estimated_hours ?? null;
+              const manual = card.card?.manual_estimated_hours ?? null;
+              const parsed = parseManualHoursInput(manualHours);
+              const invalid = parsed === undefined;
+              const unchanged = parsed === manual;
+              const fmt = (h: number | null) =>
+                h == null ? "—" : `${Number(h).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}h`;
+              const save = async (value: number | null) => {
+                setSavingEstimate(true);
+                try {
+                  await onSaveManualEstimate(card, value);
+                } catch {
+                  // O manipulador já exibe o erro.
+                } finally {
+                  setSavingEstimate(false);
+                }
+              };
+              return (
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Estimativa de horas</h4>
+                    <p className="text-xs text-muted-foreground">
+                      A estimativa automática continua sendo calculada. Preencha um valor para substituí-la neste card.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-end gap-4">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] text-muted-foreground">Automática</span>
+                      <span className={cn("text-sm font-mono tabular-nums", manual != null && "line-through text-muted-foreground")}>
+                        {fmt(auto)}
+                      </span>
+                    </div>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-[11px] text-muted-foreground">Ajuste manual (horas)</span>
+                      <Input
+                        inputMode="decimal"
+                        value={manualHours}
+                        onChange={(e) => setManualHours(e.target.value)}
+                        placeholder="Ex.: 12,5"
+                        disabled={readOnly || savingEstimate}
+                        aria-invalid={invalid}
+                        className="h-8 w-32"
+                      />
+                    </label>
+                    {manual != null && (
+                      <span className="rounded-sm bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                        Usando ajuste manual: {fmt(manual)}
+                      </span>
+                    )}
+                  </div>
+                  {invalid && (
+                    <p className="text-xs text-destructive">Informe um número de horas válido (ex.: 8 ou 12,5).</p>
+                  )}
+                  {!readOnly && (
+                    <div className="flex justify-end gap-2">
+                      {manual != null && (
+                        <Button size="sm" variant="ghost" disabled={savingEstimate} onClick={() => save(null)}>
+                          Voltar para automática
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={savingEstimate || invalid || unchanged}
+                        onClick={() => save(parsed ?? null)}
+                      >
+                        {savingEstimate ? "Salvando…" : "Salvar estimativa"}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Observações */}
             <div className="space-y-3">
