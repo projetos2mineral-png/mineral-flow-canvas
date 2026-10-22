@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fetchCards, fetchDashboardProjects, fetchDashboardUsers, fetchLanes } from "@/lib/dashboard";
-import { fetchManualDemands } from "@/lib/manual-demands";
+import { fetchManualDemands, resolveAssigneeName } from "@/lib/manual-demands";
 import {
   buildCapacityRows,
   collectMonths,

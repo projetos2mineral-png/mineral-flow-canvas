@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,9 +23,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ClientCombobox } from "@/components/demands/ClientCombobox";
-import type { DashboardUser } from "@/lib/dashboard";
+import { fetchDashboardProjects, fetchLanes, type DashboardUser } from "@/lib/dashboard";
 import {
   DEMAND_STATUSES,
+  resolveAssigneeName,
   formatHoursHHMM,
   totalEstimatedHours,
   validateDemand,
@@ -48,10 +50,10 @@ export interface DemandDialogProps {
   onDelete?: () => void;
 }
 
-type DraftAssignee = { user_id: string; hours: string };
+type DraftAssignee = { name: string; hours: string };
 
 function emptyDraft(): DraftAssignee[] {
-  return [{ user_id: "", hours: "" }];
+  return [{ name: "", hours: "" }];
 }
 
 export function DemandDialog({
@@ -73,6 +75,7 @@ export function DemandDialog({
   const [status, setStatus] = useState<DemandStatus>("Ativa");
   const [visible, setVisible] = useState(false);
   const [assignees, setAssignees] = useState<DraftAssignee[]>(emptyDraft());
+  const nameById = useMemo(() => new Map(users.map((u) => [u.id, u.name])), [users]);
 
   // Reidrata o formulário sempre que o modal abre.
   useEffect(() => {
@@ -85,20 +88,47 @@ export function DemandDialog({
     setVisible(demand?.is_visible_on_dashboard ?? false);
     setAssignees(
       demand && demand.assignees.length > 0
-        ? demand.assignees.map((a) => ({ user_id: a.user_id, hours: String(a.estimated_hours) }))
+        ? demand.assignees.map((a) => ({
+            name: resolveAssigneeName(a, nameById) ?? "",
+            hours: String(a.estimated_hours),
+          }))
         : emptyDraft()
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, demand]);
 
-  const activeUsers = useMemo(
-    () => users.filter((u) => u.is_active !== false),
-    [users]
-  );
+  // Responsáveis que já possuem Kanban no Painel Geral (projetos e filas).
+  const projectsQ = useQuery({
+    queryKey: ["dashboard", "projects"],
+    queryFn: fetchDashboardProjects,
+    staleTime: 30_000,
+    enabled: open,
+  });
+  const lanesQ = useQuery({
+    queryKey: ["dashboard", "lanes"],
+    queryFn: fetchLanes,
+    staleTime: 30_000,
+    enabled: open,
+  });
+  const kanbanAssignees = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of projectsQ.data ?? []) {
+      const n = p.assignee_name?.trim();
+      if (n && n !== "Sem responsável") set.add(n);
+    }
+    for (const l of lanesQ.data ?? []) {
+      const n = l.assignee_name?.trim();
+      if (n && n !== "Sem responsável") set.add(n);
+    }
+    // Mantém responsáveis já salvos na demanda, mesmo que não tenham mais Kanban.
+    for (const a of assignees) if (a.name) set.add(a.name);
+    return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [projectsQ.data, lanesQ.data, assignees]);
 
   const parsed: DemandAssignee[] = useMemo(
     () =>
       assignees.map((a) => ({
-        user_id: a.user_id,
+        assignee_name: a.name || null,
         // Estimativa individual: nunca dividimos o total entre responsáveis.
         estimated_hours: Number(String(a.hours).replace(",", ".")),
       })),
@@ -129,7 +159,7 @@ export function DemandDialog({
     onSubmit(input);
   };
 
-  const usedIds = new Set(assignees.map((a) => a.user_id).filter(Boolean));
+  const usedNames = new Set(assignees.map((a) => a.name).filter(Boolean));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -197,22 +227,18 @@ export function DemandDialog({
             </div>
             <div className="space-y-2">
               {assignees.map((a, index) => (
-                <div key={`${index}-${a.user_id}`} className="flex items-center gap-2">
+                <div key={`${index}-${a.name}`} className="flex items-center gap-2">
                   <Select
-                    value={a.user_id}
-                    onValueChange={(v) => updateAssignee(index, { user_id: v })}
+                    value={a.name}
+                    onValueChange={(v) => updateAssignee(index, { name: v })}
                   >
                     <SelectTrigger className="h-9 flex-1">
-                      <SelectValue placeholder="Selecionar pessoa" />
+                      <SelectValue placeholder="Selecionar responsável do Kanban" />
                     </SelectTrigger>
                     <SelectContent>
-                      {activeUsers.map((u) => (
-                        <SelectItem
-                          key={u.id}
-                          value={u.id}
-                          disabled={usedIds.has(u.id) && u.id !== a.user_id}
-                        >
-                          {u.name}
+                      {kanbanAssignees.map((n) => (
+                        <SelectItem key={n} value={n} disabled={usedNames.has(n) && n !== a.name}>
+                          {n}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -248,7 +274,7 @@ export function DemandDialog({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setAssignees((prev) => [...prev, { user_id: "", hours: "" }])}
+              onClick={() => setAssignees((prev) => [...prev, { name: "", hours: "" }])}
             >
               <Plus className="mr-1 h-4 w-4" />
               Adicionar responsável

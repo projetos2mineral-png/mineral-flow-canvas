@@ -22,6 +22,7 @@ import {
 import { fetchDashboardUsers } from "@/lib/dashboard";
 import {
   DEMAND_STATUSES,
+  resolveAssigneeName,
   createManualDemand,
   deleteManualDemand,
   fetchManualDemands,

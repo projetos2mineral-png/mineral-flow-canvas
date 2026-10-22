@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchDashboardUsers } from "@/lib/dashboard";
 import {
   DEMAND_STATUSES,
+  resolveAssigneeName,
   createManualDemand,
   deleteManualDemand,
   fetchManualDemands,
