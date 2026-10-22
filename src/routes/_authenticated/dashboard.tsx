@@ -58,6 +58,7 @@ import {
   fetchCards,
   saveManualEstimate,
   parseManualHoursInput,
+  hoursToClockInput,
   fetchDashboardUsers,
   createLane,
   updateLane,
@@ -2407,7 +2408,7 @@ function CardDetailsDialog({
   const [savingEstimate, setSavingEstimate] = useState(false);
   useEffect(() => {
     const manual = card?.card?.manual_estimated_hours;
-    setManualHours(manual == null ? "" : String(manual).replace(".", ","));
+    setManualHours(manual == null ? "" : hoursToClockInput(Number(manual)));
     setNote(card?.internal_note ?? "");
     setIsTec(card?.card?.is_tec ?? false);
     setIsGeo(card?.card?.is_geo ?? false);
@@ -2613,7 +2614,7 @@ function CardDetailsDialog({
               const invalid = parsed === undefined;
               const unchanged = parsed === manual;
               const fmt = (h: number | null) =>
-                h == null ? "—" : `${Number(h).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}h`;
+                h == null ? "—" : formatHoursCompact(Number(h));
               const save = async (value: number | null) => {
                 setSavingEstimate(true);
                 try {
@@ -2640,12 +2641,11 @@ function CardDetailsDialog({
                       </span>
                     </div>
                     <label className="flex flex-col gap-1">
-                      <span className="text-[11px] text-muted-foreground">Ajuste manual (horas)</span>
+                      <span className="text-[11px] text-muted-foreground">Ajuste manual (hh:mm)</span>
                       <Input
-                        inputMode="decimal"
                         value={manualHours}
                         onChange={(e) => setManualHours(e.target.value)}
-                        placeholder="Ex.: 12,5"
+                        placeholder="Ex.: 1:30 ou 1,5"
                         disabled={readOnly || savingEstimate}
                         aria-invalid={invalid}
                         className="h-8 w-32"
@@ -2657,9 +2657,11 @@ function CardDetailsDialog({
                       </span>
                     )}
                   </div>
-                  {invalid && (
-                    <p className="text-xs text-destructive">Informe um número de horas válido (ex.: 8 ou 12,5).</p>
-                  )}
+                  {invalid ? (
+                    <p className="text-xs text-destructive">Informe um tempo válido (ex.: 8, 1:30 ou 1,5).</p>
+                  ) : parsed != null ? (
+                    <p className="text-xs text-muted-foreground">Exibição no card: {formatHoursCompact(parsed)}</p>
+                  ) : null}
                   {!readOnly && (
                     <div className="flex justify-end gap-2">
                       {manual != null && (

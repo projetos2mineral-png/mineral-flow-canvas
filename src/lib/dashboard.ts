@@ -117,12 +117,33 @@ export function effectiveEstimatedHours(
  * Vazio => null (remove o ajuste). Retorna undefined quando inválido.
  */
 export function parseManualHoursInput(raw: string): number | null | undefined {
-  const text = raw.trim().replace(",", ".");
+  const text = raw.trim().toLowerCase().replace(/\s+/g, "");
   if (text === "") return null;
-  if (!/^\d+(\.\d+)?$/.test(text)) return undefined;
-  const value = Number(text);
+  let value: number;
+  // Formato relógio: "1:45", "01:30", "1h45", "1h", "45min"
+  const clock = /^(\d+)(?::|h)(\d{1,2})?(?:m|min)?$/.exec(text);
+  const onlyMin = /^(\d+)(?:m|min)$/.exec(text);
+  if (clock) {
+    const mins = clock[2] ? Number(clock[2]) : 0;
+    if (mins > 59) return undefined;
+    value = Number(clock[1]) + mins / 60;
+  } else if (onlyMin) {
+    value = Number(onlyMin[1]) / 60;
+  } else {
+    const dec = text.replace(",", ".");
+    if (!/^\d+(\.\d+)?$/.test(dec)) return undefined;
+    value = Number(dec);
+  }
   if (!Number.isFinite(value) || value < 0 || value > 10000) return undefined;
   return Math.round(value * 100) / 100;
+}
+
+/** Converte horas decimais para texto de relógio editável ("1:45"). */
+export function hoursToClockInput(hours: number): string {
+  const totalMin = Math.round(hours * 60);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
 /**

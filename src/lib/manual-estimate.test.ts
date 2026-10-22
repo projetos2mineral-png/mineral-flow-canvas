@@ -21,3 +21,14 @@ describe("estimativa manual", () => {
     expect(parseManualHoursInput("abc")).toBeUndefined();
   });
 });
+
+describe("entrada em formato relógio", () => {
+  it("1:30 vira 1,5h e 1h45 vira 1,75h", () => {
+    expect(parseManualHoursInput("1:30")).toBe(1.5);
+    expect(parseManualHoursInput("1h45")).toBe(1.75);
+    expect(parseManualHoursInput("45min")).toBe(0.75);
+  });
+  it("rejeita minutos acima de 59", () => {
+    expect(parseManualHoursInput("1:75")).toBeUndefined();
+  });
+});
