@@ -2407,7 +2407,7 @@ function CardDetailsDialog({
   const [savingEstimate, setSavingEstimate] = useState(false);
   useEffect(() => {
     const manual = card?.card?.manual_estimated_hours;
-    setManualHours(manual == null ? "" : String(manual).replace(".", ","));
+    setManualHours(manual == null ? "" : hoursToClockInput(Number(manual)));
     setNote(card?.internal_note ?? "");
     setIsTec(card?.card?.is_tec ?? false);
     setIsGeo(card?.card?.is_geo ?? false);
@@ -2613,7 +2613,7 @@ function CardDetailsDialog({
               const invalid = parsed === undefined;
               const unchanged = parsed === manual;
               const fmt = (h: number | null) =>
-                h == null ? "—" : `${Number(h).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}h`;
+                h == null ? "—" : formatHoursCompact(Number(h));
               const save = async (value: number | null) => {
                 setSavingEstimate(true);
                 try {
