@@ -1,6 +1,7 @@
 import { monthlyLaneTitle } from "@/lib/dashboard";
 import type { DashboardUser } from "@/lib/dashboard";
 import {
+  resolveAssigneeName,
   totalEstimatedHours,
   type ManualDemand,
 } from "@/lib/manual-demands";
@@ -58,15 +59,15 @@ export function buildDemandBoardCards(
 
     const totalHours = totalEstimatedHours(demand.assignees);
     const people = demand.assignees.map((a) => ({
-      name: nameById.get(a.user_id) ?? "Sem responsável",
+      name: resolveAssigneeName(a, nameById) ?? "Sem responsável",
       hours: Number(a.estimated_hours) || 0,
     }));
 
     for (const a of demand.assignees) {
-      const assigneeName = nameById.get(a.user_id);
+      const assigneeName = resolveAssigneeName(a, nameById);
       if (!assigneeName) continue;
       out.push({
-        key: `demand:${demand.id}:${a.user_id}`,
+        key: `demand:${demand.id}:${assigneeName}`,
         demand,
         assigneeName,
         ownHours: Number(a.estimated_hours) || 0,

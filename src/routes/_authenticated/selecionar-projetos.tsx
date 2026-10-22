@@ -22,6 +22,7 @@ import {
 import { fetchDashboardUsers } from "@/lib/dashboard";
 import {
   DEMAND_STATUSES,
+  resolveAssigneeName,
   createManualDemand,
   deleteManualDemand,
   fetchManualDemands,
@@ -1434,7 +1435,7 @@ function SelecionarProjetosPage() {
                           {d.assignees.length === 0
                             ? "—"
                             : d.assignees
-                                .map((a) => `${userNameById.get(a.user_id) ?? "Desconhecido"} (${formatHoursHHMM(a.estimated_hours)})`)
+                                .map((a) => `${resolveAssigneeName(a, userNameById) ?? "Desconhecido"} (${formatHoursHHMM(a.estimated_hours)})`)
                                 .join(", ")}
                         </span>
                       </TableCell>

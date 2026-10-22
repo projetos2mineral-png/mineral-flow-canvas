@@ -29,6 +29,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchDashboardUsers } from "@/lib/dashboard";
 import {
   DEMAND_STATUSES,
+  resolveAssigneeName,
   createManualDemand,
   deleteManualDemand,
   fetchManualDemands,
@@ -319,7 +320,7 @@ function DemandasAvulsasPage() {
                       : d.assignees
                           .map(
                             (a) =>
-                              `${userNameById.get(a.user_id) ?? "Desconhecido"} (${formatHoursHHMM(
+                              `${resolveAssigneeName(a, userNameById) ?? "Desconhecido"} (${formatHoursHHMM(
                                 a.estimated_hours
                               )})`
                           )

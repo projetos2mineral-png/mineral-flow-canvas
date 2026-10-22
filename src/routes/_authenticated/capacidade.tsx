@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { fetchCards, fetchDashboardProjects, fetchDashboardUsers, fetchLanes } from "@/lib/dashboard";
-import { fetchManualDemands } from "@/lib/manual-demands";
+import { fetchManualDemands, resolveAssigneeName } from "@/lib/manual-demands";
 import {
   buildCapacityRows,
   collectMonths,
@@ -98,7 +98,7 @@ function CapacityPage() {
     for (const demand of demands.data ?? []) {
       if (demand.status !== "Ativa") continue;
       for (const a of demand.assignees ?? []) {
-        const name = nameById.get(a.user_id)?.trim();
+        const name = resolveAssigneeName(a, nameById)?.trim();
         if (name && name !== "Sem responsável") {
           set.add(name);
         }
