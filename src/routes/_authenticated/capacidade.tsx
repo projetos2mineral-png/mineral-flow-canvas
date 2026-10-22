@@ -98,7 +98,7 @@ function CapacityPage() {
     for (const demand of demands.data ?? []) {
       if (demand.status !== "Ativa") continue;
       for (const a of demand.assignees ?? []) {
-        const name = nameById.get(a.user_id)?.trim();
+        const name = resolveAssigneeName(a, nameById)?.trim();
         if (name && name !== "Sem responsável") {
           set.add(name);
         }

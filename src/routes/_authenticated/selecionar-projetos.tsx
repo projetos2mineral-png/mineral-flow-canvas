@@ -1434,7 +1434,7 @@ function SelecionarProjetosPage() {
                           {d.assignees.length === 0
                             ? "—"
                             : d.assignees
-                                .map((a) => `${userNameById.get(a.user_id) ?? "Desconhecido"} (${formatHoursHHMM(a.estimated_hours)})`)
+                                .map((a) => `${resolveAssigneeName(a, userNameById) ?? "Desconhecido"} (${formatHoursHHMM(a.estimated_hours)})`)
                                 .join(", ")}
                         </span>
                       </TableCell>

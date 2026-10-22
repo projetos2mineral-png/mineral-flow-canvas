@@ -319,7 +319,7 @@ function DemandasAvulsasPage() {
                       : d.assignees
                           .map(
                             (a) =>
-                              `${userNameById.get(a.user_id) ?? "Desconhecido"} (${formatHoursHHMM(
+                              `${resolveAssigneeName(a, userNameById) ?? "Desconhecido"} (${formatHoursHHMM(
                                 a.estimated_hours
                               )})`
                           )

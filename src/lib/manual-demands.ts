@@ -19,8 +19,21 @@ export type DemandStatus = (typeof DEMAND_STATUSES)[number];
 
 export interface DemandAssignee {
   id?: string;
-  user_id: string;
+  /** Legado: vínculo antigo com dashboard_users. Novas demandas usam assignee_name. */
+  user_id?: string | null;
+  /** Nome do responsável do Kanban (mesmo nome usado nas filas do Painel Geral). */
+  assignee_name: string | null;
   estimated_hours: number;
+}
+
+/** Nome do responsável: prioriza o responsável do Kanban; cai no usuário legado. */
+export function resolveAssigneeName(
+  a: DemandAssignee,
+  nameById: Map<string, string>,
+): string | null {
+  const direct = a.assignee_name?.trim();
+  if (direct) return direct;
+  return a.user_id ? nameById.get(a.user_id) ?? null : null;
 }
 
 export interface ManualDemand {
@@ -87,7 +100,7 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
   const run = async (withClient: boolean) =>
     await (supabase as any)
       .from(TABLE)
-      .select(`${demandColumns(withClient)},${ASSIGNEES_TABLE}(id,user_id,estimated_hours)`)
+      .select(`${demandColumns(withClient)},${ASSIGNEES_TABLE}(id,user_id,assignee_name,estimated_hours)`)
       .order("desired_date", { ascending: true });
 
   let { data, error } = await run(clientNameSupported !== false);
@@ -114,7 +127,8 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
     updated_at: row.updated_at ?? null,
     assignees: ((row[ASSIGNEES_TABLE] ?? []) as any[]).map((a) => ({
       id: a.id,
-      user_id: a.user_id,
+      user_id: a.user_id ?? null,
+      assignee_name: a.assignee_name ?? null,
       estimated_hours: Number(a.estimated_hours) || 0,
     })),
   }));
@@ -127,9 +141,10 @@ export function validateDemand(input: ManualDemandInput): string | null {
   if (input.assignees.length === 0) return "Adicione ao menos um responsável.";
   const seen = new Set<string>();
   for (const a of input.assignees) {
-    if (!a.user_id) return "Selecione o responsável em todas as linhas.";
-    if (seen.has(a.user_id)) return "O mesmo responsável não pode ser adicionado duas vezes.";
-    seen.add(a.user_id);
+    const key = (a.assignee_name ?? "").trim().toLowerCase();
+    if (!key) return "Selecione o responsável em todas as linhas.";
+    if (seen.has(key)) return "O mesmo responsável não pode ser adicionado duas vezes.";
+    seen.add(key);
     if (!Number.isFinite(a.estimated_hours) || a.estimated_hours <= 0) {
       return "Cada responsável precisa de uma estimativa maior que zero.";
     }
@@ -162,7 +177,8 @@ async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
   const { error } = await (supabase as any).from(ASSIGNEES_TABLE).insert(
     assignees.map((a) => ({
       demand_id: demandId,
-      user_id: a.user_id,
+      user_id: null,
+      assignee_name: a.assignee_name?.trim() ?? null,
       estimated_hours: a.estimated_hours,
     }))
   );
