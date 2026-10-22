@@ -58,6 +58,7 @@ import {
   fetchCards,
   saveManualEstimate,
   parseManualHoursInput,
+  hoursToClockInput,
   fetchDashboardUsers,
   createLane,
   updateLane,
