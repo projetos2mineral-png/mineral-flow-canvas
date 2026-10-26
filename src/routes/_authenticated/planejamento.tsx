@@ -123,6 +123,37 @@ const MONTH_NAMES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 const WEEKDAYS_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+const CLIENT_COLOR_CLASSES = [
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-cyan-500",
+  "bg-indigo-500",
+  "bg-orange-500",
+  "bg-teal-500",
+  "bg-fuchsia-500",
+  "bg-lime-500",
+  "bg-blue-500",
+];
+const UNKNOWN_CLIENT_COLOR_CLASS = "bg-slate-400";
+
+function normalizeClientName(clientName: string | null | undefined) {
+  const normalized = clientName?.trim().toLocaleLowerCase("pt-BR");
+  return normalized || null;
+}
+
+function clientColorClass(clientName: string | null | undefined) {
+  const normalized = normalizeClientName(clientName);
+  if (!normalized) return UNKNOWN_CLIENT_COLOR_CLASS;
+
+  let hash = 0;
+  for (const character of normalized) {
+    hash = (hash * 31 + character.codePointAt(0)!) >>> 0;
+  }
+  return CLIENT_COLOR_CLASSES[hash % CLIENT_COLOR_CLASSES.length];
+}
 
 function PlanningPage() {
   const qc = useQueryClient();
@@ -639,6 +670,14 @@ function YearView({
                 const iso = toISODate(d);
                 const inMonth = d.getMonth() === m;
                 const count = (byDate.get(iso) ?? []).length;
+                const dayItems = byDate.get(iso) ?? [];
+                const clientNames = Array.from(
+                  new Set(dayItems.map((item) => normalizeClientName(item.client_name) ?? "__unknown__"))
+                );
+                const clientTitle = dayItems
+                  .map((item) => item.client_name?.trim() || "Cliente não informado")
+                  .filter((name, index, names) => names.indexOf(name) === index)
+                  .join(", ");
                 return (
                   <button
                     key={iso}
@@ -650,11 +689,23 @@ function YearView({
                       inMonth && count > 0 && "bg-primary/15 text-primary font-semibold hover:bg-primary/25",
                       inMonth && count === 0 && "text-foreground/70"
                     )}
-                    title={count > 0 ? `${count} projeto(s)` : ""}
+                    title={count > 0 ? `${count} projeto(s)${clientTitle ? `: ${clientTitle}` : ""}` : ""}
                   >
                     {d.getDate()}
                     {count > 0 && (
-                      <span className="absolute bottom-0.5 right-0.5 h-1 w-1 rounded-full bg-primary" />
+                      <span className="absolute bottom-0.5 left-0.5 flex max-w-[calc(100%-0.75rem)] gap-px">
+                        {clientNames.slice(0, 3).map((clientName) => (
+                          <span
+                            key={clientName}
+                            className={cn(
+                              "h-1 w-1 rounded-full",
+                              clientName === "__unknown__"
+                                ? UNKNOWN_CLIENT_COLOR_CLASS
+                                : clientColorClass(clientName)
+                            )}
+                          />
+                        ))}
+                      </span>
                     )}
                   </button>
                 );
@@ -706,21 +757,33 @@ function CompactCard({
 }) {
   const status = normalizePlanningStatus(project.planning_status);
   const hasDetail = !!(project.detail && project.detail.trim());
+  const clientName = project.client_name?.trim() || "Cliente não informado";
+  const clientIsIdentified = !!normalizeClientName(project.client_name);
   return (
     <div
       onClick={onClick}
       className={cn(
-        "rounded-md border px-2 py-1 cursor-pointer hover:shadow-sm transition-shadow",
+        "relative overflow-hidden rounded-md border px-2 py-1 cursor-pointer hover:shadow-sm transition-shadow",
         PLANNING_STATUS_CLASS[status],
         dragging && "shadow-lg opacity-90",
         compact ? "text-[10.5px] leading-tight" : "text-xs"
       )}
-      title={project.project_name}
+      title={`${project.project_name} · ${clientName}`}
     >
-      <div className="flex items-center gap-1">
-        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", PLANNING_STATUS_DOT[status])} />
-        <span className="font-medium truncate flex-1">{project.project_name}</span>
-        {hasDetail && <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />}
+      <span
+        aria-hidden="true"
+        className={cn(
+          "absolute inset-y-0 left-0 w-1",
+          clientIsIdentified ? clientColorClass(project.client_name) : UNKNOWN_CLIENT_COLOR_CLASS
+        )}
+      />
+      <div className="min-w-0">
+        <div className="flex items-center gap-1">
+          <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", PLANNING_STATUS_DOT[status])} />
+          <span className="font-medium truncate flex-1">{project.project_name}</span>
+          {hasDetail && <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />}
+        </div>
+        <div className="truncate text-[0.85em] text-muted-foreground">{clientName}</div>
       </div>
     </div>
   );
