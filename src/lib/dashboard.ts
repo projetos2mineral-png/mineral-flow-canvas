@@ -400,11 +400,18 @@ export async function updateLane(id: string, patch: Partial<Pick<Lane, "title" |
 }
 
 export async function deleteLane(id: string) {
-  // detach cards first so we don't lose them
-  await (supabase as any)
+  // Move os cards e revisões da fila para "Sem fila" (lane_id = null) antes
+  // de excluir, para não perder nada nem violar chaves estrangeiras.
+  const { error: cardsErr } = await (supabase as any)
     .from("dashboard_project_cards")
     .update({ lane_id: null })
     .eq("lane_id", id);
+  if (cardsErr) throw cardsErr;
+  const { error: reviewsErr } = await (supabase as any)
+    .from("dashboard_reviews")
+    .update({ lane_id: null })
+    .eq("lane_id", id);
+  if (reviewsErr) throw reviewsErr;
   const { error } = await (supabase as any)
     .from("dashboard_lanes")
     .delete()
@@ -586,15 +593,11 @@ export async function ensureDefaultMonthlyLanes(
   if (bootstrappedAssignees.has(key)) return false;
   bootstrappedAssignees.add(key);
 
-  const already = new Set(
-    existingLanes
-      .filter((l) => l.assignee_name === assignee_name)
-      .map((l) => l.title.trim().toLowerCase())
-  );
-  const missing = DEFAULT_MONTHLY_LANE_TITLES.filter(
-    (t) => !already.has(t.toLowerCase())
-  );
-  if (missing.length === 0) return false;
+  // Só cria os meses padrão em quadros novos (sem nenhuma fila). Se o quadro
+  // já tem filas, respeita exclusões feitas pelo usuário e não recria nada.
+  const own = existingLanes.filter((l) => l.assignee_name === assignee_name);
+  if (own.length > 0) return false;
+  const missing = [...DEFAULT_MONTHLY_LANE_TITLES];
   const basePosition = existingLanes
     .filter((l) => l.assignee_name === assignee_name)
     .reduce((max, l) => Math.max(max, l.position ?? 0), -1);

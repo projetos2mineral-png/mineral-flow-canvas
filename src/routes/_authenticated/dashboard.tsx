@@ -520,6 +520,8 @@ function DashboardPage() {
   useEffect(() => {
     if (readOnly) return;
     if (assignees.length === 0) return;
+    // Só decide após as filas carregarem, senão um quadro existente pareceria vazio.
+    if (!lanesQ.isSuccess) return;
     (async () => {
       let anyCreated = false;
       // Primeiro, consolida duplicatas eventualmente existentes.
