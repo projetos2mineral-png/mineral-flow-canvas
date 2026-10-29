@@ -1284,6 +1284,20 @@ function AssigneeBoard({
       }),
     );
 
+    // Atualiza também o cache de cards: qualquer recarga intermediária (ex.: lista
+    // de projetos) recalcula o quadro a partir do cache e, sem isso, devolvia o
+    // card para a fila antiga imediatamente após soltar.
+    const byId = new Map(updates.filter((u) => u.id).map((u) => [u.id as string, u]));
+    await qc.cancelQueries({ queryKey: ["dashboard", "cards"] });
+    qc.setQueryData<ProjectCardRow[]>(["dashboard", "cards"], (old) =>
+      old?.map((c) => {
+        const u = byId.get(c.id);
+        return u
+          ? { ...c, lane_id: u.lane_id, position: u.position, manually_positioned: true }
+          : c;
+      }),
+    );
+
     try {
       const existing = updates.filter((u) => u.id) as {
         id: string;
@@ -1309,7 +1323,6 @@ function AssigneeBoard({
         });
       }
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-      qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
     } catch (err) {
       toast.error("Falha ao mover: " + (err as Error).message);
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
