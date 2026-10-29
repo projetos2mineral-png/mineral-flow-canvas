@@ -683,10 +683,12 @@ export async function updateCard(
 }
 
 export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {
-  // Sequential updates to keep RLS happy without RPC
+  // Lotes paralelos (rápido mesmo em filas grandes) e verificação de linhas
+  // afetadas: um update que não grava nada (ex.: RLS) agora gera erro visível.
   const now = new Date().toISOString();
-  for (const u of updates) {
-    const { error } = await (supabase as any)
+  const CHUNK = 8;
+  const updateOne = async (u: (typeof updates)[number]) => {
+    const { data, error } = await (supabase as any)
       .from("dashboard_project_cards")
       .update({
         lane_id: u.lane_id,
@@ -696,8 +698,15 @@ export async function bulkUpdateCardPositions(updates: { id: string; lane_id: st
         updated_by: u.updated_by,
         updated_at: now,
       })
-      .eq("id", u.id);
+      .eq("id", u.id)
+      .select("id");
     if (error) throw error;
+    if (!data || data.length === 0) {
+      throw new Error("Nenhuma alteração foi gravada (sem permissão ou card inexistente).");
+    }
+  };
+  for (let i = 0; i < updates.length; i += CHUNK) {
+    await Promise.all(updates.slice(i, i + CHUNK).map(updateOne));
   }
 }
 
