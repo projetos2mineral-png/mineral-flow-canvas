@@ -1,8 +1,4 @@
-import {
-  closestCorners,
-  pointerWithin,
-  type CollisionDetection,
-} from "@dnd-kit/core";
+import { closestCorners, pointerWithin, type CollisionDetection } from "@dnd-kit/core";
 
 /** Prefixo dos itens arrastáveis que representam colunas (filas) inteiras. */
 export const LANE_ITEM_PREFIX = "laneItem:";
@@ -92,7 +88,9 @@ export function resolveCardDropTarget(
   if (overId === activeId) return { kind: "invalid", reason: "self" };
   const laneLevel = isLaneLevelTarget(overId);
   const laneId = laneLevel
-    ? overId.slice(overId.startsWith(LANE_BODY_PREFIX) ? LANE_BODY_PREFIX.length : LANE_ITEM_PREFIX.length)
+    ? overId.slice(
+        overId.startsWith(LANE_BODY_PREFIX) ? LANE_BODY_PREFIX.length : LANE_ITEM_PREFIX.length,
+      )
     : ctx.laneOfCard(overId);
   if (laneId == null) return { kind: "invalid", reason: "unknown-card" };
   const overCardKey = laneLevel ? null : overId;
@@ -131,9 +129,10 @@ export function planCardMove<T extends MovableCard>(args: {
   const toLaneId = target.kind === "lane" ? target.laneId : unassignedId;
   const laneValue = target.kind === "lane" ? target.laneId : null;
 
-  let toIdx = target.atEnd || !target.overCardKey
-    ? dest.length
-    : dest.findIndex((c) => c.key === target.overCardKey);
+  let toIdx =
+    target.atEnd || !target.overCardKey
+      ? dest.length
+      : dest.findIndex((c) => c.key === target.overCardKey);
   if (toIdx < 0) toIdx = dest.length;
 
   let order: T[];

@@ -6,7 +6,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * Permite verificar que o `lane_id` persistido é o solicitado e que uma recarga
  * (nova leitura) devolve o valor gravado.
  */
-type Row = { id: string; runrunit_project_id: number; assignee_name: string; lane_id: string | null; position: number };
+type Row = {
+  id: string;
+  runrunit_project_id: number;
+  assignee_name: string;
+  lane_id: string | null;
+  position: number;
+};
 const db: { rows: Row[]; failWith: string | null } = { rows: [], failWith: null };
 
 function table() {
@@ -14,16 +20,26 @@ function table() {
   const filters: [keyof Row, unknown][] = [];
   const match = () => db.rows.filter((r) => filters.every(([k, v]) => r[k] === v));
   const q: any = {
-    update(p: Partial<Row>) { patch = p; return q; },
-    select() { return q; },
-    eq(k: keyof Row, v: unknown) { filters.push([k, v]); return q; },
+    update(p: Partial<Row>) {
+      patch = p;
+      return q;
+    },
+    select() {
+      return q;
+    },
+    eq(k: keyof Row, v: unknown) {
+      filters.push([k, v]);
+      return q;
+    },
     then(res: (v: unknown) => void) {
       if (db.failWith) return res({ data: null, error: { message: db.failWith } });
       const rows = match();
       if (patch) rows.forEach((r) => Object.assign(r, patch));
       return res({ data: rows.map((r) => ({ ...r })), error: null });
     },
-    async maybeSingle() { return { data: match()[0] ?? null, error: null }; },
+    async maybeSingle() {
+      return { data: match()[0] ?? null, error: null };
+    },
     async single() {
       const rows = match();
       if (patch) rows.forEach((r) => Object.assign(r, patch));
@@ -48,7 +64,12 @@ beforeEach(() => {
 });
 
 const upd = (o: Partial<Parameters<typeof bulkUpdateCardPositions>[0][number]>) => ({
-  id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: "nov", position: 3, ...o,
+  id: "c1",
+  runrunit_project_id: 1,
+  assignee_name: "Laura",
+  lane_id: "nov",
+  position: 3,
+  ...o,
 });
 
 describe("persistência da movimentação", () => {

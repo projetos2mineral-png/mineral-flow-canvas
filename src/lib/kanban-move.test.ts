@@ -29,7 +29,9 @@ function move(activeKey: string, overId: string) {
   if (target.kind === "invalid") return { target, plan: null };
   const from = ctx.laneOfCard(activeKey)!;
   const to = target.kind === "lane" ? target.laneId : U;
-  const active = Object.values(board).flat().find((c) => c.key === activeKey)!;
+  const active = Object.values(board)
+    .flat()
+    .find((c) => c.key === activeKey)!;
   return {
     target,
     plan: planCardMove({ dest: board[to], active, fromLaneId: from, target, unassignedId: U }),
