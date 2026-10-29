@@ -19,6 +19,7 @@ function table() {
   let patch: Partial<Row> | null = null;
   const filters: [keyof Row, unknown][] = [];
   const match = () => db.rows.filter((r) => filters.every(([k, v]) => r[k] === v));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fake encadeável do cliente
   const q: any = {
     update(p: Partial<Row>) {
       patch = p;
