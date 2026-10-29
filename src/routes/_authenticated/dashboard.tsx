@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   kanbanCollisionDetection,
-  resolveCardDropLane,
-  isLaneLevelTarget,
+  resolveCardDropTarget,
+  planCardMove,
 } from "@/lib/kanban-dnd";
 import { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1145,31 +1145,16 @@ function AssigneeBoard({
     if (!it) return null;
     return it.lane_id && grouped.has(it.lane_id) ? it.lane_id : UNASSIGNED_LANE;
   };
-  // Usado apenas no arraste de CARDS: aqui `laneItem:` significa "solto sobre a coluna".
-  const findContainer = (id: string): string | null => {
-    const lane = resolveCardDropLane(id, laneOfCard);
-    if (lane && lane !== UNASSIGNED_LANE && !grouped.has(lane)) return null;
-    return lane;
+  const dropContext = {
+    unassignedId: UNASSIGNED_LANE,
+    laneExists: (id: string) => id !== UNASSIGNED_LANE && grouped.has(id),
+    laneOfCard,
   };
 
   const onDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
 
-  const onDragOver = (e: DragOverEvent) => {
-    const { active, over } = e;
-    if (!over) return;
-    const activeKey = String(active.id);
-    if (activeKey.startsWith("laneItem:")) return; // handled in onDragEnd
-    // Mantém preview visual mínimo; a lógica de preservação exata de posição
-    // e de prevalência manual é resolvida integralmente no onDragEnd
-    // usando a ordem exibida (manual primeiro + data). Não mutamos lane aqui
-    // para que findContainer/toIdx no onDragEnd reflitam a posição visual
-    // exata onde o card foi solto.
-    const fromLane = findContainer(String(active.id));
-    const toLane = findContainer(String(over.id));
-    if (!fromLane || !toLane || fromLane === toLane) return;
-    // Sem mutação otimista de lane_id aqui — evita inconsistência entre
-    // ordem exibida (agrupada por data) e índices de drop.
-  };
+  // A pré-visualização não altera a fila: toda a decisão acontece no onDragEnd.
+  const onDragOver = (_e: DragOverEvent) => {};
 
   const onDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e;
@@ -1202,119 +1187,101 @@ function AssigneeBoard({
       return;
     }
 
-    const toLane = findContainer(overKey);
-    if (!toLane) return;
-
     const activeCard = items.find((i) => i.key === activeKey);
     if (!activeCard) return;
 
-    const fromLane =
-      activeCard.lane_id && grouped.has(activeCard.lane_id) ? activeCard.lane_id : UNASSIGNED_LANE;
-
-    // Ordem exibida da fila destino (manual prevalece + auto por data) — é exatamente o que o usuário vê
-    const destDisplayed = grouped.get(toLane) ?? [];
-
-    let toIdx: number;
-    if (isLaneLevelTarget(overKey)) {
-      toIdx = destDisplayed.length;
-    } else {
-      toIdx = destDisplayed.findIndex((c) => c.key === overKey);
-      if (toIdx === -1) {
-        // Over pode ser card da mesma fila ou de outra; se não encontrado, anexa ao final
-        toIdx = destDisplayed.length;
+    // Destino explícito: "Sem fila" só quando o usuário soltou de fato nela.
+    const target = resolveCardDropTarget(overKey, activeKey, dropContext);
+    if (target.kind === "invalid") {
+      if (target.reason !== "self") {
+        console.warn("[kanban] destino de soltura não identificado", { overKey, reason: target.reason });
+        toast.warning("Não foi possível identificar a fila de destino. Solte o card dentro de uma fila.");
       }
+      return;
     }
 
-    let reordered: DashboardCard[];
-    if (fromLane === toLane) {
-      const fromIdx = destDisplayed.findIndex((c) => c.key === activeKey);
-      if (fromIdx === -1 || fromIdx === toIdx) return;
-      reordered = arrayMove(destDisplayed, fromIdx, toIdx);
-    } else {
-      // Entre filas: insere na posição visual exata onde foi solto
-      reordered = [...destDisplayed.slice(0, toIdx), activeCard, ...destDisplayed.slice(toIdx)];
-    }
-
-    const updates: {
-      id: string | null;
-      runrunit_project_id: number;
-      lane_id: string | null;
-      position: number;
-      updated_by?: string | null;
-    }[] = [];
-    reordered.forEach((it, idx) => {
-      const lane_id = toLane === UNASSIGNED_LANE ? null : toLane;
-      // Preserva exatamente onde foi solto: atualiza posição sequencial conforme ordem visual.
-      // bulkUpdate marcará como manually_positioned=true, garantindo prevalência manual.
-      if (
-        it.position !== idx ||
-        it.lane_id !== lane_id ||
-        it.card == null ||
-        it.key === activeKey
-      ) {
-        updates.push({
-          id: it.card?.id ?? null,
-          runrunit_project_id: it.runrunit_project_id,
-          lane_id,
-          position: idx,
-          updated_by: currentUserName,
-        });
-      }
+    const fromLane = laneOfCard(activeKey) ?? UNASSIGNED_LANE;
+    const toLane = target.kind === "lane" ? target.laneId : UNASSIGNED_LANE;
+    const plan = planCardMove({
+      dest: (grouped.get(toLane) ?? []).map((c) => ({ ...c, hasRow: c.card != null })),
+      active: { ...activeCard, hasRow: activeCard.card != null },
+      fromLaneId: fromLane,
+      target,
+      unassignedId: UNASSIGNED_LANE,
     });
+    if (!plan) return;
 
+    const updates = plan.changes.map(({ item, position }) => ({
+      id: item.card?.id ?? null,
+      runrunit_project_id: item.runrunit_project_id,
+      assignee_name: assignee,
+      lane_id: plan.laneValue,
+      position,
+      updated_by: currentUserName,
+    }));
+    const byProject = new Map(updates.map((u) => [u.runrunit_project_id, u]));
+
+    // Snapshot para reverter caso a gravação do card arrastado falhe.
+    const prevItems = items;
+    const prevCards = qc.getQueryData<ProjectCardRow[]>(["dashboard", "cards"]);
+
+    // Atualização otimista (estado local + cache), sem refetch intermediário.
+    await qc.cancelQueries({ queryKey: ["dashboard", "cards"] });
     setItems((prev) =>
       prev.map((it) => {
-        const u = updates.find((u) => u.runrunit_project_id === it.runrunit_project_id);
+        const u = byProject.get(it.runrunit_project_id);
         if (!u) return it;
-        // Atualiza otimisticamente também o flag manual para que a ordenação
-        // agrupada (manual primeiro) reflita imediatamente a posição exata solta
-        const nextCard = it.card
-          ? { ...it.card, manually_positioned: true as const, position: u.position }
-          : it.card;
-        // Para cards ainda sem linha no banco (card==null), criamos um stub manual
-        const stubCard = !it.card
-          ? ({ manually_positioned: true, position: u.position } as unknown as ProjectCardRow)
-          : nextCard;
-        return {
-          ...it,
-          lane_id: u.lane_id,
-          position: u.position,
-          card: stubCard as ProjectCardRow,
-        };
+        const card = (
+          it.card
+            ? { ...it.card, lane_id: u.lane_id, position: u.position, manually_positioned: true }
+            : { lane_id: u.lane_id, position: u.position, manually_positioned: true }
+        ) as ProjectCardRow;
+        return { ...it, lane_id: u.lane_id, position: u.position, card };
       }),
     );
-
-    // Atualiza também o cache de cards: qualquer recarga intermediária (ex.: lista
-    // de projetos) recalcula o quadro a partir do cache e, sem isso, devolvia o
-    // card para a fila antiga imediatamente após soltar.
-    const byId = new Map(updates.filter((u) => u.id).map((u) => [u.id as string, u]));
-    await qc.cancelQueries({ queryKey: ["dashboard", "cards"] });
     qc.setQueryData<ProjectCardRow[]>(["dashboard", "cards"], (old) =>
       old?.map((c) => {
-        const u = byId.get(c.id);
-        return u
-          ? { ...c, lane_id: u.lane_id, position: u.position, manually_positioned: true }
-          : c;
+        const u = c.assignee_name === assignee ? byProject.get(c.runrunit_project_id) : undefined;
+        return u ? { ...c, lane_id: u.lane_id, position: u.position, manually_positioned: true } : c;
       }),
     );
 
-    try {
-      const all = updates.map((u) => ({ ...u, assignee_name: assignee }));
-      // Card arrastado primeiro: precisa gravar de fato (update ou criação).
-      const first = all.filter((u) => u.runrunit_project_id === activeCard.runrunit_project_id);
-      const rest = all.filter((u) => u.runrunit_project_id !== activeCard.runrunit_project_id);
-      if (first.length) {
-        const r = await bulkUpdateCardPositions(first);
-        if (r.failed > 0) throw new Error("não foi possível gravar a nova fila do card.");
-      }
-      if (rest.length) {
-        const r = await bulkUpdateCardPositions(rest);
-        if (r.failed > 0) toast.warning(`${r.failed} card(s) não tiveram a ordem atualizada.`);
-      }
+    const [first, ...rest] = updates;
+    const firstResult = await bulkUpdateCardPositions([first]);
+    if (firstResult.failed > 0) {
+      const msg = firstResult.errors[0]?.message ?? "erro desconhecido";
+      console.error("[kanban] falha ao gravar movimentação", { update: first, errors: firstResult.errors });
+      toast.error("O card não foi movido: " + msg);
+      setItems(prevItems);
+      if (prevCards) qc.setQueryData(["dashboard", "cards"], prevCards);
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-    } catch (err) {
-      toast.error("Falha ao mover: " + (err as Error).message);
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      return;
+    }
+
+    if (rest.length) {
+      const r = await bulkUpdateCardPositions(rest);
+      if (r.failed > 0) {
+        console.error("[kanban] falha ao reordenar cards da fila", r.errors);
+        toast.warning(`${r.failed} card(s) da fila não tiveram a ordem atualizada.`);
+      }
+    }
+
+    // Recarrega do servidor e confere se a leitura reflete o que foi gravado.
+    await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+    const fresh = qc.getQueryData<ProjectCardRow[]>(["dashboard", "cards"]);
+    const readBack = fresh?.find(
+      (c) => c.assignee_name === assignee && c.runrunit_project_id === first.runrunit_project_id,
+    );
+    if (readBack && (readBack.lane_id ?? null) !== first.lane_id) {
+      console.error("[kanban] gravação confirmada, mas a leitura retornou outra fila", {
+        expected: first.lane_id,
+        got: readBack.lane_id,
+        confirmed: firstResult.confirmed.get(first.runrunit_project_id),
+        viewRowId: readBack.id,
+      });
+      toast.error(
+        "A nova fila foi gravada, mas a leitura do painel ainda mostra a fila anterior. Avise o suporte técnico.",
+      );
     }
   };
 
