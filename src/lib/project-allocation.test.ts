@@ -90,6 +90,16 @@ beforeEach(() => {
   };
 });
 
+describe("responsáveis sem runrunit_project_people", () => {
+  it("usa o responsável do próprio card quando a tabela de pessoas está vazia", async () => {
+    db.tables.runrunit_project_people = [];
+    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
+    const [o] = await allocateProjectToMonthlyLanes(1);
+    expect(o.reason).toBe("alocar");
+    expect(card(1)?.lane_id).toBe("nov");
+  });
+});
+
 describe("alocação automática em fila mensal", () => {
   it("1. card sem fila marcado como manual vai para Novembro/2026", async () => {
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
