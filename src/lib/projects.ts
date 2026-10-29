@@ -269,22 +269,36 @@ export async function allocateProjectToMonthlyLanes(
     .eq("runrunit_project_id", runrunit_project_id)
     .maybeSingle();
   if (projErr) throw projErr;
-  const desired = (proj?.desired_delivery_date as string | null) ?? null;
-  if (!desired) return [{ ...base, reason: "sem_data" }];
-  if (proj.is_open === false) return [{ ...base, desired_delivery_date: desired, reason: "projeto_encerrado" }];
 
-  const { data: people, error: peopleErr } = await (supabase as any)
-    .from("runrunit_project_people")
-    .select("assignee_name")
-    .eq("runrunit_project_id", runrunit_project_id);
-  if (peopleErr) throw peopleErr;
-  const assignees = Array.from(
-    new Set(
-      ((people ?? []) as { assignee_name: string | null }[])
-        .map((p) => p.assignee_name)
-        .filter((n): n is string => !!n && n.trim().length > 0),
-    ),
-  );
+  // Responsáveis: `runrunit_project_people` pode estar vazia em produção, por
+  // isso unimos com os cards existentes e a view do painel (fonte real).
+  const names = new Set<string>();
+  const addNames = (rows: unknown) => {
+    for (const r of (rows ?? []) as { assignee_name: string | null }[]) {
+      const n = r.assignee_name?.trim();
+      if (n) names.add(n);
+    }
+  };
+  const [peopleRes, cardsRes, viewRes] = await Promise.all([
+    (supabase as any).from("runrunit_project_people").select("assignee_name").eq("runrunit_project_id", runrunit_project_id),
+    (supabase as any).from("dashboard_project_cards").select("assignee_name").eq("runrunit_project_id", runrunit_project_id),
+    (supabase as any)
+      .from("v_dashboard_projects")
+      .select("assignee_name,desired_delivery_date,is_open")
+      .eq("runrunit_project_id", runrunit_project_id),
+  ]);
+  if (peopleRes.error && cardsRes.error && viewRes.error) throw peopleRes.error;
+  addNames(peopleRes.data);
+  addNames(cardsRes.data);
+  addNames(viewRes.data);
+  const viewRow = ((viewRes.data ?? []) as { desired_delivery_date: string | null; is_open: boolean | null }[])[0];
+
+  const desired = (proj?.desired_delivery_date as string | null) ?? viewRow?.desired_delivery_date ?? null;
+  if (!desired) return [{ ...base, reason: "sem_data" }];
+  const isOpen = proj ? proj.is_open : viewRow?.is_open;
+  if (isOpen === false) return [{ ...base, desired_delivery_date: desired, reason: "projeto_encerrado" }];
+
+  const assignees = Array.from(names);
   if (assignees.length === 0) return [{ ...base, desired_delivery_date: desired, reason: "sem_responsavel" }];
 
   const outcomes: AllocationOutcome[] = [];
