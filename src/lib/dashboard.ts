@@ -747,14 +747,7 @@ export async function bulkUpdateCardPositions(
       if (u.id) {
         const { data, error } = await (supabase as any)
           .from("dashboard_project_cards")
-          .update({
-            lane_id: u.lane_id,
-            position: u.position,
-            manually_positioned: true,
-            manually_positioned_at: now,
-            updated_by: u.updated_by ?? null,
-            updated_at: now,
-          })
+          .update(positionPatch(u, now))
           .eq("id", u.id)
           .select("id,lane_id,position");
         if (error) throw new Error(error.message || "erro desconhecido ao gravar");
@@ -766,7 +759,7 @@ export async function bulkUpdateCardPositions(
           assignee_name: u.assignee_name,
           lane_id: u.lane_id,
           position: u.position,
-          manually_positioned: true,
+          ...(u.manually_positioned === true ? { manually_positioned: true } : {}),
           updated_by: u.updated_by ?? null,
         });
         row = { id: saved.id, lane_id: saved.lane_id ?? null, position: saved.position };
