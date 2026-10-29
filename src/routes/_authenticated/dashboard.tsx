@@ -1299,28 +1299,17 @@ function AssigneeBoard({
     );
 
     try {
-      const existing = updates.filter((u) => u.id) as {
-        id: string;
-        lane_id: string | null;
-        position: number;
-        updated_by?: string | null;
-      }[];
-      // Grava primeiro o card arrastado (mudança de fila), depois reindexa os demais.
-      const activeId = activeCard.card?.id ?? null;
-      const first = existing.filter((u) => u.id === activeId);
-      const rest = existing.filter((u) => u.id !== activeId);
-      if (first.length) await bulkUpdateCardPositions(first);
-      if (rest.length) await bulkUpdateCardPositions(rest);
-      const newOnes = updates.filter((u) => !u.id);
-      for (const u of newOnes) {
-        await upsertCard({
-          runrunit_project_id: u.runrunit_project_id,
-          assignee_name: assignee,
-          lane_id: u.lane_id,
-          position: u.position,
-          manually_positioned: true,
-          updated_by: currentUserName,
-        });
+      const all = updates.map((u) => ({ ...u, assignee_name: assignee }));
+      // Card arrastado primeiro: precisa gravar de fato (update ou criação).
+      const first = all.filter((u) => u.runrunit_project_id === activeCard.runrunit_project_id);
+      const rest = all.filter((u) => u.runrunit_project_id !== activeCard.runrunit_project_id);
+      if (first.length) {
+        const r = await bulkUpdateCardPositions(first);
+        if (r.failed > 0) throw new Error("não foi possível gravar a nova fila do card.");
+      }
+      if (rest.length) {
+        const r = await bulkUpdateCardPositions(rest);
+        if (r.failed > 0) toast.warning(`${r.failed} card(s) não tiveram a ordem atualizada.`);
       }
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
     } catch (err) {

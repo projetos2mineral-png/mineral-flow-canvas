@@ -682,32 +682,55 @@ export async function updateCard(
   if (!data) throw new Error("O card não foi atualizado. Verifique suas permissões e tente novamente.");
 }
 
-export async function bulkUpdateCardPositions(updates: { id: string; lane_id: string | null; position: number; updated_by?: string | null }[]) {
-  // Lotes paralelos (rápido mesmo em filas grandes) e verificação de linhas
-  // afetadas: um update que não grava nada (ex.: RLS) agora gera erro visível.
+export async function bulkUpdateCardPositions(
+  updates: {
+    id: string | null;
+    runrunit_project_id: number;
+    assignee_name: string;
+    lane_id: string | null;
+    position: number;
+    updated_by?: string | null;
+  }[],
+): Promise<{ failed: number }> {
+  // Atualiza pelo UUID; se nenhuma linha física for afetada (ID vindo da view
+  // sem registro na tabela), grava pela chave natural (projeto + responsável),
+  // criando a linha quando necessário. Falhas individuais não abortam o lote.
   const now = new Date().toISOString();
   const CHUNK = 8;
+  let failed = 0;
   const updateOne = async (u: (typeof updates)[number]) => {
-    const { data, error } = await (supabase as any)
-      .from("dashboard_project_cards")
-      .update({
+    try {
+      if (u.id) {
+        const { data, error } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .update({
+            lane_id: u.lane_id,
+            position: u.position,
+            manually_positioned: true,
+            manually_positioned_at: now,
+            updated_by: u.updated_by,
+            updated_at: now,
+          })
+          .eq("id", u.id)
+          .select("id");
+        if (!error && data && data.length > 0) return;
+      }
+      await upsertCard({
+        runrunit_project_id: u.runrunit_project_id,
+        assignee_name: u.assignee_name,
         lane_id: u.lane_id,
         position: u.position,
         manually_positioned: true,
-        manually_positioned_at: now,
-        updated_by: u.updated_by,
-        updated_at: now,
-      })
-      .eq("id", u.id)
-      .select("id");
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error("Nenhuma alteração foi gravada (sem permissão ou card inexistente).");
+        updated_by: u.updated_by ?? null,
+      });
+    } catch {
+      failed++;
     }
   };
   for (let i = 0; i < updates.length; i += CHUNK) {
     await Promise.all(updates.slice(i, i + CHUNK).map(updateOne));
   }
+  return { failed };
 }
 
 // ---------- Reviews ----------
