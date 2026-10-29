@@ -757,7 +757,11 @@ export async function bulkUpdateCardPositions(
       }
       result.confirmed.set(u.runrunit_project_id, row);
     } catch (err) {
-      fail(u, err instanceof Error ? err.message : String(err));
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+      fail(u, message || "erro desconhecido ao gravar");
     }
   };
 
