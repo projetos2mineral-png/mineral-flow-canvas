@@ -1291,7 +1291,12 @@ function AssigneeBoard({
         position: number;
         updated_by?: string | null;
       }[];
-      if (existing.length) await bulkUpdateCardPositions(existing);
+      // Grava primeiro o card arrastado (mudança de fila), depois reindexa os demais.
+      const activeId = activeCard.card?.id ?? null;
+      const first = existing.filter((u) => u.id === activeId);
+      const rest = existing.filter((u) => u.id !== activeId);
+      if (first.length) await bulkUpdateCardPositions(first);
+      if (rest.length) await bulkUpdateCardPositions(rest);
       const newOnes = updates.filter((u) => !u.id);
       for (const u of newOnes) {
         await upsertCard({
@@ -1304,6 +1309,7 @@ function AssigneeBoard({
         });
       }
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
     } catch (err) {
       toast.error("Falha ao mover: " + (err as Error).message);
       qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
