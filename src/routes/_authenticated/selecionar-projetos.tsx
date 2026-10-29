@@ -14,6 +14,7 @@ import {
   invokeDiscoverProjects,
   invokeSyncVisibleProjects,
   allocateProjectToMonthlyLanes,
+  syncAndAllocateProject,
   reallocateAllTrackedProjects,
   countClosedTrackedProjects,
   clearClosedTrackedProjects,
@@ -36,6 +37,7 @@ import {
   type ManualDemandInput,
 } from "@/lib/manual-demands";
 import { DemandDialog } from "@/components/demands/DemandDialog";
+import { RecoverUnassignedDialog } from "@/components/projects/RecoverUnassignedDialog";
 import { exportProjectsToExcel } from "@/lib/export-projects";
 import { startBatchUpdate, useBatchUpdate, BATCH_BLOCKED_TITLE, guardBatchConflict } from "@/lib/batch-update-store";
 import { Input } from "@/components/ui/input";
@@ -549,10 +551,15 @@ function SelecionarProjetosPage() {
     if (guardBatchConflict()) return;
     markBusy(project.runrunit_project_id, true);
     try {
-      await invokeSyncSingleProject(project.runrunit_project_id);
-      await allocateProjectToMonthlyLanes(project.runrunit_project_id);
-      
-      toast.success(`Projeto "${project.name}" sincronizado`);
+      const r = await syncAndAllocateProject(project.runrunit_project_id);
+      if (r.allocationError) throw new Error(`alocação: ${r.allocationError}`);
+      if (r.syncError) {
+        toast.warning(`Sincronização de "${project.name}" falhou; alocação feita com os dados já salvos.`, {
+          description: r.syncError,
+        });
+      } else {
+        toast.success(`Projeto "${project.name}" sincronizado`);
+      }
       
       // Atualiza o estado local para refletir a nova data de sincronização e outros dados
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
@@ -621,6 +628,7 @@ function SelecionarProjetosPage() {
     setSelectedDates(new Set());
   };
 
+  const [recoverOpen, setRecoverOpen] = useState(false);
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -655,8 +663,17 @@ function SelecionarProjetosPage() {
                   <Download className="mr-2 h-4 w-4" />
                   <span>Importar projeto por ID</span>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setRecoverOpen(true)}
+                  disabled={batchBlocked}
+                  title={batchBlocked ? BATCH_BLOCKED_TITLE : undefined}
+                >
+                  <Calendar className="mr-2 h-4 w-4" />
+                  <span>Recuperar cards em "Sem fila"</span>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <RecoverUnassignedDialog open={recoverOpen} onOpenChange={setRecoverOpen} />
 
             <Button
               variant="outline"

@@ -1211,13 +1211,16 @@ function AssigneeBoard({
     });
     if (!plan) return;
 
-    const updates = plan.changes.map(({ item, position }) => ({
+    // `plan.changes[0]` é sempre o card arrastado: só ele vira posicionamento
+    // manual. Vizinhos apenas reindexados preservam o valor atual.
+    const updates = plan.changes.map(({ item, position }, idx) => ({
       id: item.card?.id ?? null,
       runrunit_project_id: item.runrunit_project_id,
       assignee_name: assignee,
       lane_id: plan.laneValue,
       position,
       updated_by: currentUserName,
+      ...(idx === 0 ? { manually_positioned: true } : {}),
     }));
     const byProject = new Map(updates.map((u) => [u.runrunit_project_id, u]));
 
@@ -1231,10 +1234,11 @@ function AssigneeBoard({
       prev.map((it) => {
         const u = byProject.get(it.runrunit_project_id);
         if (!u) return it;
+        const manual = u.manually_positioned === true || it.card?.manually_positioned === true;
         const card = (
           it.card
-            ? { ...it.card, lane_id: u.lane_id, position: u.position, manually_positioned: true }
-            : { lane_id: u.lane_id, position: u.position, manually_positioned: true }
+            ? { ...it.card, lane_id: u.lane_id, position: u.position, manually_positioned: manual }
+            : { lane_id: u.lane_id, position: u.position, manually_positioned: manual }
         ) as ProjectCardRow;
         return { ...it, lane_id: u.lane_id, position: u.position, card };
       }),
@@ -1242,7 +1246,14 @@ function AssigneeBoard({
     qc.setQueryData<ProjectCardRow[]>(["dashboard", "cards"], (old) =>
       old?.map((c) => {
         const u = c.assignee_name === assignee ? byProject.get(c.runrunit_project_id) : undefined;
-        return u ? { ...c, lane_id: u.lane_id, position: u.position, manually_positioned: true } : c;
+        return u
+          ? {
+              ...c,
+              lane_id: u.lane_id,
+              position: u.position,
+              manually_positioned: u.manually_positioned === true || c.manually_positioned === true,
+            }
+          : c;
       }),
     );
 

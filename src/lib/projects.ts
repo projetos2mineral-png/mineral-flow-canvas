@@ -188,101 +188,246 @@ export async function invokeSyncVisibleProjects(limit = 100) {
   return data;
 }
 
+// ---------- Alocação automática em filas mensais (regra única) ----------
+
+export type AllocationReason =
+  | "alocar" // card sem fila (ou inexistente) com destino válido
+  | "ja_alocado" // card já está em uma fila: preservado (inclui posições manuais)
+  | "sem_data"
+  | "projeto_encerrado"
+  | "sem_responsavel"
+  | "sem_fila_mensal";
+
+export type AllocationOutcome = {
+  runrunit_project_id: number;
+  assignee_name: string | null;
+  desired_delivery_date: string | null;
+  antecedence_days: number;
+  target_lane_title: string | null;
+  target_lane_id: string | null;
+  reason: AllocationReason;
+  /** true quando a gravação foi feita (somente fora do modo prévia). */
+  applied: boolean;
+  error?: string;
+};
+
+export const ALLOCATION_REASON_LABEL: Record<AllocationReason, string> = {
+  alocar: "Elegível",
+  ja_alocado: "Já está em uma fila",
+  sem_data: "Sem data desejada",
+  projeto_encerrado: "Projeto encerrado",
+  sem_responsavel: "Sem responsável",
+  sem_fila_mensal: "Fila do mês não existe no quadro",
+};
+
+/** Título "Mês/AAAA" de destino, aplicando a antecedência do quadro. */
+export function targetLaneTitleFor(desired: string, antecedenceDays: number): string | null {
+  const ante = Number.isFinite(antecedenceDays) && antecedenceDays >= 0 ? Math.floor(antecedenceDays) : 0;
+  const pos = calculatePositioningDate(desired, ante) ?? desired;
+  return monthlyLaneTitle(pos) || null;
+}
+
 /**
- * Após a sincronização de um projeto, posiciona o card de cada responsável na
- * fila do mês correspondente (Mês/AAAA) considerando a antecedência do quadro:
- * data_posicionamento = desired_delivery_date - antecedence_days.
- * Somente quando o card ainda não existe ou ainda não tem fila definida.
- * Não cria filas automaticamente; se a fila não existir no quadro do responsável,
- * o card permanece "Sem fila".
+ * Decisão pura (sem I/O) para um card. Regra:
+ * - card com `lane_id` definido → preservado, seja manual ou automático;
+ * - card sem fila (`lane_id = null`) ou inexistente → aloca se a fila do mês
+ *   existir no quadro, independentemente de `manually_positioned` (cards em
+ *   "Sem fila" marcados como manuais eram efeito colateral da reordenação).
  */
-export async function allocateProjectToMonthlyLanes(runrunit_project_id: number) {
+export function decideCardAllocation(input: {
+  existingLaneId: string | null | undefined;
+  cardExists: boolean;
+  targetLaneId: string | null;
+}): AllocationReason {
+  if (input.cardExists && input.existingLaneId) return "ja_alocado";
+  if (!input.targetLaneId) return "sem_fila_mensal";
+  return "alocar";
+}
+
+/**
+ * Posiciona o card de cada responsável do projeto na fila mensal
+ * (data_posicionamento = desired_delivery_date - antecedence_days).
+ * Nunca cria filas e nunca move cards que já estão em uma fila.
+ * Com `dryRun: true` apenas calcula (prévia), sem gravar nada.
+ */
+export async function allocateProjectToMonthlyLanes(
+  runrunit_project_id: number,
+  opts: { dryRun?: boolean } = {},
+): Promise<AllocationOutcome[]> {
+  const base = {
+    runrunit_project_id,
+    assignee_name: null,
+    desired_delivery_date: null,
+    antecedence_days: 0,
+    target_lane_title: null,
+    target_lane_id: null,
+    applied: false,
+  };
   const { data: proj, error: projErr } = await (supabase as any)
     .from("runrunit_projects")
     .select("desired_delivery_date,is_open")
     .eq("runrunit_project_id", runrunit_project_id)
     .maybeSingle();
   if (projErr) throw projErr;
-  if (!proj?.desired_delivery_date) return;
-  if (proj.is_open === false) return;
+  const desired = (proj?.desired_delivery_date as string | null) ?? null;
+  if (!desired) return [{ ...base, reason: "sem_data" }];
+  if (proj.is_open === false) return [{ ...base, desired_delivery_date: desired, reason: "projeto_encerrado" }];
 
   const { data: people, error: peopleErr } = await (supabase as any)
     .from("runrunit_project_people")
     .select("assignee_name")
     .eq("runrunit_project_id", runrunit_project_id);
   if (peopleErr) throw peopleErr;
-
   const assignees = Array.from(
     new Set(
       ((people ?? []) as { assignee_name: string | null }[])
         .map((p) => p.assignee_name)
-        .filter((n): n is string => !!n && n.trim().length > 0)
-    )
+        .filter((n): n is string => !!n && n.trim().length > 0),
+    ),
   );
+  if (assignees.length === 0) return [{ ...base, desired_delivery_date: desired, reason: "sem_responsavel" }];
 
+  const outcomes: AllocationOutcome[] = [];
   for (const assignee of assignees) {
-    // Aplica antecedência do quadro para cálculo da data de posicionamento — seguro
     let antecedence = 0;
     try {
-      const v = await fetchBoardAntecedence(assignee);
-      antecedence = Number.isFinite(v) && (v as number) >= 0 ? Math.floor(v as number) : 0;
+      antecedence = await fetchBoardAntecedence(assignee);
     } catch {
       antecedence = 0;
     }
-    const desired = proj.desired_delivery_date as string | null | undefined;
-    if (!desired) continue;
-    let positioningDate: string | null = null;
-    try {
-      positioningDate = calculatePositioningDate(desired, antecedence);
-    } catch {
-      positioningDate = null;
-    }
-    const dateToUse = positioningDate ?? desired;
-    let laneTitle: string | null = null;
-    try {
-      laneTitle = monthlyLaneTitle(dateToUse);
-    } catch {
-      laneTitle = null;
-    }
-    if (!laneTitle) continue;
+    const laneTitle = targetLaneTitleFor(desired, antecedence);
 
-    const { data: lanes } = await (supabase as any)
+    const { data: lanes, error: lanesErr } = await (supabase as any)
       .from("dashboard_lanes")
       .select("id,title")
       .eq("assignee_name", assignee);
-    const lane = ((lanes ?? []) as { id: string; title: string }[]).find(
-      (l) => l.title.trim().toLowerCase() === laneTitle.toLowerCase()
-    );
-    if (!lane) continue;
+    if (lanesErr) throw lanesErr;
+    const lane = laneTitle
+      ? ((lanes ?? []) as { id: string; title: string }[]).find(
+          (l) => l.title.trim().toLowerCase() === laneTitle.toLowerCase(),
+        )
+      : undefined;
 
-    const { data: existing } = await (supabase as any)
+    const { data: existing, error: exErr } = await (supabase as any)
       .from("dashboard_project_cards")
       .select("id,lane_id,manually_positioned")
       .eq("runrunit_project_id", runrunit_project_id)
       .eq("assignee_name", assignee)
       .maybeSingle();
+    if (exErr) throw exErr;
 
-    // Preserva organização manual: só realoca se o card nunca foi movido pelo
-    // usuário. Se `manually_positioned` for true, mantém a fila atual.
-    if (existing && existing.manually_positioned === true) continue;
+    const reason = decideCardAllocation({
+      cardExists: !!existing,
+      existingLaneId: existing?.lane_id ?? null,
+      targetLaneId: lane?.id ?? null,
+    });
+    const outcome: AllocationOutcome = {
+      runrunit_project_id,
+      assignee_name: assignee,
+      desired_delivery_date: desired,
+      antecedence_days: antecedence,
+      target_lane_title: laneTitle,
+      target_lane_id: lane?.id ?? null,
+      reason,
+      applied: false,
+    };
+    outcomes.push(outcome);
+    if (reason !== "alocar" || opts.dryRun || !lane) continue;
 
-    if (existing) {
-      await (supabase as any)
-        .from("dashboard_project_cards")
-        .update({ lane_id: lane.id, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
-    } else {
-      await (supabase as any).from("dashboard_project_cards").insert({
-        runrunit_project_id,
-        assignee_name: assignee,
-        lane_id: lane.id,
-        status: "a iniciar",
-        position: 0,
-        review_status: "não enviado",
-        manually_positioned: false,
-      });
+    try {
+      if (existing) {
+        // Filtro `lane_id is null` torna a gravação idempotente e evita
+        // sobrescrever um card que outra pessoa alocou nesse intervalo.
+        const { data, error } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .update({ lane_id: lane.id, manually_positioned: false, updated_at: new Date().toISOString() })
+          .eq("id", existing.id)
+          .is("lane_id", null)
+          .select("id,lane_id");
+        if (error) throw error;
+        outcome.applied = Array.isArray(data) && data.length > 0 && data[0].lane_id === lane.id;
+        if (!outcome.applied) outcome.reason = "ja_alocado";
+      } else {
+        const { error } = await (supabase as any).from("dashboard_project_cards").insert({
+          runrunit_project_id,
+          assignee_name: assignee,
+          lane_id: lane.id,
+          status: "a iniciar",
+          position: 0,
+          review_status: "não enviado",
+          manually_positioned: false,
+        });
+        if (error) throw error;
+        outcome.applied = true;
+      }
+    } catch (e) {
+      outcome.error = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
     }
   }
+  return outcomes;
+}
+
+/** IDs de projetos abertos e exibidos que têm ao menos um card em "Sem fila". */
+export async function fetchProjectsWithUnassignedCards(): Promise<number[]> {
+  const ids = new Set<number>();
+  const pageSize = 1000;
+  for (let from = 0; from < 50 * pageSize; from += pageSize) {
+    const { data, error } = await (supabase as any)
+      .from("dashboard_project_cards")
+      .select("runrunit_project_id")
+      .is("lane_id", null)
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { runrunit_project_id: number }[];
+    rows.forEach((r) => ids.add(r.runrunit_project_id));
+    if (rows.length < pageSize) break;
+  }
+  const all = [...ids];
+  const open: number[] = [];
+  for (let i = 0; i < all.length; i += 150) {
+    const { data, error } = await (supabase as any)
+      .from("runrunit_projects")
+      .select("runrunit_project_id")
+      .in("runrunit_project_id", all.slice(i, i + 150))
+      .eq("is_open", true)
+      .eq("is_tracking_enabled", true);
+    if (error) throw error;
+    for (const r of (data ?? []) as { runrunit_project_id: number }[]) open.push(r.runrunit_project_id);
+  }
+  return open;
+}
+
+/** Executa a alocação (prévia ou gravação) para vários projetos, 3 por vez. */
+export async function allocateManyProjects(
+  ids: number[],
+  opts: { dryRun?: boolean } = {},
+): Promise<AllocationOutcome[]> {
+  const out: AllocationOutcome[] = [];
+  for (let i = 0; i < ids.length; i += 3) {
+    const part = await Promise.all(
+      ids.slice(i, i + 3).map(async (id) => {
+        try {
+          return await allocateProjectToMonthlyLanes(id, opts);
+        } catch (e) {
+          return [
+            {
+              runrunit_project_id: id,
+              assignee_name: null,
+              desired_delivery_date: null,
+              antecedence_days: 0,
+              target_lane_title: null,
+              target_lane_id: null,
+              reason: "sem_fila_mensal" as AllocationReason,
+              applied: false,
+              error: e instanceof Error ? e.message : String(e),
+            },
+          ];
+        }
+      }),
+    );
+    part.forEach((p) => out.push(...p));
+  }
+  return out;
 }
 
 /**
@@ -475,4 +620,29 @@ export async function clearClosedTrackedProjects(): Promise<number> {
   // independentemente de já estarem desmarcados. Isso reflete quantos serão
   // removidos/confirmados fora da lista Selecionar Projetos e do Painel.
   return allClosedIds.length;
+}
+
+/**
+ * Fluxo único de "Atualizar projeto" (individual e em lote): sincroniza com o
+ * Runrun.it e, mesmo se a sincronização falhar, tenta alocar com os dados
+ * locais já gravados. Erros de sincronização e de alocação são separados.
+ */
+export async function syncAndAllocateProject(id: number): Promise<{
+  syncError: string | null;
+  allocationError: string | null;
+  outcomes: AllocationOutcome[];
+}> {
+  let syncError: string | null = null;
+  try {
+    await invokeSyncSingleProject(id);
+  } catch (e) {
+    syncError = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const outcomes = await allocateProjectToMonthlyLanes(id);
+    const failed = outcomes.find((o) => o.error);
+    return { syncError, allocationError: failed?.error ?? null, outcomes };
+  } catch (e) {
+    return { syncError, allocationError: e instanceof Error ? e.message : String(e), outcomes: [] };
+  }
 }

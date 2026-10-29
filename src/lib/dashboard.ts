@@ -689,7 +689,27 @@ export type CardPositionUpdate = {
   lane_id: string | null;
   position: number;
   updated_by?: string | null;
+  /**
+   * Somente o card efetivamente arrastado pelo usuário deve receber `true`.
+   * Vizinhos reindexados omitem o campo e mantêm o valor atual no banco.
+   */
+  manually_positioned?: boolean;
 };
+
+/** Patch gravado para um update de posição (exportado para teste). */
+export function positionPatch(u: CardPositionUpdate, now: string): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    lane_id: u.lane_id,
+    position: u.position,
+    updated_by: u.updated_by ?? null,
+    updated_at: now,
+  };
+  if (u.manually_positioned === true) {
+    patch.manually_positioned = true;
+    patch.manually_positioned_at = now;
+  }
+  return patch;
+}
 
 export type BulkPositionResult = {
   failed: number;
@@ -727,14 +747,7 @@ export async function bulkUpdateCardPositions(
       if (u.id) {
         const { data, error } = await (supabase as any)
           .from("dashboard_project_cards")
-          .update({
-            lane_id: u.lane_id,
-            position: u.position,
-            manually_positioned: true,
-            manually_positioned_at: now,
-            updated_by: u.updated_by ?? null,
-            updated_at: now,
-          })
+          .update(positionPatch(u, now))
           .eq("id", u.id)
           .select("id,lane_id,position");
         if (error) throw new Error(error.message || "erro desconhecido ao gravar");
@@ -746,7 +759,7 @@ export async function bulkUpdateCardPositions(
           assignee_name: u.assignee_name,
           lane_id: u.lane_id,
           position: u.position,
-          manually_positioned: true,
+          ...(u.manually_positioned === true ? { manually_positioned: true } : {}),
           updated_by: u.updated_by ?? null,
         });
         row = { id: saved.id, lane_id: saved.lane_id ?? null, position: saved.position };
