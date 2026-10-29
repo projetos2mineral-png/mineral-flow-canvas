@@ -682,24 +682,48 @@ export async function updateCard(
   if (!data) throw new Error("O card não foi atualizado. Verifique suas permissões e tente novamente.");
 }
 
+export type CardPositionUpdate = {
+  id: string | null;
+  runrunit_project_id: number;
+  assignee_name: string;
+  lane_id: string | null;
+  position: number;
+  updated_by?: string | null;
+};
+
+export type BulkPositionResult = {
+  failed: number;
+  /** Mensagens reais de erro, uma por card que falhou. */
+  errors: { runrunit_project_id: number; message: string }[];
+  /** Valores lidos de volta da tabela física após a gravação. */
+  confirmed: Map<number, { id: string; lane_id: string | null; position: number }>;
+};
+
+/**
+ * Grava fila/posição dos cards na tabela física `dashboard_project_cards` e
+ * CONFIRMA cada gravação lendo de volta a linha afetada. Uma gravação só conta
+ * como sucesso quando o `lane_id` devolvido é exatamente o solicitado.
+ *
+ * - Update por UUID; se nenhuma linha física corresponder (ID vindo da view),
+ *   grava pela chave natural (projeto + responsável) via `upsertCard`.
+ * - Erros do banco (RLS, coluna ausente etc.) NÃO caem em fallback silencioso:
+ *   são registrados com a mensagem original.
+ */
 export async function bulkUpdateCardPositions(
-  updates: {
-    id: string | null;
-    runrunit_project_id: number;
-    assignee_name: string;
-    lane_id: string | null;
-    position: number;
-    updated_by?: string | null;
-  }[],
-): Promise<{ failed: number }> {
-  // Atualiza pelo UUID; se nenhuma linha física for afetada (ID vindo da view
-  // sem registro na tabela), grava pela chave natural (projeto + responsável),
-  // criando a linha quando necessário. Falhas individuais não abortam o lote.
+  updates: CardPositionUpdate[],
+): Promise<BulkPositionResult> {
   const now = new Date().toISOString();
   const CHUNK = 8;
-  let failed = 0;
-  const updateOne = async (u: (typeof updates)[number]) => {
+  const result: BulkPositionResult = { failed: 0, errors: [], confirmed: new Map() };
+
+  const fail = (u: CardPositionUpdate, message: string) => {
+    result.failed++;
+    result.errors.push({ runrunit_project_id: u.runrunit_project_id, message });
+  };
+
+  const updateOne = async (u: CardPositionUpdate) => {
     try {
+      let row: { id: string; lane_id: string | null; position: number } | null = null;
       if (u.id) {
         const { data, error } = await (supabase as any)
           .from("dashboard_project_cards")
@@ -708,29 +732,39 @@ export async function bulkUpdateCardPositions(
             position: u.position,
             manually_positioned: true,
             manually_positioned_at: now,
-            updated_by: u.updated_by,
+            updated_by: u.updated_by ?? null,
             updated_at: now,
           })
           .eq("id", u.id)
-          .select("id");
-        if (!error && data && data.length > 0) return;
+          .select("id,lane_id,position");
+        if (error) throw new Error(error.message || "erro desconhecido ao gravar");
+        if (Array.isArray(data) && data.length > 0) row = data[0];
       }
-      await upsertCard({
-        runrunit_project_id: u.runrunit_project_id,
-        assignee_name: u.assignee_name,
-        lane_id: u.lane_id,
-        position: u.position,
-        manually_positioned: true,
-        updated_by: u.updated_by ?? null,
-      });
-    } catch {
-      failed++;
+      if (!row) {
+        const saved = await upsertCard({
+          runrunit_project_id: u.runrunit_project_id,
+          assignee_name: u.assignee_name,
+          lane_id: u.lane_id,
+          position: u.position,
+          manually_positioned: true,
+          updated_by: u.updated_by ?? null,
+        });
+        row = { id: saved.id, lane_id: saved.lane_id ?? null, position: saved.position };
+      }
+      if ((row.lane_id ?? null) !== (u.lane_id ?? null)) {
+        fail(u, "o banco não confirmou a nova fila (valor gravado diferente do solicitado).");
+        return;
+      }
+      result.confirmed.set(u.runrunit_project_id, row);
+    } catch (err) {
+      fail(u, err instanceof Error ? err.message : String(err));
     }
   };
+
   for (let i = 0; i < updates.length; i += CHUNK) {
     await Promise.all(updates.slice(i, i + CHUNK).map(updateOne));
   }
-  return { failed };
+  return result;
 }
 
 // ---------- Reviews ----------
