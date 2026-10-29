@@ -191,3 +191,20 @@ describe("9. reordenação no Kanban", () => {
     expect(dragged.manually_positioned).toBe(true);
   });
 });
+
+import { isCardOrphan as orphan } from "./projects";
+describe("isCardOrphan (por responsável)", () => {
+  const owners = new Map([["laneLauraNov", "Laura Fernandes"], ["laneCarlos", "Carlos"]]);
+  it("card sem fila é órfão", () => {
+    expect(orphan({ assignee_name: "Laura Fernandes", lane_id: null }, owners)).toBe(true);
+  });
+  it("card com fila de outro responsável é órfão", () => {
+    expect(orphan({ assignee_name: "Laura Fernandes", lane_id: "laneCarlos" }, owners)).toBe(true);
+  });
+  it("card com fila excluída é órfão", () => {
+    expect(orphan({ assignee_name: "Laura Fernandes", lane_id: "sumiu" }, owners)).toBe(true);
+  });
+  it("card na própria fila não é órfão", () => {
+    expect(orphan({ assignee_name: "Laura Fernandes", lane_id: "laneLauraNov" }, owners)).toBe(false);
+  });
+});
