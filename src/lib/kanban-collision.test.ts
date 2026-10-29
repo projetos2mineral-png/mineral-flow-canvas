@@ -5,9 +5,21 @@ import { kanbanCollisionDetection } from "./kanban-dnd";
  * Simula o quadro: "Sem fila" (x 0–200) e "Novembro/2026" (x 300–500).
  * A fila "Sem fila" tem um card oculto pela rolagem (y 900+), fora da área visível.
  */
-type Rect = { top: number; left: number; width: number; height: number; bottom: number; right: number };
+type Rect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  bottom: number;
+  right: number;
+};
 const r = (left: number, top: number, w: number, h: number): Rect => ({
-  left, top, width: w, height: h, right: left + w, bottom: top + h,
+  left,
+  top,
+  width: w,
+  height: h,
+  right: left + w,
+  bottom: top + h,
 });
 
 const UN = "__unassigned__";
