@@ -330,9 +330,14 @@ export async function allocateProjectToMonthlyLanes(
       .maybeSingle();
     if (exErr) throw exErr;
 
+    // A fila gravada só vale se pertencer ao quadro DESTE responsável;
+    // fila de outro quadro ou excluída = card órfão (aparece em "Sem fila").
+    const ownLaneIds = new Set(((lanes ?? []) as { id: string }[]).map((l) => l.id));
+    const rawLaneId: string | null = existing?.lane_id ?? null;
+    const validLaneId = rawLaneId && ownLaneIds.has(rawLaneId) ? rawLaneId : null;
     const reason = decideCardAllocation({
       cardExists: !!existing,
-      existingLaneId: existing?.lane_id ?? null,
+      existingLaneId: validLaneId,
       targetLaneId: lane?.id ?? null,
     });
     const outcome: AllocationOutcome = {
@@ -350,14 +355,14 @@ export async function allocateProjectToMonthlyLanes(
 
     try {
       if (existing) {
-        // Filtro `lane_id is null` torna a gravação idempotente e evita
+        // Filtro pelo lane_id lido torna a gravação idempotente e evita
         // sobrescrever um card que outra pessoa alocou nesse intervalo.
-        const { data, error } = await (supabase as any)
+        let q = (supabase as any)
           .from("dashboard_project_cards")
           .update({ lane_id: lane.id, manually_positioned: false, updated_at: new Date().toISOString() })
-          .eq("id", existing.id)
-          .is("lane_id", null)
-          .select("id,lane_id");
+          .eq("id", existing.id);
+        q = rawLaneId ? q.eq("lane_id", rawLaneId) : q.is("lane_id", null);
+        const { data, error } = await q.select("id,lane_id");
         if (error) throw error;
         outcome.applied = Array.isArray(data) && data.length > 0 && data[0].lane_id === lane.id;
         if (!outcome.applied) outcome.reason = "ja_alocado";
@@ -381,19 +386,41 @@ export async function allocateProjectToMonthlyLanes(
   return outcomes;
 }
 
-/** IDs de projetos abertos e exibidos que têm ao menos um card em "Sem fila". */
+/** Card está em "Sem fila" no quadro do seu responsável (sem fila ou fila de outro quadro/excluída). */
+export function isCardOrphan(
+  card: { assignee_name: string | null; lane_id: string | null },
+  laneOwner: Map<string, string>,
+): boolean {
+  if (!card.lane_id) return true;
+  const owner = laneOwner.get(card.lane_id);
+  return !owner || owner.trim() !== (card.assignee_name ?? "").trim();
+}
+
+/** IDs de projetos abertos e exibidos com ao menos um card em "Sem fila" (avaliado por responsável). */
 export async function fetchProjectsWithUnassignedCards(): Promise<number[]> {
   const ids = new Set<number>();
   const pageSize = 1000;
+  const laneOwner = new Map<string, string>();
+  for (let from = 0; from < 50 * pageSize; from += pageSize) {
+    const { data, error } = await (supabase as any)
+      .from("dashboard_lanes")
+      .select("id,assignee_name")
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as { id: string; assignee_name: string }[];
+    rows.forEach((l) => laneOwner.set(l.id, l.assignee_name));
+    if (rows.length < pageSize) break;
+  }
   for (let from = 0; from < 50 * pageSize; from += pageSize) {
     const { data, error } = await (supabase as any)
       .from("dashboard_project_cards")
-      .select("runrunit_project_id")
-      .is("lane_id", null)
+      .select("runrunit_project_id,assignee_name,lane_id")
       .range(from, from + pageSize - 1);
     if (error) throw error;
-    const rows = (data ?? []) as { runrunit_project_id: number }[];
-    rows.forEach((r) => ids.add(r.runrunit_project_id));
+    const rows = (data ?? []) as { runrunit_project_id: number; assignee_name: string | null; lane_id: string | null }[];
+    rows.forEach((r) => {
+      if (isCardOrphan(r, laneOwner)) ids.add(r.runrunit_project_id);
+    });
     if (rows.length < pageSize) break;
   }
   const all = [...ids];
