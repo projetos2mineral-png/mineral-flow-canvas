@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import type { QueryClient } from "@tanstack/react-query";
-import { invokeSyncSingleProject, allocateProjectToMonthlyLanes } from "@/lib/projects";
+import { syncAndAllocateProject } from "@/lib/projects";
 
 /**
  * Store singleton (fora do ciclo de vida do React) do processamento em lote
@@ -139,8 +139,14 @@ export async function startBatchUpdate(ids: number[], queryClient: QueryClient):
           chunk.map(async (id) => {
             setState({ activeIds: [...state.activeIds, id] });
             try {
-              await invokeSyncSingleProject(id);
-              await allocateProjectToMonthlyLanes(id);
+              // Mesmo fluxo do botão individual: falha de sincronização não
+              // impede a alocação com os dados locais.
+              const r = await syncAndAllocateProject(id);
+              const parts = [
+                r.syncError ? `sincronização: ${r.syncError}` : null,
+                r.allocationError ? `alocação: ${r.allocationError}` : null,
+              ].filter(Boolean);
+              if (parts.length) throw new Error(parts.join(" | "));
               results.push({ id, ok: true });
             } catch (e) {
               const err = e instanceof Error ? e.message : String(e);

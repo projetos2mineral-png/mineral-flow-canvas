@@ -549,10 +549,15 @@ function SelecionarProjetosPage() {
     if (guardBatchConflict()) return;
     markBusy(project.runrunit_project_id, true);
     try {
-      await invokeSyncSingleProject(project.runrunit_project_id);
-      await allocateProjectToMonthlyLanes(project.runrunit_project_id);
-      
-      toast.success(`Projeto "${project.name}" sincronizado`);
+      const r = await syncAndAllocateProject(project.runrunit_project_id);
+      if (r.allocationError) throw new Error(`alocação: ${r.allocationError}`);
+      if (r.syncError) {
+        toast.warning(`Sincronização de "${project.name}" falhou; alocação feita com os dados já salvos.`, {
+          description: r.syncError,
+        });
+      } else {
+        toast.success(`Projeto "${project.name}" sincronizado`);
+      }
       
       // Atualiza o estado local para refletir a nova data de sincronização e outros dados
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
