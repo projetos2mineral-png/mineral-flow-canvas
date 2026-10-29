@@ -621,3 +621,28 @@ export async function clearClosedTrackedProjects(): Promise<number> {
   // removidos/confirmados fora da lista Selecionar Projetos e do Painel.
   return allClosedIds.length;
 }
+
+/**
+ * Fluxo único de "Atualizar projeto" (individual e em lote): sincroniza com o
+ * Runrun.it e, mesmo se a sincronização falhar, tenta alocar com os dados
+ * locais já gravados. Erros de sincronização e de alocação são separados.
+ */
+export async function syncAndAllocateProject(id: number): Promise<{
+  syncError: string | null;
+  allocationError: string | null;
+  outcomes: AllocationOutcome[];
+}> {
+  let syncError: string | null = null;
+  try {
+    await invokeSyncSingleProject(id);
+  } catch (e) {
+    syncError = e instanceof Error ? e.message : String(e);
+  }
+  try {
+    const outcomes = await allocateProjectToMonthlyLanes(id);
+    const failed = outcomes.find((o) => o.error);
+    return { syncError, allocationError: failed?.error ?? null, outcomes };
+  } catch (e) {
+    return { syncError, allocationError: e instanceof Error ? e.message : String(e), outcomes: [] };
+  }
+}
