@@ -358,8 +358,15 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
         .in("id", ids));
     }
     if (error) {
-      if (isMissingClassificationColumns(error)) break;
-      throw error;
+      const value = error as { code?: string; message?: string; details?: string };
+      console.error("[dashboard] fetchCards complementary flags query failed", {
+        code: value.code ?? null,
+        message: value.message ?? null,
+        details: value.details ?? null,
+        withManual,
+        cardCount: all.length,
+      });
+      break;
     }
     for (const row of (data ?? []) as any[])
       flagsById.set(row.id, {
@@ -408,18 +415,6 @@ export async function saveManualEstimate(
   }
   if (!data) throw new Error("O card não foi atualizado. Verifique suas permissões e tente novamente.");
   return data.manual_estimated_hours == null ? null : Number(data.manual_estimated_hours);
-}
-
-function isMissingClassificationColumns(error: unknown): boolean {
-  const value = error as { code?: string; message?: string; details?: string };
-  if (value?.code === "42703" || value?.code === "PGRST204") return true;
-  const message = `${value?.message ?? ""} ${value?.details ?? ""}`.toLowerCase();
-  return (
-    (message.includes("is_tec") || message.includes("is_geo")) &&
-    (message.includes("does not exist") ||
-      message.includes("schema cache") ||
-      message.includes("could not find"))
-  );
 }
 
 export async function createLane(assignee_name: string, title: string, position: number): Promise<Lane> {
