@@ -313,6 +313,60 @@ type RecoveryAuditEntry = {
   reason: string;
 };
 
+const LAURA_VALIDATION_PAIRS = [
+  ["0d75cafc-4fa8-4632-891d-89959119decf", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["348d2cee-c4c3-4f1f-ba22-ce929a3b1bfe", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["4261918c-e2cc-460f-9ebd-101fd003c923", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["4aec2cbd-2e81-4131-b755-b44615f31e34", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["552c7368-1023-41c7-86dc-57922b348777", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["5aba88b3-a55d-4deb-825d-0ccc675311cb", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["654ef944-58d0-439d-ba44-361ac0112bfc", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["6bcb0fc3-fd5f-4a89-b503-1e0f79ced813", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["6f10ee30-f5fe-4ec4-9e70-74d1e953fb39", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["7033111f-889b-47fa-8768-a393b0f824ca", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["77cf0221-c500-4bca-b1b4-bc9dccbc5d64", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["7a98e9d2-e408-4c52-a82e-18d94d7b7924", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["811d2244-77bd-4f97-bf76-cdf33de469ad", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["ae0979e3-96f2-4de9-812c-0f8ee6603563", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["aed78ef2-3620-4322-90ca-f8df556f091c", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["bca47928-8290-48e3-b110-0b64972d4467", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["d03b9025-6f44-4fac-88f8-fc0e4fe1c743", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["d19d4c58-b6f7-4a99-b909-f08333d8428c", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["d71115e6-c7fc-484b-b065-f3633161db5f", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["d7f835f3-8032-48fc-be53-23b74da6cdc7", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["e76aff8e-0ca4-4abc-a10a-28ea093180d8", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+] as const;
+
+type LauraValidationRow = {
+  card_id: string;
+  project_name: string | null;
+  desired_delivery_date: string | null;
+  current_lane_id: string | null;
+  target_lane_id: string;
+  card_assignee_name: string | null;
+  target_lane_assignee_name: string | null;
+  target_lane_title: string | null;
+  criteria: {
+    card_exists: boolean;
+    current_lane_is_null: boolean;
+    card_assignee_is_laura: boolean;
+    target_lane_exists: boolean;
+    target_lane_assignee_is_laura: boolean;
+  };
+  result: "Elegível" | "Inelegível";
+  reason: string | null;
+};
+
+type LauraValidationReport = {
+  generated_at: string;
+  source: "dashboard_project_cards + dashboard_lanes via authenticated application client";
+  responsible: "Laura Fernandes";
+  pair_count: number;
+  eligible_count: number;
+  ineligible_count: number;
+  rows: LauraValidationRow[];
+};
+
 function KanbanAuditPanel({
   cards,
   lanes,
@@ -336,6 +390,10 @@ function KanbanAuditPanel({
 }) {
   const [copied, setCopied] = useState(false);
   const [recoveryCopied, setRecoveryCopied] = useState(false);
+  const [lauraValidation, setLauraValidation] = useState<LauraValidationReport | null>(null);
+  const [lauraValidationLoading, setLauraValidationLoading] = useState(false);
+  const [lauraValidationError, setLauraValidationError] = useState<string | null>(null);
+  const [lauraValidationCopied, setLauraValidationCopied] = useState(false);
   const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
@@ -539,6 +597,108 @@ function KanbanAuditPanel({
     }
   };
 
+  const validateLauraCards = async () => {
+    setLauraValidationLoading(true);
+    setLauraValidationError(null);
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!sessionData.session) throw new Error("Nenhuma sessão autenticada ativa no Preview.");
+
+      const cardIds = LAURA_VALIDATION_PAIRS.map(([cardId]) => cardId);
+      const targetLaneIds = [...new Set(LAURA_VALIDATION_PAIRS.map(([, laneId]) => laneId))];
+      const [{ data: cardRows, error: cardsError }, { data: laneRows, error: lanesError }] = await Promise.all([
+        (supabase as any)
+          .from("dashboard_project_cards")
+          .select("id,runrunit_project_id,assignee_name,lane_id")
+          .in("id", cardIds),
+        (supabase as any)
+          .from("dashboard_lanes")
+          .select("id,assignee_name,title,position")
+          .in("id", targetLaneIds),
+      ]);
+      if (cardsError) throw cardsError;
+      if (lanesError) throw lanesError;
+
+      const cardsById = new Map((cardRows ?? []).map((row: any) => [row.id, row]));
+      const lanesById = new Map((laneRows ?? []).map((row: any) => [row.id, row]));
+      const projectsByKey = new Map(
+        projects.map((project) => [
+          `${project.runrunit_project_id}::${normalizeAssigneeName(project.assignee_name)}`,
+          project,
+        ]),
+      );
+      const rows: LauraValidationRow[] = LAURA_VALIDATION_PAIRS.map(([cardId, targetLaneId]) => {
+        const card = cardsById.get(cardId);
+        const targetLane = lanesById.get(targetLaneId);
+        const project = card
+          ? projectsByKey.get(`${card.runrunit_project_id}::${normalizeAssigneeName(card.assignee_name)}`)
+          : undefined;
+        const criteria = {
+          card_exists: !!card,
+          current_lane_is_null: !!card && card.lane_id === null,
+          card_assignee_is_laura: !!card && sameAssigneeName(card.assignee_name, "Laura Fernandes"),
+          target_lane_exists: !!targetLane,
+          target_lane_assignee_is_laura:
+            !!targetLane && sameAssigneeName(targetLane.assignee_name, "Laura Fernandes"),
+        };
+        const failed = Object.entries(criteria)
+          .filter(([, passed]) => !passed)
+          .map(([name]) => name);
+        return {
+          card_id: cardId,
+          project_name: project?.project_name ?? null,
+          desired_delivery_date: project?.desired_delivery_date ?? null,
+          current_lane_id: card?.lane_id ?? null,
+          target_lane_id: targetLaneId,
+          card_assignee_name: card?.assignee_name ?? null,
+          target_lane_assignee_name: targetLane?.assignee_name ?? null,
+          target_lane_title: targetLane?.title ?? null,
+          criteria,
+          result: failed.length === 0 ? "Elegível" : "Inelegível",
+          reason: failed.length ? `Critérios não atendidos: ${failed.join(", ")}` : null,
+        };
+      });
+      setLauraValidation({
+        generated_at: new Date().toISOString(),
+        source: "dashboard_project_cards + dashboard_lanes via authenticated application client",
+        responsible: "Laura Fernandes",
+        pair_count: rows.length,
+        eligible_count: rows.filter((row) => row.result === "Elegível").length,
+        ineligible_count: rows.filter((row) => row.result === "Inelegível").length,
+        rows,
+      });
+    } catch (error) {
+      setLauraValidationError(error instanceof Error ? error.message : String(error));
+      setLauraValidation(null);
+    } finally {
+      setLauraValidationLoading(false);
+    }
+  };
+
+  const copyLauraValidation = async () => {
+    if (!lauraValidation) return;
+    const text = JSON.stringify(lauraValidation, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setLauraValidationCopied(true);
+      window.setTimeout(() => setLauraValidationCopied(false), 2500);
+    } catch (error) {
+      console.error("[KANBAN-AUDIT] Laura validation copy failed", error);
+    }
+  };
+
   return (
     <details className="fixed bottom-3 left-3 z-[70] max-h-[82vh] w-[min(96vw,760px)] overflow-auto rounded-md border border-blue-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm">
       <summary className="cursor-pointer font-semibold text-blue-700">
@@ -576,6 +736,71 @@ function KanbanAuditPanel({
         <pre className="mt-2 max-h-[55vh] overflow-auto whitespace-pre-wrap break-words font-mono">
           {JSON.stringify(recoveryDiagnostic, null, 2)}
         </pre>
+      </details>
+      <details className="mt-3 rounded border border-amber-500/30 p-2">
+        <summary className="cursor-pointer font-semibold text-amber-700">
+          Validação dos 21 cards da Laura
+        </summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={validateLauraCards}
+            disabled={lauraValidationLoading}
+            className="rounded bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1"
+          >
+            {lauraValidationLoading ? "Validando…" : "Validar 21 cards da Laura"}
+          </button>
+          {lauraValidation && (
+            <button
+              type="button"
+              onClick={copyLauraValidation}
+              className="rounded bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-900 shadow-sm transition hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1"
+            >
+              Copiar validação JSON
+            </button>
+          )}
+          {lauraValidationCopied && <span className="font-semibold text-green-700" role="status">Validação copiada!</span>}
+        </div>
+        {lauraValidationError && <p className="mt-2 text-red-700">Falha na validação: {lauraValidationError}</p>}
+        {lauraValidation && (
+          <>
+            <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
+              <span>Pares: {lauraValidation.pair_count}</span>
+              <span>Elegíveis: {lauraValidation.eligible_count}</span>
+              <span>Inelegíveis: {lauraValidation.ineligible_count}</span>
+            </div>
+            <div className="mt-2 max-h-[45vh] overflow-auto rounded border border-amber-500/20">
+              <table className="w-full border-collapse text-left font-mono text-[10px]">
+                <thead className="sticky top-0 bg-muted">
+                  <tr>
+                    <th className="p-1">card_id</th>
+                    <th className="p-1">lane atual</th>
+                    <th className="p-1">target lane</th>
+                    <th className="p-1">responsável</th>
+                    <th className="p-1">coluna</th>
+                    <th className="p-1">resultado</th>
+                    <th className="p-1">motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lauraValidation.rows.map((row) => (
+                    <tr key={row.card_id} className="border-t border-border align-top">
+                      <td className="p-1">{row.card_id}</td>
+                      <td className="p-1">{row.current_lane_id ?? "NULL"}</td>
+                      <td className="p-1">{row.target_lane_id}</td>
+                      <td className="p-1">{row.card_assignee_name ?? "—"}</td>
+                      <td className="p-1">{row.target_lane_title ?? "—"}</td>
+                      <td className={row.result === "Elegível" ? "p-1 text-green-700" : "p-1 text-red-700"}>
+                        {row.result}
+                      </td>
+                      <td className="p-1">{row.reason ?? "Todos os critérios atendidos"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </details>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
         <span>Total cartões: {cards.length}</span>
