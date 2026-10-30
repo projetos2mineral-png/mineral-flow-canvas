@@ -167,6 +167,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const UNASSIGNED = "Sem responsável";
+const DIAGNOSTIC_ASSIGNEE = "Laura Fernandes";
+const DIAGNOSTIC_CARD_ID = "5cd68712-432b-4fa5-be8f-acd06bbdf84d";
+const DIAGNOSTIC_LANE_ID = "68b6406b-36b1-4f84-aa56-edb0d8abedac";
 
 /**
  * Gera rótulos compactos para responsáveis.
@@ -313,6 +316,30 @@ type RecoveryAuditEntry = {
   available_lanes: { id: string; title: string; position: number }[];
   reason: string;
 };
+
+const LAURA_VALIDATION_PAIRS = [
+  ["0d75cafc-4fa8-4632-891d-89959119decf", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["348d2cee-c4c3-4f1f-ba22-ce929a3b1bfe", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["4261918c-e2cc-460f-9ebd-101fd003c923", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["4aec2cbd-2e81-4131-b755-b44615f31e34", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["552c7368-1023-41c7-86dc-57922b348777", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["5aba88b3-a55d-4deb-825d-0ccc675311cb", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["654ef944-58d0-439d-ba44-361ac0112bfc", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["6bcb0fc3-fd5f-4a89-b503-1e0f79ced813", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["6f10ee30-f5fe-4ec4-9e70-74d1e953fb39", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["7033111f-889b-47fa-8768-a393b0f824ca", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["77cf0221-c500-4bca-b1b4-bc9dccbc5d64", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["7a98e9d2-e408-4c52-a82e-18d94d7b7924", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["811d2244-77bd-4f97-bf76-cdf33de469ad", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["ae0979e3-96f2-4de9-812c-0f8ee6603563", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["aed78ef2-3620-4322-90ca-f8df556f091c", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["bca47928-8290-48e3-b110-0b64972d4467", "21c22010-526e-4856-aefd-b9fb1cddcadf"],
+  ["d03b9025-6f44-4fac-88f8-fc0e4fe1c743", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["d19d4c58-b6f7-4a99-b909-f08333d8428c", "07d0b041-9003-4209-b13b-5eaa12b594a8"],
+  ["d71115e6-c7fc-484b-b065-f3633161db5f", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["d7f835f3-8032-48fc-be53-23b74da6cdc7", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+  ["e76aff8e-0ca4-4abc-a10a-28ea093180d8", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
+] as const;
 
 const RECOVERY_PAGE_SIZE = 1000;
 const RECOVERY_IN_CHUNK_SIZE = 100;
@@ -639,7 +666,18 @@ function KanbanAuditPanel({
 }) {
   const [copied, setCopied] = useState(false);
   const [recoveryCopied, setRecoveryCopied] = useState(false);
-const audit = useMemo(() => {
+  const [lauraValidation, setLauraValidation] = useState<LauraValidationReport | null>(null);
+  const [lauraValidationLoading, setLauraValidationLoading] = useState(false);
+  const [lauraValidationError, setLauraValidationError] = useState<string | null>(null);
+  const [lauraValidationCopied, setLauraValidationCopied] = useState(false);
+  const [lauraCorrection, setLauraCorrection] = useState<LauraCorrectionReport | null>(null);
+  const [lauraCorrectionLoading, setLauraCorrectionLoading] = useState(false);
+  const [globalRecovery, setGlobalRecovery] = useState<GlobalRecoveryReport | null>(null);
+  const [globalRecoveryLoading, setGlobalRecoveryLoading] = useState(false);
+  const [globalDiagnostic, setGlobalDiagnostic] = useState<GlobalDiagnosticReport | null>(null);
+  const [globalDiagnosticLoading, setGlobalDiagnosticLoading] = useState(false);
+  const [globalDiagnosticCopied, setGlobalDiagnosticCopied] = useState(false);
+  const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
       if (!projectNameById.has(project.runrunit_project_id)) {
@@ -2513,7 +2551,8 @@ function AssigneeBoard({
                   : !diagnosticResolvedLane
                     ? "resolveCardLane retornou null"
                     : "fila resolvida";
-const diagnosticPayload = {
+  const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
+  const diagnosticPayload = {
     fetchCards: {
       data: diagnosticCardsQuery.data,
       error: diagnosticCardsQuery.error,

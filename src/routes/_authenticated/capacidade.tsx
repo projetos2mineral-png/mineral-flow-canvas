@@ -66,7 +66,7 @@ function CapacityPage() {
   const users = useQuery({ queryKey: ["dashboard", "users"], queryFn: fetchDashboardUsers });
   const projects = useQuery({ queryKey: ["dashboard", "projects"], queryFn: fetchDashboardProjects });
   const lanes = useQuery({ queryKey: ["dashboard", "lanes"], queryFn: fetchLanes });
-  const cards = useQuery({ queryKey: ["dashboard", "cards"], queryFn: fetchCards });
+  const cards = useQuery({ queryKey: ["dashboard", "cards"], queryFn: () => fetchCards() });
   const demands = useQuery({ queryKey: ["manual-demands"], queryFn: fetchManualDemands });
   const capacities = useQuery({ queryKey: ["dashboard", "capacities"], queryFn: fetchAllCapacities });
 
