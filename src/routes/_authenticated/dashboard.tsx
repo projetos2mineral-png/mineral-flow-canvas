@@ -167,9 +167,6 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const UNASSIGNED = "Sem responsável";
-const DIAGNOSTIC_ASSIGNEE = "Laura Fernandes";
-const DIAGNOSTIC_CARD_ID = "5cd68712-432b-4fa5-be8f-acd06bbdf84d";
-const DIAGNOSTIC_LANE_ID = "68b6406b-36b1-4f84-aa56-edb0d8abedac";
 
 /**
  * Gera rótulos compactos para responsáveis.
@@ -2516,8 +2513,7 @@ function AssigneeBoard({
                   : !diagnosticResolvedLane
                     ? "resolveCardLane retornou null"
                     : "fila resolvida";
-  const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
-  const diagnosticPayload = {
+const diagnosticPayload = {
     fetchCards: {
       data: diagnosticCardsQuery.data,
       error: diagnosticCardsQuery.error,
