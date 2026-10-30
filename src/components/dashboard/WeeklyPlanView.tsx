@@ -33,6 +33,7 @@ import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import type { DemandBoardCard } from "@/lib/dashboard-demands";
 import { cn } from "@/lib/utils";
+import { sumLaneEstimatedHours, formatHoursCompact } from "@/lib/kanban-capacity";
 import type { DashboardCard } from "@/routes/_authenticated/dashboard";
 
 /**
@@ -111,6 +112,24 @@ function WeeklySortableCard({
   );
 }
 
+function WeeklySortableDemand({ demand, disabled }: { demand: DemandBoardCard; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: demand.key,
+    disabled,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 }}
+      {...attributes}
+      {...listeners}
+      className="shrink-0 w-[var(--kb-col,260px)]"
+    >
+      <DemandCardView card={demand} />
+    </div>
+  );
+}
+
 function WeeklyRow({
   bucket,
   title,
@@ -139,6 +158,8 @@ function WeeklyRow({
   emptyLabel?: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: rowIdForBucket(bucket) });
+  const weekHours =
+    sumLaneEstimatedHours(cards) + demands.reduce((acc, d) => acc + (Number(d.ownHours) || 0), 0);
   return (
     <div
       className={cn(
@@ -150,17 +171,20 @@ function WeeklyRow({
       <div className="w-[124px] shrink-0 pt-1">
         <div
           className={cn(
-            "text-[11px] font-medium uppercase tracking-wider leading-none",
+            "text-[13px] font-semibold uppercase tracking-wider leading-none",
             variant === "backlog" ? "text-foreground/70" : "text-muted-foreground/80",
           )}
         >
           {title}
         </div>
         {subtitle && (
-          <div className="mt-1 text-[10px] leading-none text-muted-foreground/60 font-mono tabular-nums">
+          <div className="mt-1.5 text-[12px] leading-none text-foreground/75 font-mono font-bold tabular-nums">
             {subtitle}
           </div>
         )}
+        <div className="mt-2 text-[12px] leading-none text-muted-foreground tabular-nums">
+          Total: <span className="font-semibold text-foreground/80">{formatHoursCompact(weekHours)}</span>
+        </div>
       </div>
       <div
         ref={setNodeRef}
@@ -169,7 +193,7 @@ function WeeklyRow({
           isOver && "bg-primary/5",
         )}
       >
-        <SortableContext items={cards.map((c) => c.key)} strategy={horizontalListSortingStrategy}>
+        <SortableContext items={[...cards.map((c) => c.key), ...demands.map((d) => d.key)]} strategy={horizontalListSortingStrategy}>
           <div className="flex gap-2 pb-0.5 min-h-[70px] items-start">
             {cards.length > 0 || demands.length > 0 ? (
               <>
@@ -184,9 +208,7 @@ function WeeklyRow({
                   />
                 ))}
                 {demands.map((d) => (
-                  <div key={d.key} className="shrink-0 w-[var(--kb-col,260px)]">
-                    <DemandCardView card={d} />
-                  </div>
+                  <WeeklySortableDemand key={d.key} demand={d} disabled={disabled} />
                 ))}
               </>
             ) : (
@@ -291,9 +313,36 @@ export function WeeklyPlanView({
    * semanas úteis (ex.: fim de semana) cai na semana mais próxima anterior;
    * sem correspondência → Backlog.
    */
+  const overrideStorageKey = `weekly-demand-overrides:${assigneeName}:${referenceMonth ?? ""}`;
+  const [demandOverrides, setDemandOverrides] = useState<Record<string, number>>({});
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(overrideStorageKey);
+      setDemandOverrides(raw ? (JSON.parse(raw) as Record<string, number>) : {});
+    } catch {
+      setDemandOverrides({});
+    }
+  }, [overrideStorageKey]);
+  const setDemandWeek = (key: string, bucket: number) => {
+    setDemandOverrides((prev) => {
+      const next = { ...prev, [key]: bucket };
+      try {
+        window.localStorage.setItem(overrideStorageKey, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   const demandBuckets = useMemo(() => {
     const out: DemandBoardCard[][] = [[], [], [], [], [], []];
     for (const d of demands) {
+      const ov = demandOverrides[d.key];
+      if (typeof ov === "number" && ov >= 0 && ov <= 5) {
+        out[ov].push(d);
+        continue;
+      }
       const [y, m, day] = d.demand.desired_date.slice(0, 10).split("-").map(Number);
       const date = new Date(y, (m ?? 1) - 1, day ?? 1);
       let bucket = BUCKET_BACKLOG;
@@ -303,11 +352,12 @@ export function WeeklyPlanView({
       out[bucket].push(d);
     }
     return out;
-  }, [demands, weeks]);
+  }, [demands, weeks, demandOverrides]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const activeCard = activeKey ? (cards.find((c) => c.key === activeKey) ?? null) : null;
+  const activeDemand = activeKey ? (demands.find((d) => d.key === activeKey) ?? null) : null;
 
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: ["weekly-plan", assigneeName, referenceMonth] });
@@ -322,6 +372,21 @@ export function WeeklyPlanView({
 
     const activeKeyStr = String(active.id);
     const overId = String(over.id);
+
+    // Demanda avulsa: posição semanal guardada neste navegador.
+    if (demands.some((d) => d.key === activeKeyStr)) {
+      let dest: number | null = overId.startsWith("wrow:") ? Number(overId.slice(5)) : null;
+      if (dest === null) {
+        const idx = [...Array(6).keys()].find(
+          (b) =>
+            buckets[b].some((c) => c.key === overId) ||
+            demandBuckets[b].some((d) => d.key === overId),
+        );
+        dest = idx ?? null;
+      }
+      if (dest !== null) setDemandWeek(activeKeyStr, dest);
+      return;
+    }
     if (!cards.some((c) => c.key === activeKeyStr)) return;
 
     // Lógica pura da movimentação (ordem + operações) em src/lib/weekly-move.ts
@@ -457,6 +522,10 @@ export function WeeklyPlanView({
                   dragging
                   isAdmin={isAdmin}
                 />
+              </div>
+            ) : activeDemand ? (
+              <div className="pointer-events-none w-[var(--kb-col,260px)]">
+                <DemandCardView card={activeDemand} />
               </div>
             ) : null}
           </DragOverlay>
