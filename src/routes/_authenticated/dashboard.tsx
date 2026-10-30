@@ -3566,7 +3566,10 @@ function LaneColumn({
     >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
-        className="group px-2.5 flex shrink-0 flex-col justify-center border-b border-border/50 bg-card rounded-t-lg min-h-[44px] gap-0.5 py-1"
+        className={cn(
+          "group px-2.5 flex shrink-0 flex-col justify-center bg-card min-h-[44px] gap-0.5 py-1",
+          isMonthly && isCollapsed ? "rounded-[9px]" : "border-b border-border/50 rounded-t-lg",
+        )}
       >
         {editing && onRename ? (
           <div className="flex items-center gap-1.5 w-full">
@@ -3966,19 +3969,21 @@ function DroppableLaneBody({
   return (
     <div
       ref={setNodeRef}
-      style={{ padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }}
+      style={
+        collapsed
+          ? { padding: 0 }
+          : { padding: "var(--kb-card-gap)", gap: "var(--kb-card-gap)" }
+      }
       className={cn(
         collapsed
-          ? "flex-none min-h-[28px] overflow-hidden transition-colors"
+          ? "flex-none h-0 min-h-0 overflow-hidden"
           : horizontal
             ? "flex-1 flex flex-row overflow-x-auto overflow-y-hidden min-h-[100px] transition-colors"
             : "flex-1 flex flex-col overflow-y-auto min-h-[100px] transition-colors",
         isOver && "bg-primary/5",
       )}
     >
-      {collapsed ? (
-        <div aria-hidden="true" className="h-5" />
-      ) : (
+      {collapsed ? null : (
         <>
           {reviews.map((r) => (
             <div key={`rev:${r.id}`} className={itemShell}>
