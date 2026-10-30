@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import {
   fetchDashboardProjects,
+  fetchPlanningProjects,
   fetchLanes,
   fetchCards,
   saveManualEstimate,
@@ -80,6 +81,7 @@ import {
   type ProjectCardRow,
   type CardStatus,
   type DashboardUser,
+  type PlanningProject,
 } from "@/lib/dashboard";
 import { fetchReviews, createReview, updateReview, type ReviewRow } from "@/lib/dashboard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -130,6 +132,7 @@ import {
 import { fetchUserCapacity, upsertUserCapacity, type UserCapacity } from "@/lib/user-capacity";
 import {
   fetchBoardAntecedence,
+  fetchAllBoardAntecedences,
   upsertBoardAntecedence,
   calculatePositioningDate,
 } from "@/lib/board-antecedence";
@@ -282,20 +285,54 @@ type CardAuditEntry = {
   reason: string;
 };
 
+type RecoveryCategory =
+  | "Coluna de destino comprovada por informação existente"
+  | "Possível coluna de destino, mas dependente de confirmação"
+  | "Sem informação suficiente para determinar a coluna";
+
+type RecoveryAuditEntry = {
+  category: RecoveryCategory;
+  card_id: string;
+  project_id: number;
+  project_name: string | null;
+  assignee_name: string;
+  lane_id: null;
+  desired_delivery_date: string | null;
+  created_at_runrunit: string | null;
+  last_synced_at: string | null;
+  card_updated_at: string | null;
+  planning_date: string | null;
+  planning_status: string | null;
+  planning_detail: string | null;
+  planning_updated_at: string | null;
+  antecedence_days: number;
+  positioning_date: string | null;
+  candidate_lane_title: string | null;
+  candidate_lane: { id: string; title: string; position: number } | null;
+  available_lanes: { id: string; title: string; position: number }[];
+  reason: string;
+};
+
 function KanbanAuditPanel({
   cards,
   lanes,
   projects,
+  planningProjects,
+  antecedences,
   cardsError,
   lanesError,
   projectsError,
+  planningError,
 }: {
   cards: ProjectCardRow[];
   lanes: Lane[];
   projects: DashboardProject[];
+  planningProjects: PlanningProject[];
+  antecedences: Map<string, number>;
   cardsError: unknown;
   lanesError: unknown;
   projectsError: unknown;
+  planningError: unknown;
 }) {
   const [copied, setCopied] = useState(false);
   const audit = useMemo(() => {
@@ -373,6 +410,90 @@ function KanbanAuditPanel({
     all_cards: audit.entries,
   };
 
+  const recoveryAudit = useMemo(() => {
+    const projectsById = new Map<number, DashboardProject>();
+    for (const project of projects) {
+      if (!projectsById.has(project.runrunit_project_id)) projectsById.set(project.runrunit_project_id, project);
+    }
+    const planningById = new Map<number, PlanningProject>();
+    for (const project of planningProjects) {
+      if (!planningById.has(project.runrunit_project_id)) planningById.set(project.runrunit_project_id, project);
+    }
+    const entries: RecoveryAuditEntry[] = [];
+    for (const card of cards.filter((item) => !item.lane_id)) {
+      const project = projectsById.get(card.runrunit_project_id) ?? null;
+      const planning = planningById.get(card.runrunit_project_id) ?? null;
+      const availableLanes = lanes
+        .filter((lane) => laneBelongsToAssignee(lane, card.assignee_name))
+        .map((lane) => ({ id: lane.id, title: lane.title, position: lane.position }));
+      const normalizedAssignee = normalizeAssigneeName(card.assignee_name);
+      const antecedenceDays = Array.from(antecedences.entries()).find(
+        ([name]) => normalizeAssigneeName(name) === normalizedAssignee,
+      )?.[1] ?? 0;
+      const desired = project?.desired_delivery_date ?? planning?.desired_delivery_date ?? null;
+      const positioningDate = desired ? calculatePositioningDate(desired, antecedenceDays) : null;
+      const candidateLaneTitle = positioningDate ? monthlyLaneTitle(positioningDate) : null;
+      const candidateLane = candidateLaneTitle
+        ? availableLanes.find((lane) => lane.title.trim().toLowerCase() === candidateLaneTitle.toLowerCase()) ?? null
+        : null;
+      const planningDate = planning?.planning_date ?? null;
+      const planningLaneTitle = planningDate ? monthlyLaneTitle(planningDate) : null;
+      const planningLane = planningLaneTitle
+        ? availableLanes.find((lane) => lane.title.trim().toLowerCase() === planningLaneTitle.toLowerCase()) ?? null
+        : null;
+      const category: RecoveryCategory = planningLane || candidateLane
+          ? "Possível coluna de destino, mas dependente de confirmação"
+          : "Sem informação suficiente para determinar a coluna";
+      const reason = planningLane
+        ? `planning_date=${planningDate} coincide com ${planningLane.title}, mas o planejamento semanal é independente da associação Kanban; requer confirmação`
+        : candidateLane
+          ? `desired_delivery_date=${desired} com antecedência de ${antecedenceDays} dias aponta para ${candidateLane.title}; requer confirmação`
+          : "não existe data de planejamento confirmada nem candidato mensal resolvível";
+      entries.push({
+        category,
+        card_id: card.id,
+        project_id: card.runrunit_project_id,
+        project_name: project?.project_name ?? null,
+        assignee_name: card.assignee_name,
+        lane_id: null,
+        desired_delivery_date: desired,
+        created_at_runrunit: project?.created_at_runrunit ?? null,
+        last_synced_at: project?.last_synced_at ?? null,
+        card_updated_at: card.updated_at ?? null,
+        planning_date: planningDate,
+        planning_status: planning?.planning_status ?? null,
+        planning_detail: planning?.detail ?? null,
+        planning_updated_at: planning?.planning_updated_at ?? null,
+        antecedence_days: antecedenceDays,
+        positioning_date: positioningDate,
+        candidate_lane_title: candidateLaneTitle,
+        candidate_lane: candidateLane,
+        available_lanes: availableLanes,
+        reason,
+      });
+    }
+    const counts = entries.reduce<Record<RecoveryCategory, number>>(
+      (result, entry) => {
+        result[entry.category] += 1;
+        return result;
+      },
+      {
+        "Coluna de destino comprovada por informação existente": 0,
+        "Possível coluna de destino, mas dependente de confirmação": 0,
+        "Sem informação suficiente para determinar a coluna": 0,
+      },
+    );
+    return { entries, counts };
+  }, [cards, lanes, projects, planningProjects, antecedences]);
+
+  const recoveryDiagnostic = {
+    generated_at: new Date().toISOString(),
+    total_cards_without_lane_id: recoveryAudit.entries.length,
+    query_error: planningError,
+    categories: recoveryAudit.counts,
+    cards: recoveryAudit.entries,
+  };
+
   const copyAudit = async () => {
     const text = JSON.stringify(diagnostic, null, 2);
     try {
@@ -410,6 +531,19 @@ function KanbanAuditPanel({
         </button>
         {copied && <span className="font-semibold text-green-700" role="status">Auditoria copiada!</span>}
       </div>
+      <details className="mt-3 rounded border border-blue-500/30 p-2">
+        <summary className="cursor-pointer font-semibold text-blue-700">
+          Recuperação de associação dos cartões sem lane_id ({recoveryAudit.entries.length})
+        </summary>
+        <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
+          <span>Comprovados: {recoveryAudit.counts["Coluna de destino comprovada por informação existente"]}</span>
+          <span>Possíveis: {recoveryAudit.counts["Possível coluna de destino, mas dependente de confirmação"]}</span>
+          <span>Insuficientes: {recoveryAudit.counts["Sem informação suficiente para determinar a coluna"]}</span>
+        </div>
+        <pre className="mt-2 max-h-[55vh] overflow-auto whitespace-pre-wrap break-words font-mono">
+          {JSON.stringify(recoveryDiagnostic, null, 2)}
+        </pre>
+      </details>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
         <span>Total cartões: {cards.length}</span>
         <span>Total filas: {lanes.length}</span>
@@ -436,6 +570,16 @@ function DashboardPage() {
   const projectsQ = useQuery({
     queryKey: ["dashboard", "projects"],
     queryFn: fetchDashboardProjects,
+    staleTime: 30_000,
+  });
+  const planningQ = useQuery({
+    queryKey: ["dashboard", "planning-projects"],
+    queryFn: fetchPlanningProjects,
+    staleTime: 30_000,
+  });
+  const antecedencesQ = useQuery({
+    queryKey: ["dashboard", "board-antecedences"],
+    queryFn: fetchAllBoardAntecedences,
     staleTime: 30_000,
   });
   const lanesQ = useQuery({
@@ -743,9 +887,12 @@ function DashboardPage() {
         cards={cards}
         lanes={lanes}
         projects={projects}
+        planningProjects={planningQ.data ?? []}
+        antecedences={antecedencesQ.data ?? new Map()}
         cardsError={cardsQ.error}
         lanesError={lanesQ.error}
         projectsError={projectsQ.error}
+        planningError={planningQ.error ?? antecedencesQ.error}
       />
       {readOnly && (
         <div className="px-6 py-3 border-b border-border bg-card/40">
