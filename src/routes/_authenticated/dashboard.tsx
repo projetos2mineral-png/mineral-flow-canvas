@@ -106,7 +106,8 @@ import {
   monthlyLaneTitle,
 } from "@/lib/dashboard";
 
-import { Eye } from "lucide-react";
+import { Eye, Download } from "lucide-react";
+import { exportLaneCardsToExcel } from "@/lib/export-projects";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -3757,7 +3758,27 @@ function LaneColumn({
             <Dialog open={isCapacityDialogOpen} onOpenChange={setIsCapacityDialogOpen}>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Configurações da Fila</DialogTitle>
+                  <div className="flex items-center gap-2 pr-6">
+                    <DialogTitle>Configurações da Fila</DialogTitle>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                      aria-label="Baixar cards da fila em Excel"
+                      title="Baixar cards da fila em Excel (.xlsx)"
+                      onClick={() => {
+                        try {
+                          exportLaneCardsToExcel(title, cards);
+                          toast.success(`${cards.length} card(s) exportado(s)`);
+                        } catch (e) {
+                          toast.error("Falha ao exportar Excel: " + (e as Error).message);
+                        }
+                      }}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <DialogDescription>
                     {isAdmin && isMonthly
                       ? `Ajuste o título ou a capacidade para ${assigneeName}.`
