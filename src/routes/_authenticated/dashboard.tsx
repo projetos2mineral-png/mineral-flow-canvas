@@ -383,6 +383,29 @@ type LauraCorrectionReport = {
   }[];
 };
 
+type GlobalRecoveryReport = {
+  generated_at: string;
+  update_fields_sent: ["lane_id"];
+  initial_without_lane: number;
+  effectively_directed: number;
+  kept_without_date: number;
+  kept_without_matching_lane: number;
+  not_updated_or_divergent: number;
+  stopped_on_error: boolean;
+  error: string | null;
+  by_assignee_month: { assignee_name: string; month: string; updated_count: number }[];
+  rows: {
+    card_id: string;
+    project_id: number;
+    assignee_name: string;
+    desired_delivery_date: string | null;
+    target_lane_id: string | null;
+    target_lane_title: string | null;
+    final_lane_id: string | null;
+    outcome: "direcionado" | "sem_data" | "sem_coluna" | "não_atualizado";
+  }[];
+};
+
 function KanbanAuditPanel({
   cards,
   lanes,
@@ -412,6 +435,8 @@ function KanbanAuditPanel({
   const [lauraValidationCopied, setLauraValidationCopied] = useState(false);
   const [lauraCorrection, setLauraCorrection] = useState<LauraCorrectionReport | null>(null);
   const [lauraCorrectionLoading, setLauraCorrectionLoading] = useState(false);
+  const [globalRecovery, setGlobalRecovery] = useState<GlobalRecoveryReport | null>(null);
+  const [globalRecoveryLoading, setGlobalRecoveryLoading] = useState(false);
   const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
@@ -821,6 +846,168 @@ function KanbanAuditPanel({
     }
   };
 
+  const recoverAllUnassignedCards = async () => {
+    setGlobalRecoveryLoading(true);
+    setGlobalRecovery(null);
+    let stoppedOnError = false;
+    let errorMessage: string | null = null;
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!sessionData.session) throw new Error("Nenhuma sessão autenticada ativa no Preview.");
+
+      const initialCards: { id: string; runrunit_project_id: number; assignee_name: string; lane_id: string | null }[] = [];
+      for (let from = 0; from < 50_000; from += 1000) {
+        const { data, error } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .select("id,runrunit_project_id,assignee_name,lane_id")
+          .is("lane_id", null)
+          .order("id", { ascending: true })
+          .range(from, from + 999);
+        if (error) throw error;
+        const rows = (data ?? []) as typeof initialCards;
+        initialCards.push(...rows);
+        if (rows.length < 1000) break;
+      }
+
+      const { data: laneRows, error: lanesError } = await (supabase as any)
+        .from("dashboard_lanes")
+        .select("id,assignee_name,title,position");
+      if (lanesError) throw lanesError;
+      const lanesByKey = new Map<string, { id: string; assignee_name: string; title: string; position: number }[]>();
+      for (const lane of (laneRows ?? []) as { id: string; assignee_name: string; title: string; position: number }[]) {
+        const key = `${normalizeAssigneeName(lane.assignee_name)}::${lane.title.trim().toLocaleLowerCase("pt-BR")}`;
+        const matches = lanesByKey.get(key) ?? [];
+        matches.push(lane);
+        lanesByKey.set(key, matches);
+      }
+
+      const projectDates = new Map<number, string | null>();
+      const projectIds = [...new Set(initialCards.map((card) => card.runrunit_project_id))];
+      for (let from = 0; from < projectIds.length; from += 150) {
+        const { data, error } = await (supabase as any)
+          .from("runrunit_projects")
+          .select("runrunit_project_id,desired_delivery_date")
+          .in("runrunit_project_id", projectIds.slice(from, from + 150));
+        if (error) throw error;
+        for (const project of (data ?? []) as { runrunit_project_id: number; desired_delivery_date: string | null }[]) {
+          projectDates.set(project.runrunit_project_id, project.desired_delivery_date);
+        }
+      }
+
+      const planned = initialCards.map((card) => {
+        const desired = projectDates.get(card.runrunit_project_id) ?? null;
+        const title = desired ? monthlyLaneTitle(desired) : null;
+        const matches = title
+          ? lanesByKey.get(`${normalizeAssigneeName(card.assignee_name)}::${title.trim().toLocaleLowerCase("pt-BR")}`) ?? []
+          : [];
+        return {
+          card,
+          desired,
+          title,
+          lane: matches.length === 1 ? matches[0] : null,
+          ambiguous: matches.length > 1,
+        };
+      });
+      const rows = planned.map((item) => ({
+        card_id: item.card.id,
+        project_id: item.card.runrunit_project_id,
+        assignee_name: item.card.assignee_name,
+        desired_delivery_date: item.desired,
+        target_lane_id: item.lane?.id ?? null,
+        target_lane_title: item.title,
+        final_lane_id: null,
+        outcome: item.desired ? (item.lane ? "não_atualizado" : "sem_coluna") : "sem_data",
+      } as GlobalRecoveryReport["rows"][number]));
+
+      const groups = new Map<string, string[]>();
+      for (const item of planned) {
+        if (item.lane && !item.ambiguous) {
+          const ids = groups.get(item.lane.id) ?? [];
+          ids.push(item.card.id);
+          groups.set(item.lane.id, ids);
+        }
+      }
+
+      for (const [targetLaneId, cardIds] of groups) {
+        const { error } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .update({ lane_id: targetLaneId })
+          .in("id", cardIds)
+          .is("lane_id", null);
+        if (error) {
+          stoppedOnError = true;
+          errorMessage = error.message ?? String(error);
+          break;
+        }
+      }
+
+      const { data: finalCards, error: finalError } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select("id,lane_id")
+        .in("id", initialCards.map((card) => card.id));
+      if (finalError) {
+        stoppedOnError = true;
+        errorMessage = errorMessage ?? finalError.message ?? String(finalError);
+      }
+      const finalById = new Map((finalCards ?? []).map((card: { id: string; lane_id: string | null }) => [card.id, card.lane_id]));
+      const updatedRows = rows.map((row) => {
+        const finalLaneId = finalById.get(row.card_id) ?? null;
+        const directed = !!row.target_lane_id && finalLaneId === row.target_lane_id;
+        return {
+          ...row,
+          final_lane_id: finalLaneId,
+          outcome: directed ? "direcionado" : row.outcome,
+        } as GlobalRecoveryReport["rows"][number];
+      });
+      const byMonth = new Map<string, GlobalRecoveryReport["by_assignee_month"][number]>();
+      for (const row of updatedRows) {
+        if (row.outcome !== "direcionado" || !row.target_lane_title) continue;
+        const key = `${normalizeAssigneeName(row.assignee_name)}::${row.target_lane_title}`;
+        const current = byMonth.get(key) ?? {
+          assignee_name: row.assignee_name,
+          month: row.target_lane_title,
+          updated_count: 0,
+        };
+        current.updated_count += 1;
+        byMonth.set(key, current);
+      }
+      setGlobalRecovery({
+        generated_at: new Date().toISOString(),
+        update_fields_sent: ["lane_id"],
+        initial_without_lane: initialCards.length,
+        effectively_directed: updatedRows.filter((row) => row.outcome === "direcionado").length,
+        kept_without_date: updatedRows.filter((row) => row.outcome === "sem_data").length,
+        kept_without_matching_lane: updatedRows.filter((row) => row.outcome === "sem_coluna").length,
+        not_updated_or_divergent: updatedRows.filter((row) => row.outcome === "não_atualizado").length,
+        stopped_on_error: stoppedOnError,
+        error: errorMessage,
+        by_assignee_month: [...byMonth.values()],
+        rows: updatedRows,
+      });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard", "projects"] }),
+      ]);
+    } catch (error) {
+      setGlobalRecovery({
+        generated_at: new Date().toISOString(),
+        update_fields_sent: ["lane_id"],
+        initial_without_lane: 0,
+        effectively_directed: 0,
+        kept_without_date: 0,
+        kept_without_matching_lane: 0,
+        not_updated_or_divergent: 0,
+        stopped_on_error: true,
+        error: error instanceof Error ? error.message : String(error),
+        by_assignee_month: [],
+        rows: [],
+      });
+    } finally {
+      setGlobalRecoveryLoading(false);
+    }
+  };
+
   return (
     <details className="fixed bottom-3 left-3 z-[70] max-h-[82vh] w-[min(96vw,760px)] overflow-auto rounded-md border border-blue-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm">
       <summary className="cursor-pointer font-semibold text-blue-700">
@@ -942,6 +1129,34 @@ function KanbanAuditPanel({
             {lauraCorrection.error && <div className="mt-1 text-red-700">Processamento interrompido: {lauraCorrection.error}</div>}
             <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap break-words font-mono">
               {JSON.stringify(lauraCorrection, null, 2)}
+            </pre>
+          </div>
+        )}
+        <div className="mt-3 border-t border-amber-500/20 pt-3">
+          <button
+            type="button"
+            onClick={recoverAllUnassignedCards}
+            disabled={globalRecoveryLoading}
+            className="rounded bg-purple-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-800 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1"
+          >
+            {globalRecoveryLoading ? "Recuperando todos…" : "Recuperar todos os cards sem lane_id"}
+          </button>
+          <span className="ml-2 text-muted-foreground">não cria filas; atualiza somente lane_id</span>
+        </div>
+        {globalRecovery && (
+          <div className="mt-3 rounded border border-purple-500/30 p-2">
+            <div className="font-semibold text-purple-700">Resultado da recuperação global</div>
+            <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-3">
+              <span>Inicialmente sem fila: {globalRecovery.initial_without_lane}</span>
+              <span>Direcionados: {globalRecovery.effectively_directed}</span>
+              <span>Sem data: {globalRecovery.kept_without_date}</span>
+              <span>Sem coluna correspondente: {globalRecovery.kept_without_matching_lane}</span>
+              <span>Não atualizados/divergentes: {globalRecovery.not_updated_or_divergent}</span>
+              <span>Campos enviados: {globalRecovery.update_fields_sent.join(", ")}</span>
+            </div>
+            {globalRecovery.error && <div className="mt-1 text-red-700">Processamento interrompido: {globalRecovery.error}</div>}
+            <pre className="mt-2 max-h-[55vh] overflow-auto whitespace-pre-wrap break-words font-mono">
+              {JSON.stringify(globalRecovery, null, 2)}
             </pre>
           </div>
         )}
