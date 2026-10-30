@@ -71,6 +71,7 @@ import {
   normalizeStatus,
   normalizeAssigneeName,
   sameAssigneeName,
+  laneBelongsToAssignee,
   filterByAssignee,
   resolveCardLane,
   findLaneByTitle as findLaneByTitleLib,
@@ -159,6 +160,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const UNASSIGNED = "Sem responsável";
+const DIAGNOSTIC_ASSIGNEE = "Laura Fernandes";
+const DIAGNOSTIC_CARD_ID = "5cd68712-432b-4fa5-be8f-acd06bbdf84d";
+const DIAGNOSTIC_LANE_ID = "68b6406b-36b1-4f84-aa56-edb0d8abedac";
 
 /**
  * Gera rótulos compactos para responsáveis.
@@ -617,6 +621,8 @@ function DashboardPage() {
                 demandCards={demandCards.filter((d) => d.assigneeName === a)}
                 allLanes={lanes}
                 reviewerOptions={reviewerOptions}
+                diagnosticCard={cards.find((c) => c.id === DIAGNOSTIC_CARD_ID) ?? null}
+                diagnosticLaneQuery={{ data: lanesQ.data ?? null, error: lanesQ.error ?? null }}
                 currentUserName={currentUserName}
                 qc={qc}
                 readOnly={readOnly}
@@ -755,6 +761,8 @@ function AssigneeBoard({
   demandCards = [],
   allLanes,
   reviewerOptions,
+  diagnosticCard,
+  diagnosticLaneQuery,
   currentUserName,
   qc,
   readOnly = false,
@@ -772,6 +780,8 @@ function AssigneeBoard({
   demandCards?: DemandBoardCard[];
   allLanes: Lane[];
   reviewerOptions: string[];
+  diagnosticCard: ProjectCardRow | null;
+  diagnosticLaneQuery: { data: Lane[] | null; error: unknown };
   currentUserName: string;
   qc: ReturnType<typeof useQueryClient>;
   readOnly?: boolean;
@@ -1028,6 +1038,67 @@ function AssigneeBoard({
     }
     return m;
   }, [items, localLanes, normalizedSearch]);
+
+  const diagnosticLane = localLanes.find((lane) => lane.id === DIAGNOSTIC_LANE_ID) ?? null;
+  const diagnosticCardInItems = items.find((item) => item.card?.id === DIAGNOSTIC_CARD_ID) ?? null;
+  const diagnosticSameAssignee = diagnosticCard
+    ? sameAssigneeName(diagnosticCard.assignee_name, diagnosticLane?.assignee_name)
+    : false;
+  const diagnosticLaneBelongs = laneBelongsToAssignee(diagnosticLane, assignee);
+  const diagnosticResolvedLane = diagnosticCardInItems
+    ? resolveCardLane(
+        {
+          lane_id: diagnosticCardInItems.lane_id,
+          assignee_name: diagnosticCardInItems.card?.assignee_name ?? diagnosticCardInItems.assignee_name,
+        },
+        localLanes,
+        assignee,
+      )
+    : null;
+  const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
+
+  useEffect(() => {
+    if (!showDiagnostic) return;
+    const payload = {
+      fetchLanes: {
+        data: diagnosticLaneQuery.data,
+        error: diagnosticLaneQuery.error,
+      },
+      targetLane: {
+        id: DIAGNOSTIC_LANE_ID,
+        received: !!diagnosticLaneQuery.data?.some((lane) => lane.id === DIAGNOSTIC_LANE_ID),
+        assignee_name: diagnosticLane?.assignee_name ?? null,
+      },
+      localLanes: localLanes.map((lane) => ({
+        id: lane.id,
+        assignee_name: lane.assignee_name,
+        title: lane.title,
+        position: lane.position,
+      })),
+      selectedAssignee: assignee,
+      card: diagnosticCard,
+      cardInItems: diagnosticCardInItems,
+      sameAssigneeName: diagnosticSameAssignee,
+      laneBelongsToAssignee: diagnosticLaneBelongs,
+      mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
+      resolveCardLane: diagnosticResolvedLane,
+    };
+    console.groupCollapsed("[KANBAN-DIAGNOSTIC] Laura Fernandes / projeto 3733527");
+    console.log(payload);
+    console.groupEnd();
+  }, [
+    showDiagnostic,
+    diagnosticLaneQuery,
+    diagnosticLane,
+    localLanes,
+    assignee,
+    diagnosticCard,
+    diagnosticCardInItems,
+    diagnosticSameAssignee,
+    diagnosticLaneBelongs,
+    grouped,
+    diagnosticResolvedLane,
+  ]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -1542,6 +1613,38 @@ function AssigneeBoard({
           >
             <div style={{ width: kanbanContentWidth, height: 1 }} aria-hidden="true" />
           </div>
+        )}
+        {showDiagnostic && (
+          <details
+            open
+            className="fixed right-3 top-16 z-[60] max-h-[80vh] w-[min(96vw,680px)] overflow-auto rounded-md border border-orange-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm"
+          >
+            <summary className="cursor-pointer font-semibold text-orange-700">
+              [DIAGNÓSTICO TEMPORÁRIO] Laura Fernandes / 3733527
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-words font-mono">
+              {JSON.stringify(
+                {
+                  fetchLanes: diagnosticLaneQuery,
+                  targetLane: {
+                    id: DIAGNOSTIC_LANE_ID,
+                    received: !!diagnosticLaneQuery.data?.some((lane) => lane.id === DIAGNOSTIC_LANE_ID),
+                    assignee_name: diagnosticLane?.assignee_name ?? null,
+                  },
+                  localLanes,
+                  selectedAssignee: assignee,
+                  card: diagnosticCard,
+                  cardInItems: diagnosticCardInItems,
+                  sameAssigneeName: diagnosticSameAssignee,
+                  laneBelongsToAssignee: diagnosticLaneBelongs,
+                  mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
+                  resolveCardLane: diagnosticResolvedLane,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          </details>
         )}
         <DndContext
           sensors={sensors}
