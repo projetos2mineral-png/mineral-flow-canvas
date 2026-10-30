@@ -2551,7 +2551,7 @@ function AssigneeBoard({
                   : !diagnosticResolvedLane
                     ? "resolveCardLane retornou null"
                     : "fila resolvida";
-  const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
+  const showDiagnostic = false;
   const diagnosticPayload = {
     fetchCards: {
       data: diagnosticCardsQuery.data,
