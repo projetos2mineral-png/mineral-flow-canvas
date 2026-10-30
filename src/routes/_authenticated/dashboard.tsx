@@ -367,6 +367,22 @@ type LauraValidationReport = {
   rows: LauraValidationRow[];
 };
 
+type LauraCorrectionReport = {
+  generated_at: string;
+  update_fields_sent: ["lane_id"];
+  updated_count: number;
+  not_updated_count: number;
+  stopped_on_error: boolean;
+  error: string | null;
+  rows: {
+    card_id: string;
+    final_lane_id: string | null;
+    target_lane_id: string;
+    target_lane_title: string | null;
+    updated: boolean;
+  }[];
+};
+
 function KanbanAuditPanel({
   cards,
   lanes,
@@ -394,6 +410,8 @@ function KanbanAuditPanel({
   const [lauraValidationLoading, setLauraValidationLoading] = useState(false);
   const [lauraValidationError, setLauraValidationError] = useState<string | null>(null);
   const [lauraValidationCopied, setLauraValidationCopied] = useState(false);
+  const [lauraCorrection, setLauraCorrection] = useState<LauraCorrectionReport | null>(null);
+  const [lauraCorrectionLoading, setLauraCorrectionLoading] = useState(false);
   const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
@@ -699,6 +717,110 @@ function KanbanAuditPanel({
     }
   };
 
+  const correctLauraCards = async () => {
+    if (!lauraValidation || lauraValidation.rows.length !== LAURA_VALIDATION_PAIRS.length) return;
+    if (lauraValidation.rows.some((row) => row.result !== "Elegível")) {
+      setLauraCorrection({
+        generated_at: new Date().toISOString(),
+        update_fields_sent: ["lane_id"],
+        updated_count: 0,
+        not_updated_count: LAURA_VALIDATION_PAIRS.length,
+        stopped_on_error: true,
+        error: "Correção interrompida: a validação autenticada contém cards inelegíveis.",
+        rows: lauraValidation.rows.map((row) => ({
+          card_id: row.card_id,
+          final_lane_id: row.current_lane_id,
+          target_lane_id: row.target_lane_id,
+          target_lane_title: row.target_lane_title,
+          updated: false,
+        })),
+      });
+      return;
+    }
+
+    setLauraCorrectionLoading(true);
+    setLauraCorrection(null);
+    const targetTitleById = new Map(lauraValidation.rows.map((row) => [row.target_lane_id, row.target_lane_title]));
+    const updatedIds = new Set<string>();
+    let stoppedOnError = false;
+    let errorMessage: string | null = null;
+    try {
+      const groups = new Map<string, string[]>();
+      for (const [cardId, targetLaneId] of LAURA_VALIDATION_PAIRS) {
+        const ids = groups.get(targetLaneId) ?? [];
+        ids.push(cardId);
+        groups.set(targetLaneId, ids);
+      }
+
+      for (const [targetLaneId, cardIds] of groups) {
+        const { data, error } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .update({ lane_id: targetLaneId })
+          .in("id", cardIds)
+          .is("lane_id", null)
+          .select("id,lane_id");
+        if (error) {
+          stoppedOnError = true;
+          errorMessage = error.message ?? String(error);
+          break;
+        }
+        const returned = (data ?? []) as { id: string; lane_id: string | null }[];
+        if (returned.length !== cardIds.length || returned.some((row) => row.lane_id !== targetLaneId)) {
+          stoppedOnError = true;
+          errorMessage = `Divergência no grupo ${targetLaneId}: esperados ${cardIds.length}, confirmados ${returned.length}.`;
+          for (const row of returned) {
+            if (row.lane_id === targetLaneId) updatedIds.add(row.id);
+          }
+          break;
+        }
+        for (const row of returned) updatedIds.add(row.id);
+      }
+
+      const { data: finalCards, error: finalError } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select("id,lane_id")
+        .in("id", LAURA_VALIDATION_PAIRS.map(([cardId]) => cardId));
+      if (finalError) {
+        stoppedOnError = true;
+        errorMessage = errorMessage ?? finalError.message ?? String(finalError);
+      }
+      const finalById = new Map((finalCards ?? []).map((row: any) => [row.id, row]));
+      setLauraCorrection({
+        generated_at: new Date().toISOString(),
+        update_fields_sent: ["lane_id"],
+        updated_count: updatedIds.size,
+        not_updated_count: LAURA_VALIDATION_PAIRS.length - updatedIds.size,
+        stopped_on_error: stoppedOnError,
+        error: errorMessage,
+        rows: LAURA_VALIDATION_PAIRS.map(([cardId, targetLaneId]) => ({
+          card_id: cardId,
+          final_lane_id: finalById.get(cardId)?.lane_id ?? null,
+          target_lane_id: targetLaneId,
+          target_lane_title: targetTitleById.get(targetLaneId) ?? null,
+          updated: updatedIds.has(cardId),
+        })),
+      });
+    } catch (error) {
+      setLauraCorrection({
+        generated_at: new Date().toISOString(),
+        update_fields_sent: ["lane_id"],
+        updated_count: updatedIds.size,
+        not_updated_count: LAURA_VALIDATION_PAIRS.length - updatedIds.size,
+        stopped_on_error: true,
+        error: error instanceof Error ? error.message : String(error),
+        rows: LAURA_VALIDATION_PAIRS.map(([cardId, targetLaneId]) => ({
+          card_id: cardId,
+          final_lane_id: null,
+          target_lane_id: targetLaneId,
+          target_lane_title: targetTitleById.get(targetLaneId) ?? null,
+          updated: updatedIds.has(cardId),
+        })),
+      });
+    } finally {
+      setLauraCorrectionLoading(false);
+    }
+  };
+
   return (
     <details className="fixed bottom-3 left-3 z-[70] max-h-[82vh] w-[min(96vw,760px)] overflow-auto rounded-md border border-blue-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm">
       <summary className="cursor-pointer font-semibold text-blue-700">
@@ -759,6 +881,16 @@ function KanbanAuditPanel({
               Copiar validação JSON
             </button>
           )}
+          {lauraValidation && lauraValidation.rows.every((row) => row.result === "Elegível") && (
+            <button
+              type="button"
+              onClick={correctLauraCards}
+              disabled={lauraCorrectionLoading}
+              className="rounded bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+            >
+              {lauraCorrectionLoading ? "Corrigindo…" : "Corrigir 21 cards da Laura"}
+            </button>
+          )}
           {lauraValidationCopied && <span className="font-semibold text-green-700" role="status">Validação copiada!</span>}
         </div>
         {lauraValidationError && <p className="mt-2 text-red-700">Falha na validação: {lauraValidationError}</p>}
@@ -800,6 +932,18 @@ function KanbanAuditPanel({
               </table>
             </div>
           </>
+        )}
+        {lauraCorrection && (
+          <div className="mt-3 rounded border border-red-500/30 p-2">
+            <div className="font-semibold text-red-700">
+              Correção: {lauraCorrection.updated_count} atualizados, {lauraCorrection.not_updated_count} não atualizados
+            </div>
+            <div className="mt-1">Campos enviados: {lauraCorrection.update_fields_sent.join(", ")}</div>
+            {lauraCorrection.error && <div className="mt-1 text-red-700">Processamento interrompido: {lauraCorrection.error}</div>}
+            <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap break-words font-mono">
+              {JSON.stringify(lauraCorrection, null, 2)}
+            </pre>
+          </div>
         )}
       </details>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
