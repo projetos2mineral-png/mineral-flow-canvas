@@ -263,6 +263,169 @@ export type DashboardCard = {
   updated_at: string | null;
 };
 
+type AuditCategory =
+  | "Correto"
+  | "Lane inexistente"
+  | "Responsável divergente"
+  | "Sem lane_id com fila disponível"
+  | "Sem lane_id sem fila disponível";
+
+type CardAuditEntry = {
+  category: AuditCategory;
+  card_id: string;
+  project_id: number;
+  project_name: string | null;
+  assignee_name: string;
+  lane_id: string | null;
+  found_lane: { id: string; assignee_name: string; title: string; position: number } | null;
+  resolveCardLane: { id: string; assignee_name: string; title: string; position: number } | null;
+  reason: string;
+};
+
+function KanbanAuditPanel({
+  cards,
+  lanes,
+  projects,
+  cardsError,
+  lanesError,
+  projectsError,
+}: {
+  cards: ProjectCardRow[];
+  lanes: Lane[];
+  projects: DashboardProject[];
+  cardsError: unknown;
+  lanesError: unknown;
+  projectsError: unknown;
+}) {
+  const [copied, setCopied] = useState(false);
+  const audit = useMemo(() => {
+    const projectNameById = new Map<number, string>();
+    for (const project of projects) {
+      if (!projectNameById.has(project.runrunit_project_id)) {
+        projectNameById.set(project.runrunit_project_id, project.project_name);
+      }
+    }
+    const laneById = new Map(lanes.map((lane) => [lane.id, lane]));
+    const entries: CardAuditEntry[] = [];
+    for (const card of cards) {
+      const foundLane = card.lane_id ? laneById.get(card.lane_id) ?? null : null;
+      const resolvedLane = resolveCardLane(card, lanes, card.assignee_name);
+      let category: AuditCategory;
+      let reason: string;
+      if (card.lane_id && !foundLane) {
+        category = "Lane inexistente";
+        reason = "lane_id persistido não foi encontrado em dashboard_lanes";
+      } else if (foundLane && !sameAssigneeName(foundLane.assignee_name, card.assignee_name)) {
+        category = "Responsável divergente";
+        reason = "responsável da fila diverge do responsável do cartão";
+      } else if (!card.lane_id) {
+        const hasCompatibleLane = lanes.some((lane) => laneBelongsToAssignee(lane, card.assignee_name));
+        category = hasCompatibleLane
+          ? "Sem lane_id com fila disponível"
+          : "Sem lane_id sem fila disponível";
+        reason = hasCompatibleLane
+          ? "não há associação persistida, embora exista fila compatível"
+          : "não há associação persistida nem fila compatível";
+      } else {
+        category = "Correto";
+        reason = "lane_id existe e pertence ao responsável do cartão";
+      }
+      entries.push({
+        category,
+        card_id: card.id,
+        project_id: card.runrunit_project_id,
+        project_name: projectNameById.get(card.runrunit_project_id) ?? null,
+        assignee_name: card.assignee_name,
+        lane_id: card.lane_id,
+        found_lane: foundLane,
+        resolveCardLane: resolvedLane,
+        reason,
+      });
+    }
+    const counts = entries.reduce<Record<AuditCategory, number>>(
+      (result, entry) => {
+        result[entry.category] += 1;
+        return result;
+      },
+      {
+        Correto: 0,
+        "Lane inexistente": 0,
+        "Responsável divergente": 0,
+        "Sem lane_id com fila disponível": 0,
+        "Sem lane_id sem fila disponível": 0,
+      },
+    );
+    return { entries, counts };
+  }, [cards, lanes, projects]);
+
+  const diagnostic = {
+    generated_at: new Date().toISOString(),
+    total_cards: cards.length,
+    total_lanes: lanes.length,
+    categories: Object.fromEntries(
+      Object.entries(audit.counts).map(([category, count]) => [
+        category,
+        { count, percentage: cards.length ? Number(((count / cards.length) * 100).toFixed(2)) : 0 },
+      ]),
+    ),
+    query_errors: { cards: cardsError, lanes: lanesError, projects: projectsError },
+    inconsistent_cards: audit.entries.filter((entry) => entry.category !== "Correto"),
+    all_cards: audit.entries,
+  };
+
+  const copyAudit = async () => {
+    const text = JSON.stringify(diagnostic, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2500);
+    } catch (error) {
+      console.error("[KANBAN-AUDIT] copy failed", error);
+    }
+  };
+
+  return (
+    <details className="fixed bottom-3 left-3 z-[70] max-h-[82vh] w-[min(96vw,760px)] overflow-auto rounded-md border border-blue-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm">
+      <summary className="cursor-pointer font-semibold text-blue-700">
+        [AUDITORIA TEMPORÁRIA] Associação de cartões às filas
+      </summary>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={copyAudit}
+          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+        >
+          Copiar auditoria completa
+        </button>
+        {copied && <span className="font-semibold text-green-700" role="status">Auditoria copiada!</span>}
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+        <span>Total cartões: {cards.length}</span>
+        <span>Total filas: {lanes.length}</span>
+        <span>Corretos: {audit.counts.Correto}</span>
+        <span>Lane inexistente: {audit.counts["Lane inexistente"]}</span>
+        <span>Responsável divergente: {audit.counts["Responsável divergente"]}</span>
+        <span>Sem lane, fila disponível: {audit.counts["Sem lane_id com fila disponível"]}</span>
+        <span>Sem lane, sem fila: {audit.counts["Sem lane_id sem fila disponível"]}</span>
+      </div>
+      <pre className="mt-2 max-h-[60vh] overflow-auto whitespace-pre-wrap break-words font-mono">
+        {JSON.stringify({ ...diagnostic, all_cards: undefined }, null, 2)}
+      </pre>
+    </details>
+  );
+}
+
 function DashboardPage() {
   const qc = useQueryClient();
   const { level } = useCurrentDashboardUser();
@@ -576,6 +739,14 @@ function DashboardPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      <KanbanAuditPanel
+        cards={cards}
+        lanes={lanes}
+        projects={projects}
+        cardsError={cardsQ.error}
+        lanesError={lanesQ.error}
+        projectsError={projectsQ.error}
+      />
       {readOnly && (
         <div className="px-6 py-3 border-b border-border bg-card/40">
           <div className="inline-flex items-center gap-2 text-xs rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground">
