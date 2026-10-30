@@ -329,6 +329,7 @@ export async function fetchCards(
       .select(
         "id,runrunit_project_id,assignee_name,lane_id,status,position,internal_note,review_status,review_requested_by,review_requested_to,correction_note,manually_positioned,total_tasks,total_estimated_hours,calculation_details,updated_by,updated_at"
       )
+      .order("id", { ascending: true })
       .range(from, to);
 
     if (error) throw error;

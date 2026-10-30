@@ -26,12 +26,25 @@ const flagsError = {
   details: "authenticated role is not allowed to read the table",
 };
 
-const state = { flagsCalls: 0 };
+const state = {
+  flagsCalls: 0,
+  primaryRows: [primaryCard],
+  orderCalls: [] as { column: string; ascending: boolean }[],
+  ranges: [] as { from: number; to: number }[],
+};
 
 function primaryQuery() {
   return {
     select: () => primaryQuery(),
-    range: async () => ({ data: [primaryCard], error: null }),
+    order: (column: string, options: { ascending: boolean }) => {
+      state.orderCalls.push({ column, ascending: options.ascending });
+      return primaryQuery();
+    },
+    range: async (from: number, to: number) => {
+      state.ranges.push({ from, to });
+      const rows = [...state.primaryRows].sort((a, b) => a.id.localeCompare(b.id));
+      return { data: rows.slice(from, to + 1), error: null };
+    },
   };
 }
 
@@ -59,6 +72,9 @@ import { fetchCards } from "./dashboard";
 describe("fetchCards", () => {
   beforeEach(() => {
     state.flagsCalls = 0;
+    state.primaryRows = [primaryCard];
+    state.orderCalls = [];
+    state.ranges = [];
   });
 
   it("preserva cards da view quando a consulta complementar falha", async () => {
@@ -78,11 +94,45 @@ describe("fetchCards", () => {
       total_estimated_hours: 0.95,
     });
     expect(state.flagsCalls).toBe(1);
+    expect(state.orderCalls).toEqual([{ column: "id", ascending: true }]);
+    expect(state.ranges).toEqual([{ from: 0, to: 999 }]);
     expect(errorSpy).toHaveBeenCalledWith(
       "[dashboard] fetchCards complementary flags query failed",
       expect.objectContaining(flagsError),
     );
 
     errorSpy.mockRestore();
+  });
+
+  it("pagina sem duplicar ou omitir cards acima de 2.000 registros", async () => {
+    const targetId = primaryCard.id;
+    state.primaryRows = Array.from({ length: 2199 }, (_, index) => ({
+      ...primaryCard,
+      id: index === 1234 ? targetId : `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      runrunit_project_id: index === 1234 ? 3733527 : index + 1,
+      assignee_name: index === 1234 ? "Laura Fernandes" : `Assignee ${index}`,
+    }));
+
+    const cards = await fetchCards();
+    const ids = cards.map((card) => card.id);
+
+    expect(cards).toHaveLength(2199);
+    expect(new Set(ids).size).toBe(2199);
+    expect(ids).toContain(targetId);
+    expect(cards.find((card) => card.id === targetId)).toMatchObject({
+      runrunit_project_id: 3733527,
+      assignee_name: "Laura Fernandes",
+      lane_id: primaryCard.lane_id,
+    });
+    expect(state.orderCalls).toEqual([
+      { column: "id", ascending: true },
+      { column: "id", ascending: true },
+      { column: "id", ascending: true },
+    ]);
+    expect(state.ranges).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 },
+      { from: 2000, to: 2999 },
+    ]);
   });
 });
