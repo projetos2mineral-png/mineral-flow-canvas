@@ -69,6 +69,10 @@ import {
   STATUS_LABEL,
   STATUS_DOT_CLASS,
   normalizeStatus,
+  normalizeAssigneeName,
+  sameAssigneeName,
+  filterByAssignee,
+  resolveCardLane,
   findLaneByTitle as findLaneByTitleLib,
   type DashboardProject,
   type Lane,
@@ -318,10 +322,14 @@ function DashboardPage() {
   );
 
   const assignees = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of projects) set.add(p.assignee_name ?? UNASSIGNED);
-    for (const d of demandCards) set.add(d.assigneeName);
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+    const names = new Map<string, string>();
+    const add = (name: string) => {
+      const key = name === UNASSIGNED ? UNASSIGNED : normalizeAssigneeName(name);
+      if (!names.has(key)) names.set(key, name);
+    };
+    for (const p of projects) add(p.assignee_name ?? UNASSIGNED);
+    for (const d of demandCards) add(d.assigneeName);
+    return Array.from(names.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [projects, demandCards]);
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
@@ -344,7 +352,7 @@ function DashboardPage() {
     for (const a of assignees) {
       const ids = new Set(
         projects
-          .filter((p) => (p.assignee_name ?? UNASSIGNED) === a)
+           .filter((p) => sameAssigneeName(p.assignee_name ?? UNASSIGNED, a))
           .map((p) => p.runrunit_project_id),
       );
       m[a] = ids.size;
@@ -541,8 +549,10 @@ function DashboardPage() {
         }
       }
       if (anyCreated) {
-        qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] }),
+          qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+        ]);
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -598,9 +608,9 @@ function DashboardPage() {
             >
               <AssigneeBoard
                 assignee={a}
-                projects={projects.filter((p) => (p.assignee_name ?? UNASSIGNED) === a)}
-                lanes={lanes.filter((l) => l.assignee_name === a)}
-                cards={cards.filter((c) => c.assignee_name === a)}
+                projects={projects.filter((p) => sameAssigneeName(p.assignee_name ?? UNASSIGNED, a))}
+                lanes={filterByAssignee(lanes, a)}
+                cards={filterByAssignee(cards, a)}
                 reviews={reviews.filter(
                   (r) => r.reviewer_name === a && r.review_status === "aguardando revisão",
                 )}
@@ -878,8 +888,10 @@ function AssigneeBoard({
       } catch (e) {
         console.warn("Reallocate after antecedence change failed:", e);
       }
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
-      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] }),
+      ]);
     } catch (e) {
       toast.error("Falha ao salvar antecedência: " + (e as Error).message);
     } finally {
@@ -990,7 +1002,12 @@ function AssigneeBoard({
           .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
-      const key = it.lane_id && m.has(it.lane_id) ? it.lane_id : UNASSIGNED_LANE;
+      const lane = resolveCardLane(
+        { lane_id: it.lane_id, assignee_name: it.card?.assignee_name ?? it.assignee_name },
+        localLanes,
+        assignee,
+      );
+      const key = lane ? lane.id : UNASSIGNED_LANE;
       m.get(key)!.push(it);
     }
     // Ordenação automática por "Data de entrega desejada" (desired_delivery_date)
@@ -1179,10 +1196,10 @@ function AssigneeBoard({
             await updateLane(next[i].id, { position: i });
           }
         }
-        qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+        await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
       } catch (err) {
         toast.error("Falha ao reordenar filas: " + (err as Error).message);
-        qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+        await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
       }
       return;
     }
@@ -1245,7 +1262,9 @@ function AssigneeBoard({
     );
     qc.setQueryData<ProjectCardRow[]>(["dashboard", "cards"], (old) =>
       old?.map((c) => {
-        const u = c.assignee_name === assignee ? byProject.get(c.runrunit_project_id) : undefined;
+        const u = sameAssigneeName(c.assignee_name, assignee)
+          ? byProject.get(c.runrunit_project_id)
+          : undefined;
         return u
           ? {
               ...c,
@@ -1281,7 +1300,9 @@ function AssigneeBoard({
     await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
     const fresh = qc.getQueryData<ProjectCardRow[]>(["dashboard", "cards"]);
     const readBack = fresh?.find(
-      (c) => c.assignee_name === assignee && c.runrunit_project_id === first.runrunit_project_id,
+      (c) =>
+        sameAssigneeName(c.assignee_name, assignee) &&
+        c.runrunit_project_id === first.runrunit_project_id,
     );
     if (readBack && (readBack.lane_id ?? null) !== first.lane_id) {
       console.error("[kanban] gravação confirmada, mas a leitura retornou outra fila", {
@@ -1301,7 +1322,7 @@ function AssigneeBoard({
     if (!title) return;
     try {
       await createLane(assignee, title, lanesSorted.length);
-      qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
       toast.success("Fila criada");
     } catch (e) {
       toast.error("Falha ao criar fila: " + (e as Error).message);
@@ -1331,7 +1352,7 @@ function AssigneeBoard({
         updated_by: currentUserName,
         ...(targetLaneId !== undefined ? { lane_id: targetLaneId } : {}),
       });
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
     } catch (e) {
       toast.error("Falha ao atualizar status: " + (e as Error).message);
     }
@@ -1346,7 +1367,7 @@ function AssigneeBoard({
         updated_by: currentUserName,
       });
       toast.success("Observação salva");
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
     } catch (e) {
       toast.error("Falha ao salvar observação: " + (e as Error).message);
     }
@@ -1378,7 +1399,7 @@ function AssigneeBoard({
         previous.map((item) => (item.key === it.key ? updatedCard : item)),
       );
       setOpenCard((previous) => (previous?.key === it.key ? updatedCard : previous));
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
       toast.success("Classificações salvas");
     } catch (e) {
       toast.error("Falha ao salvar classificações: " + (e as Error).message);
@@ -1407,7 +1428,7 @@ function AssigneeBoard({
       const updatedCard = { ...it, card: savedCard };
       setItems((previous) => previous.map((item) => (item.key === it.key ? updatedCard : item)));
       setOpenCard((previous) => (previous?.key === it.key ? updatedCard : previous));
-      qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+      await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
       toast.success(saved == null ? "Estimativa automática restaurada" : "Estimativa manual salva");
     } catch (e) {
       toast.error("Falha ao salvar estimativa: " + (e as Error).message);
@@ -1593,7 +1614,7 @@ function AssigneeBoard({
                       onRename={async (newTitle) => {
                         try {
                           await updateLane(lane.id, { title: newTitle });
-                          qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+                          await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
                         } catch (e) {
                           toast.error("Falha ao renomear: " + (e as Error).message);
                         }
@@ -1602,8 +1623,8 @@ function AssigneeBoard({
                         if (!window.confirm(`Excluir a fila "${lane.title}"?`)) return;
                         try {
                           await deleteLane(lane.id);
-                          qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-                          qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+                          await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+                          await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
                           toast.success("Fila excluída");
                         } catch (e) {
                           toast.error("Falha ao excluir: " + (e as Error).message);

@@ -74,6 +74,30 @@ export type Lane = {
   position: number;
 };
 
+/**
+ * Normaliza nomes somente para comparação no cliente.
+ * O texto original continua sendo o valor persistido no banco.
+ */
+export function normalizeAssigneeName(name: string | null | undefined): string {
+  return (name ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+}
+
+export function sameAssigneeName(
+  left: string | null | undefined,
+  right: string | null | undefined,
+): boolean {
+  const normalizedLeft = normalizeAssigneeName(left);
+  const normalizedRight = normalizeAssigneeName(right);
+  return normalizedLeft !== "" && normalizedLeft === normalizedRight;
+}
+
+export function laneBelongsToAssignee(
+  lane: Pick<Lane, "assignee_name"> | null | undefined,
+  assigneeName: string | null | undefined,
+): boolean {
+  return !!lane && sameAssigneeName(lane.assignee_name, assigneeName);
+}
+
 export type CalculationDetails = unknown;
 
 export type ProjectCardRow = {
@@ -101,6 +125,23 @@ export type ProjectCardRow = {
   /** Ajuste manual; quando preenchido, substitui a estimativa automática. */
   manual_estimated_hours?: number | null;
 };
+
+export function filterByAssignee<T extends { assignee_name: string | null }>(
+  rows: T[],
+  assigneeName: string | null | undefined,
+): T[] {
+  return rows.filter((row) => sameAssigneeName(row.assignee_name, assigneeName));
+}
+
+export function resolveCardLane(
+  card: { lane_id: string | null; assignee_name: string | null },
+  lanes: Lane[],
+  assigneeName: string,
+): Lane | null {
+  if (!sameAssigneeName(card.assignee_name, assigneeName) || !card.lane_id) return null;
+  const lane = lanes.find((candidate) => candidate.id === card.lane_id);
+  return laneBelongsToAssignee(lane, assigneeName) ? lane : null;
+}
 
 /** Horas efetivas do card: ajuste manual tem prioridade sobre a automática. */
 export function effectiveEstimatedHours(
@@ -258,7 +299,7 @@ export function findLaneByTitle(
   assigneeName: string,
   titles: string[]
 ): Lane | null {
-  const set = lanes.filter((l) => l.assignee_name === assigneeName);
+  const set = lanes.filter((l) => laneBelongsToAssignee(l, assigneeName));
   for (const t of titles) {
     const m = set.find((l) => l.title.trim().toLowerCase() === t.toLowerCase());
     if (m) return m;
@@ -589,17 +630,17 @@ export async function ensureDefaultMonthlyLanes(
   assignee_name: string,
   existingLanes: Lane[]
 ): Promise<boolean> {
-  const key = assignee_name.trim().toLowerCase();
+  const key = normalizeAssigneeName(assignee_name);
   if (bootstrappedAssignees.has(key)) return false;
   bootstrappedAssignees.add(key);
 
   // Só cria os meses padrão em quadros novos (sem nenhuma fila). Se o quadro
   // já tem filas, respeita exclusões feitas pelo usuário e não recria nada.
-  const own = existingLanes.filter((l) => l.assignee_name === assignee_name);
+  const own = existingLanes.filter((l) => sameAssigneeName(l.assignee_name, assignee_name));
   if (own.length > 0) return false;
   const missing = [...DEFAULT_MONTHLY_LANE_TITLES];
   const basePosition = existingLanes
-    .filter((l) => l.assignee_name === assignee_name)
+    .filter((l) => sameAssigneeName(l.assignee_name, assignee_name))
     .reduce((max, l) => Math.max(max, l.position ?? 0), -1);
   // Inserir uma a uma e ignorar violação do índice único (23505). Isso
   // evita que corridas entre abas/refreshes gerem filas duplicadas.
@@ -635,7 +676,7 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
   const byKey = new Map<string, Lane[]>();
   for (const l of lanes) {
     if (!isMonthlyLaneTitle(l.title)) continue;
-    const k = `${l.assignee_name}::${l.title.trim().toLowerCase()}`;
+    const k = `${normalizeAssigneeName(l.assignee_name)}::${l.title.trim().toLowerCase()}`;
     const arr = byKey.get(k) ?? [];
     arr.push(l);
     byKey.set(k, arr);
