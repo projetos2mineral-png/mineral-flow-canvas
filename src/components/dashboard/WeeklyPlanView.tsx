@@ -30,6 +30,8 @@ import { computeMonthWeeks } from "@/lib/weekly-weeks";
 import { planWeeklyMove } from "@/lib/weekly-move";
 import { monthlyTitleToDateISO, type CardStatus } from "@/lib/dashboard";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
+import { DemandCardView } from "@/components/dashboard/DemandCardView";
+import type { DemandBoardCard } from "@/lib/dashboard-demands";
 import { cn } from "@/lib/utils";
 import type { DashboardCard } from "@/routes/_authenticated/dashboard";
 
@@ -115,6 +117,7 @@ function WeeklyRow({
   subtitle,
   variant = "week",
   cards,
+  demands = [],
   onOpenCard,
   onStatusChange,
   disabled = false,
@@ -127,6 +130,7 @@ function WeeklyRow({
   subtitle?: string | null;
   variant?: "backlog" | "week";
   cards: DashboardCard[];
+  demands?: DemandBoardCard[];
   onOpenCard?: (c: DashboardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   disabled?: boolean;
@@ -167,17 +171,24 @@ function WeeklyRow({
       >
         <SortableContext items={cards.map((c) => c.key)} strategy={horizontalListSortingStrategy}>
           <div className="flex gap-2 pb-0.5 min-h-[70px] items-start">
-            {cards.length > 0 ? (
-              cards.map((c) => (
-                <WeeklySortableCard
-                  key={c.key}
-                  card={c}
-                  onOpenCard={onOpenCard}
-                  onStatusChange={onStatusChange}
-                  disabled={disabled}
-                  isAdmin={isAdmin}
-                />
-              ))
+            {cards.length > 0 || demands.length > 0 ? (
+              <>
+                {cards.map((c) => (
+                  <WeeklySortableCard
+                    key={c.key}
+                    card={c}
+                    onOpenCard={onOpenCard}
+                    onStatusChange={onStatusChange}
+                    disabled={disabled}
+                    isAdmin={isAdmin}
+                  />
+                ))}
+                {demands.map((d) => (
+                  <div key={d.key} className="shrink-0 w-[var(--kb-col,260px)]">
+                    <DemandCardView card={d} />
+                  </div>
+                ))}
+              </>
             ) : (
               <span className="text-[11px] text-muted-foreground/45 pt-6">{emptyLabel ?? ""}</span>
             )}
@@ -194,6 +205,7 @@ export function WeeklyPlanView({
   assigneeName,
   monthTitle,
   cards,
+  demands = [],
   onOpenCard,
   onStatusChange,
   readOnly = false,
@@ -204,6 +216,7 @@ export function WeeklyPlanView({
   assigneeName: string;
   monthTitle: string;
   cards: DashboardCard[];
+  demands?: DemandBoardCard[];
   onOpenCard?: (c: DashboardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   readOnly?: boolean;
@@ -271,6 +284,26 @@ export function WeeklyPlanView({
     }
     return out;
   }, [cards, entryByProject]);
+
+  /**
+   * Demandas Avulsas: posicionadas automaticamente na semana que contém
+   * `desired_date` (somente leitura, sem persistência). Data fora das
+   * semanas úteis (ex.: fim de semana) cai na semana mais próxima anterior;
+   * sem correspondência → Backlog.
+   */
+  const demandBuckets = useMemo(() => {
+    const out: DemandBoardCard[][] = [[], [], [], [], [], []];
+    for (const d of demands) {
+      const [y, m, day] = d.demand.desired_date.slice(0, 10).split("-").map(Number);
+      const date = new Date(y, (m ?? 1) - 1, day ?? 1);
+      let bucket = BUCKET_BACKLOG;
+      weeks.forEach((w, i) => {
+        if (w.rangeLabel && date >= w.start) bucket = i + 1;
+      });
+      out[bucket].push(d);
+    }
+    return out;
+  }, [demands, weeks]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeKey, setActiveKey] = useState<string | null>(null);
@@ -385,6 +418,7 @@ export function WeeklyPlanView({
               title="Backlog"
               variant="backlog"
               cards={buckets[BUCKET_BACKLOG]}
+              demands={demandBuckets[BUCKET_BACKLOG]}
               onOpenCard={onOpenCard}
               onStatusChange={onStatusChange}
               disabled={readOnly}
@@ -402,6 +436,7 @@ export function WeeklyPlanView({
                   title={`Semana ${w.index}`}
                   subtitle={w.rangeLabel}
                   cards={buckets[i + 1]}
+                  demands={demandBuckets[i + 1]}
                   onOpenCard={onOpenCard}
                   onStatusChange={onStatusChange}
                   disabled={readOnly}
