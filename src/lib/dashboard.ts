@@ -140,7 +140,7 @@ export function resolveCardLane(
 ): Lane | null {
   if (!sameAssigneeName(card.assignee_name, assigneeName) || !card.lane_id) return null;
   const lane = lanes.find((candidate) => candidate.id === card.lane_id);
-  return laneBelongsToAssignee(lane, assigneeName) ? lane : null;
+  return lane && laneBelongsToAssignee(lane, assigneeName) ? lane : null;
 }
 
 /** Horas efetivas do card: ajuste manual tem prioridade sobre a automática. */
@@ -292,6 +292,231 @@ export function monthlyLaneTitle(dateISO: string): string {
   const d = new Date(dateISO.length <= 10 ? `${dateISO}T00:00:00Z` : dateISO);
   if (Number.isNaN(d.getTime())) return "";
   return `${MONTH_NAMES_PT[d.getUTCMonth()]}/${d.getUTCFullYear()}`;
+}
+
+export type MonthlyPeriod = {
+  year: number;
+  month: number;
+};
+
+export type LanePeriodInfo = {
+  lane: Lane;
+  assigneeKey: string;
+  period: MonthlyPeriod | null;
+  periodKey: string | null;
+};
+
+export type LanePeriodIndex = {
+  entries: LanePeriodInfo[];
+  byKey: Map<string, LanePeriodInfo[]>;
+  byAssignee: Map<string, LanePeriodInfo[]>;
+};
+
+export type LaneMatchReason =
+  | "match"
+  | "sem_data"
+  | "sem_responsavel"
+  | "sem_fila_do_responsavel"
+  | "titulo_de_fila_invalido"
+  | "sem_fila_do_mes"
+  | "ambiguo";
+
+export type LaneMatchResult = {
+  reason: LaneMatchReason;
+  lane: Lane | null;
+  candidates: Lane[];
+  assigneeKey: string;
+  period: MonthlyPeriod | null;
+  periodKey: string | null;
+  ownLaneCount: number;
+  validPeriodLaneCount: number;
+};
+
+function normalizeMatchingText(value: string | null | undefined): string {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00a0/g, " ")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+export function canonicalAssigneeKey(name: string | null | undefined): string {
+  return (name ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+const MONTH_TOKEN_TO_NUMBER = new Map<string, number>();
+
+for (let index = 0; index < MONTH_NAMES_PT.length; index += 1) {
+  const monthName = normalizeMatchingText(MONTH_NAMES_PT[index]);
+  MONTH_TOKEN_TO_NUMBER.set(monthName, index + 1);
+  MONTH_TOKEN_TO_NUMBER.set(monthName.slice(0, 3), index + 1);
+}
+
+function validYear(value: number): boolean {
+  return Number.isInteger(value) && value >= 1900 && value <= 2200;
+}
+
+function validMonth(value: number): boolean {
+  return Number.isInteger(value) && value >= 1 && value <= 12;
+}
+
+export function monthPeriodKey(period: MonthlyPeriod): string {
+  return `${period.year}-${String(period.month).padStart(2, "0")}`;
+}
+
+export function parseMonthlyPeriodFromDate(
+  value: string | null | undefined,
+): MonthlyPeriod | null {
+  const match = /^(\d{4})-(\d{1,2})(?:-\d{1,2})?/.exec((value ?? "").trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!validYear(year) || !validMonth(month)) return null;
+  return { year, month };
+}
+
+export function parseMonthlyPeriodFromTitle(
+  title: string | null | undefined,
+): MonthlyPeriod | null {
+  const normalized = normalizeMatchingText(title);
+  if (!normalized) return null;
+
+  const tokens = normalized.split(" ");
+  const years = [
+    ...new Set(
+      tokens
+        .filter((token) => /^\d{4}$/.test(token))
+        .map(Number)
+        .filter(validYear),
+    ),
+  ];
+  if (years.length !== 1) return null;
+
+  const namedMonths = [
+    ...new Set(
+      tokens
+        .map((token) => MONTH_TOKEN_TO_NUMBER.get(token))
+        .filter((month): month is number => month !== undefined),
+    ),
+  ];
+
+  const months =
+    namedMonths.length > 0
+      ? namedMonths
+      : [
+          ...new Set(
+            tokens
+              .filter((token) => /^\d{1,2}$/.test(token))
+              .map(Number)
+              .filter(validMonth),
+          ),
+        ];
+
+  if (months.length !== 1) return null;
+  return { year: years[0], month: months[0] };
+}
+
+export function buildLanePeriodIndex(lanes: Lane[]): LanePeriodIndex {
+  const entries: LanePeriodInfo[] = [];
+  const byKey = new Map<string, LanePeriodInfo[]>();
+  const byAssignee = new Map<string, LanePeriodInfo[]>();
+
+  for (const lane of lanes) {
+    const assigneeKey = canonicalAssigneeKey(lane.assignee_name);
+    const period = parseMonthlyPeriodFromTitle(lane.title);
+    const periodKey = period ? monthPeriodKey(period) : null;
+    const entry = { lane, assigneeKey, period, periodKey };
+    entries.push(entry);
+    if (!assigneeKey) continue;
+
+    const own = byAssignee.get(assigneeKey) ?? [];
+    own.push(entry);
+    byAssignee.set(assigneeKey, own);
+
+    if (!periodKey) continue;
+    const key = `${assigneeKey}::${periodKey}`;
+    const matches = byKey.get(key) ?? [];
+    matches.push(entry);
+    byKey.set(key, matches);
+  }
+
+  return { entries, byKey, byAssignee };
+}
+
+export function findLaneForCard(
+  card: {
+    assignee_name?: string | null;
+    desired_delivery_date?: string | null;
+  },
+  index: LanePeriodIndex,
+): LaneMatchResult {
+  const assigneeKey = canonicalAssigneeKey(card.assignee_name);
+  const period = parseMonthlyPeriodFromDate(card.desired_delivery_date);
+  const periodKey = period ? monthPeriodKey(period) : null;
+  const base = {
+    reason: "sem_data" as LaneMatchReason,
+    lane: null,
+    candidates: [] as Lane[],
+    assigneeKey,
+    period,
+    periodKey,
+    ownLaneCount: 0,
+    validPeriodLaneCount: 0,
+  };
+
+  if (!assigneeKey) return { ...base, reason: "sem_responsavel" };
+  if (!period || !periodKey) return base;
+
+  const own = index.byAssignee.get(assigneeKey) ?? [];
+  if (own.length === 0) return { ...base, reason: "sem_fila_do_responsavel" };
+
+  const validOwn = own.filter((entry) => entry.periodKey !== null);
+  if (validOwn.length === 0) {
+    return {
+      ...base,
+      reason: "titulo_de_fila_invalido",
+      ownLaneCount: own.length,
+    };
+  }
+
+  const candidates = (index.byKey.get(`${assigneeKey}::${periodKey}`) ?? []).map(
+    (entry) => entry.lane,
+  );
+  if (candidates.length === 0) {
+    return {
+      ...base,
+      reason: "sem_fila_do_mes",
+      ownLaneCount: own.length,
+      validPeriodLaneCount: validOwn.length,
+    };
+  }
+  if (candidates.length > 1) {
+    return {
+      ...base,
+      reason: "ambiguo",
+      candidates,
+      ownLaneCount: own.length,
+      validPeriodLaneCount: validOwn.length,
+    };
+  }
+
+  return {
+    ...base,
+    reason: "match",
+    lane: candidates[0],
+    candidates,
+    ownLaneCount: own.length,
+    validPeriodLaneCount: validOwn.length,
+  };
 }
 
 export function findLaneByTitle(
