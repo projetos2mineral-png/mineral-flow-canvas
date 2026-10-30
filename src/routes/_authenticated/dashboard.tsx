@@ -2028,7 +2028,7 @@ function DashboardPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
-      <KanbanAuditPanel
+      {false && <KanbanAuditPanel
         cards={cards}
         lanes={lanes}
         projects={projects}
