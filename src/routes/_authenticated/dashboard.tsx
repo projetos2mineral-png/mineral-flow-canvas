@@ -1088,57 +1088,57 @@ function AssigneeBoard({
                     ? "resolveCardLane retornou null"
                     : "fila resolvida";
   const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
+  const diagnosticPayload = {
+    fetchCards: {
+      data: diagnosticCardsQuery.data,
+      error: diagnosticCardsQuery.error,
+      complementaryError: diagnosticCardsComplementaryError,
+      dataLoaded: diagnosticCardsQuery.data !== null,
+      cardReturned: !!diagnosticCard,
+      lane_id: diagnosticCard?.lane_id ?? null,
+    },
+    fetchLanes: {
+      data: diagnosticLaneQuery.data,
+      error: diagnosticLaneQuery.error,
+    },
+    targetLane: {
+      id: DIAGNOSTIC_LANE_ID,
+      received: !!diagnosticLaneQuery.data?.some((lane) => lane.id === DIAGNOSTIC_LANE_ID),
+      assignee_name: diagnosticLane?.assignee_name ?? null,
+    },
+    localLanes: localLanes.map((lane) => ({
+      id: lane.id,
+      assignee_name: lane.assignee_name,
+      title: lane.title,
+      position: lane.position,
+    })),
+    selectedAssignee: assignee,
+    card: diagnosticCard,
+    cardByProject: {
+      hasProject: !!diagnosticCardByProject,
+      card: diagnosticCardByProject,
+    },
+    hydrated: {
+      hasProject: !!diagnosticHydratedItem,
+      card: diagnosticHydratedItem?.card ?? null,
+    },
+    items: {
+      hasProject: !!diagnosticItem,
+      card: diagnosticItem?.card ?? null,
+      lane_id: diagnosticItem?.lane_id ?? null,
+    },
+    cardInItems: diagnosticCardInItems,
+    sameAssigneeName: diagnosticSameAssignee,
+    laneBelongsToAssignee: diagnosticLaneBelongs,
+    mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
+    resolveCardLane: diagnosticResolvedLane,
+    resolveCardLaneReason: diagnosticResolveReason,
+  };
 
   useEffect(() => {
     if (!showDiagnostic) return;
-    const payload = {
-      fetchLanes: {
-        data: diagnosticLaneQuery.data,
-        error: diagnosticLaneQuery.error,
-      },
-      fetchCards: {
-        data: diagnosticCardsQuery.data,
-        error: diagnosticCardsQuery.error,
-        complementaryError: diagnosticCardsComplementaryError,
-        dataLoaded: diagnosticCardsQuery.data !== null,
-        cardReturned: !!diagnosticCard,
-        lane_id: diagnosticCard?.lane_id ?? null,
-      },
-      targetLane: {
-        id: DIAGNOSTIC_LANE_ID,
-        received: !!diagnosticLaneQuery.data?.some((lane) => lane.id === DIAGNOSTIC_LANE_ID),
-        assignee_name: diagnosticLane?.assignee_name ?? null,
-      },
-      localLanes: localLanes.map((lane) => ({
-        id: lane.id,
-        assignee_name: lane.assignee_name,
-        title: lane.title,
-        position: lane.position,
-      })),
-      selectedAssignee: assignee,
-      card: diagnosticCard,
-      cardByProject: {
-        hasProject: !!diagnosticCardByProject,
-        card: diagnosticCardByProject,
-      },
-      hydrated: {
-        hasProject: !!diagnosticHydratedItem,
-        card: diagnosticHydratedItem?.card ?? null,
-      },
-      items: {
-        hasProject: !!diagnosticItem,
-        card: diagnosticItem?.card ?? null,
-        lane_id: diagnosticItem?.lane_id ?? null,
-      },
-      cardInItems: diagnosticCardInItems,
-      sameAssigneeName: diagnosticSameAssignee,
-      laneBelongsToAssignee: diagnosticLaneBelongs,
-      mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
-      resolveCardLane: diagnosticResolvedLane,
-      resolveCardLaneReason: diagnosticResolveReason,
-    };
     console.groupCollapsed("[KANBAN-DIAGNOSTIC] Laura Fernandes / projeto 3733527");
-    console.log(payload);
+    console.log(diagnosticPayload);
     console.groupEnd();
   }, [
     showDiagnostic,
@@ -1158,11 +1158,34 @@ function AssigneeBoard({
     grouped,
     diagnosticResolvedLane,
     diagnosticResolveReason,
+    diagnosticPayload,
   ]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const activeCard = activeId ? (items.find((i) => i.key === activeId) ?? null) : null;
+  const copyDiagnostic = async () => {
+    const text = JSON.stringify(diagnosticPayload, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setDiagnosticCopied(true);
+      window.setTimeout(() => setDiagnosticCopied(false), 2500);
+    } catch (error) {
+      console.error("[KANBAN-DIAGNOSTIC] copy failed", error);
+    }
+  };
 
   // ---- Persistência + barra horizontal flutuante do Kanban (sincronizada) ----
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -1682,49 +1705,22 @@ function AssigneeBoard({
             <summary className="cursor-pointer font-semibold text-orange-700">
               [DIAGNÓSTICO TEMPORÁRIO] Laura Fernandes / 3733527
             </summary>
-            <pre className="mt-2 whitespace-pre-wrap break-words font-mono">
-              {JSON.stringify(
-                {
-                  fetchCards: {
-                    data: diagnosticCardsQuery.data,
-                    error: diagnosticCardsQuery.error,
-                    complementaryError: diagnosticCardsComplementaryError,
-                    dataLoaded: diagnosticCardsQuery.data !== null,
-                    cardReturned: !!diagnosticCard,
-                    lane_id: diagnosticCard?.lane_id ?? null,
-                  },
-                  fetchLanes: diagnosticLaneQuery,
-                  targetLane: {
-                    id: DIAGNOSTIC_LANE_ID,
-                    received: !!diagnosticLaneQuery.data?.some((lane) => lane.id === DIAGNOSTIC_LANE_ID),
-                    assignee_name: diagnosticLane?.assignee_name ?? null,
-                  },
-                  localLanes,
-                  selectedAssignee: assignee,
-                  card: diagnosticCard,
-                  cardByProject: {
-                    hasProject: !!diagnosticCardByProject,
-                    card: diagnosticCardByProject,
-                  },
-                  hydrated: {
-                    hasProject: !!diagnosticHydratedItem,
-                    card: diagnosticHydratedItem?.card ?? null,
-                  },
-                  items: {
-                    hasProject: !!diagnosticItem,
-                    card: diagnosticItem?.card ?? null,
-                    lane_id: diagnosticItem?.lane_id ?? null,
-                  },
-                  cardInItems: diagnosticCardInItems,
-                  sameAssigneeName: diagnosticSameAssignee,
-                  laneBelongsToAssignee: diagnosticLaneBelongs,
-                  mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
-                  resolveCardLane: diagnosticResolvedLane,
-                  resolveCardLaneReason: diagnosticResolveReason,
-                },
-                null,
-                2,
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={copyDiagnostic}
+                className="rounded bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1"
+              >
+                Copiar diagnóstico
+              </button>
+              {diagnosticCopied && (
+                <span className="font-semibold text-green-700" role="status">
+                  Diagnóstico copiado!
+                </span>
               )}
+            </div>
+            <pre className="mt-2 whitespace-pre-wrap break-words font-mono">
+              {JSON.stringify(diagnosticPayload, null, 2)}
             </pre>
           </details>
         )}
