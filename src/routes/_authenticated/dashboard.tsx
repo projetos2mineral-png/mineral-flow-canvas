@@ -335,6 +335,7 @@ function KanbanAuditPanel({
   planningError: unknown;
 }) {
   const [copied, setCopied] = useState(false);
+  const [recoveryCopied, setRecoveryCopied] = useState(false);
   const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
@@ -516,6 +517,28 @@ function KanbanAuditPanel({
     }
   };
 
+  const copyRecoveryAudit = async () => {
+    const text = JSON.stringify(recoveryDiagnostic, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setRecoveryCopied(true);
+      window.setTimeout(() => setRecoveryCopied(false), 2500);
+    } catch (error) {
+      console.error("[KANBAN-AUDIT] recovery copy failed", error);
+    }
+  };
+
   return (
     <details className="fixed bottom-3 left-3 z-[70] max-h-[82vh] w-[min(96vw,760px)] overflow-auto rounded-md border border-blue-500/60 bg-background/95 p-3 text-[11px] shadow-xl backdrop-blur-sm">
       <summary className="cursor-pointer font-semibold text-blue-700">
@@ -535,6 +558,16 @@ function KanbanAuditPanel({
         <summary className="cursor-pointer font-semibold text-blue-700">
           Recuperação de associação dos cartões sem lane_id ({recoveryAudit.entries.length})
         </summary>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={copyRecoveryAudit}
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+          >
+            Copiar recuperação completa
+          </button>
+          {recoveryCopied && <span className="font-semibold text-green-700" role="status">Recuperação copiada!</span>}
+        </div>
         <div className="mt-2 grid grid-cols-1 gap-1 sm:grid-cols-3">
           <span>Comprovados: {recoveryAudit.counts["Coluna de destino comprovada por informação existente"]}</span>
           <span>Possíveis: {recoveryAudit.counts["Possível coluna de destino, mas dependente de confirmação"]}</span>
