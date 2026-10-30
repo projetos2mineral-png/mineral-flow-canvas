@@ -3408,6 +3408,7 @@ function AssigneeBoard({
           assigneeName={assignee}
           monthTitle={weeklyLane.title}
           cards={grouped.get(weeklyLane.id) ?? []}
+          demands={demandsByLane.get(weeklyLane.id) ?? []}
           onOpenCard={setOpenCard}
           onStatusChange={handleStatusChange}
           readOnly={readOnly}
