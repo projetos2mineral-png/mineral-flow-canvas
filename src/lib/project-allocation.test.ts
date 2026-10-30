@@ -35,6 +35,7 @@ function table(name: string) {
     is: (k: string, v: unknown) => (filters.push((r) => (r[k] ?? null) === v), q),
     in: (k: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[k])), q),
     range: () => q,
+    limit: () => q,
     async maybeSingle() {
       return { data: match()[0] ?? null, error: null };
     },
@@ -60,10 +61,11 @@ vi.mock("@/integrations/supabase/client", () => ({
 import {
   allocateProjectToMonthlyLanes,
   allocateManyProjects,
+  decideCardAllocation,
   syncAndAllocateProject,
   targetLaneTitleFor,
 } from "./projects";
-import { positionPatch } from "./dashboard";
+import { dedupeMonthlyLanes, positionPatch } from "./dashboard";
 
 const card = (pid: number, who = "Laura") =>
   db.tables.dashboard_project_cards.find((c) => c.runrunit_project_id === pid && c.assignee_name === who);
@@ -93,7 +95,7 @@ beforeEach(() => {
 describe("responsáveis sem runrunit_project_people", () => {
   it("usa o responsável do próprio card quando a tabela de pessoas está vazia", async () => {
     db.tables.runrunit_project_people = [];
-    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
+    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: false });
     const [o] = await allocateProjectToMonthlyLanes(1);
     expect(o.reason).toBe("alocar");
     expect(card(1)?.lane_id).toBe("nov");
@@ -101,12 +103,13 @@ describe("responsáveis sem runrunit_project_people", () => {
 });
 
 describe("alocação automática em fila mensal", () => {
-  it("1. card sem fila marcado como manual vai para Novembro/2026", async () => {
+  it("1. card sem fila marcado como manual permanece em Sem fila", async () => {
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
     const [o] = await allocateProjectToMonthlyLanes(1);
-    expect(o.applied).toBe(true);
-    expect(card(1)?.lane_id).toBe("nov");
-    expect(card(1)?.manually_positioned).toBe(false);
+    expect(o.reason).toBe("manual_sem_fila");
+    expect(o.applied).toBe(false);
+    expect(card(1)?.lane_id).toBeNull();
+    expect(card(1)?.manually_positioned).toBe(true);
   });
 
   it("2. card sem fila não manual vai para Novembro/2026", async () => {
@@ -124,7 +127,7 @@ describe("alocação automática em fila mensal", () => {
 
   it("4. sem a fila Novembro/2026 no quadro, o card fica sem fila e nenhuma fila é criada", async () => {
     db.tables.dashboard_lanes = db.tables.dashboard_lanes.filter((l) => l.id !== "nov");
-    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
+    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: false });
     const [o] = await allocateProjectToMonthlyLanes(1);
     expect(o.reason).toBe("sem_fila_mensal");
     expect(card(1)?.lane_id).toBeNull();
@@ -138,12 +141,13 @@ describe("alocação automática em fila mensal", () => {
     expect(db.tables.dashboard_project_cards).toHaveLength(0);
   });
 
-  it("6. falha na sincronização ainda aloca com os dados locais", async () => {
+  it("6. falha na sincronização preserva card manual em Sem fila", async () => {
     db.syncFails = true;
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
     const r = await syncAndAllocateProject(1);
     expect(r.syncError).not.toBeNull();
-    expect(card(1)?.lane_id).toBe("nov");
+    expect(r.outcomes[0].reason).toBe("manual_sem_fila");
+    expect(card(1)?.lane_id).toBeNull();
   });
 
   it("7. entrega em 17/11/2026 com 30 dias de antecedência vai para Outubro/2026", async () => {
@@ -170,12 +174,65 @@ describe("alocação automática em fila mensal", () => {
     expect(card(2)?.lane_id).toBe(card(1)?.lane_id);
   });
 
-  it("prévia não grava nada", async () => {
+  it("11. lote preserva card manual em Sem fila", async () => {
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
+    const [o] = await allocateManyProjects([1]);
+    expect(o.reason).toBe("manual_sem_fila");
+    expect(card(1)?.lane_id).toBeNull();
+  });
+
+  it("prévia não grava nada", async () => {
+    db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: false });
     const [o] = await allocateProjectToMonthlyLanes(1, { dryRun: true });
     expect(o.reason).toBe("alocar");
     expect(o.target_lane_title).toBe("Novembro/2026");
     expect(card(1)?.lane_id).toBeNull();
+  });
+});
+
+describe("decisão de alocação", () => {
+  it("preserva card manual em Sem fila", () => {
+    expect(
+      decideCardAllocation({
+        cardExists: true,
+        existingLaneId: null,
+        targetLaneId: "nov",
+        manuallyPositioned: true,
+      }),
+    ).toBe("manual_sem_fila");
+  });
+
+  it("aloca card não manual em Sem fila quando a fila existe", () => {
+    expect(
+      decideCardAllocation({
+        cardExists: true,
+        existingLaneId: null,
+        targetLaneId: "nov",
+        manuallyPositioned: false,
+      }),
+    ).toBe("alocar");
+  });
+
+  it("preserva card já alocado independentemente de ser manual", () => {
+    expect(
+      decideCardAllocation({
+        cardExists: true,
+        existingLaneId: "dez",
+        targetLaneId: "nov",
+        manuallyPositioned: true,
+      }),
+    ).toBe("ja_alocado");
+  });
+
+  it("não aloca quando a fila do mês não existe", () => {
+    expect(
+      decideCardAllocation({
+        cardExists: true,
+        existingLaneId: null,
+        targetLaneId: null,
+        manuallyPositioned: false,
+      }),
+    ).toBe("sem_fila_mensal");
   });
 });
 

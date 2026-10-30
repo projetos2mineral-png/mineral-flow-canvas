@@ -85,7 +85,8 @@ export function RecoverUnassignedDialog({ open, onOpenChange }: RecoverUnassigne
           <DialogTitle>Recuperar cards em "Sem fila"</DialogTitle>
           <DialogDescription>
             Mostra para qual fila mensal cada card iria, considerando a antecedência do quadro. Nada é
-            gravado até você confirmar. Cards que já estão em uma fila não são alterados.
+            gravado até você confirmar. Cards que já estão em uma fila ou foram posicionados manualmente
+            em "Sem fila" não são alterados.
           </DialogDescription>
         </DialogHeader>
 

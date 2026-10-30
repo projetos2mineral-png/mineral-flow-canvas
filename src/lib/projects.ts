@@ -193,6 +193,7 @@ export async function invokeSyncVisibleProjects(limit = 100) {
 export type AllocationReason =
   | "alocar" // card sem fila (ou inexistente) com destino válido
   | "ja_alocado" // card já está em uma fila: preservado (inclui posições manuais)
+  | "manual_sem_fila" // card em "Sem fila" posicionado manualmente: preservado
   | "sem_data"
   | "projeto_encerrado"
   | "sem_responsavel"
@@ -214,6 +215,7 @@ export type AllocationOutcome = {
 export const ALLOCATION_REASON_LABEL: Record<AllocationReason, string> = {
   alocar: "Elegível",
   ja_alocado: "Já está em uma fila",
+  manual_sem_fila: "Sem fila (manual)",
   sem_data: "Sem data desejada",
   projeto_encerrado: "Projeto encerrado",
   sem_responsavel: "Sem responsável",
@@ -230,16 +232,18 @@ export function targetLaneTitleFor(desired: string, antecedenceDays: number): st
 /**
  * Decisão pura (sem I/O) para um card. Regra:
  * - card com `lane_id` definido → preservado, seja manual ou automático;
+ * - card em "Sem fila" posicionado manualmente → preservado;
  * - card sem fila (`lane_id = null`) ou inexistente → aloca se a fila do mês
- *   existir no quadro, independentemente de `manually_positioned` (cards em
- *   "Sem fila" marcados como manuais eram efeito colateral da reordenação).
+ *   existir no quadro.
  */
 export function decideCardAllocation(input: {
   existingLaneId: string | null | undefined;
   cardExists: boolean;
   targetLaneId: string | null;
+  manuallyPositioned: boolean | null | undefined;
 }): AllocationReason {
   if (input.cardExists && input.existingLaneId) return "ja_alocado";
+  if (input.cardExists && input.manuallyPositioned === true) return "manual_sem_fila";
   if (!input.targetLaneId) return "sem_fila_mensal";
   return "alocar";
 }
@@ -247,7 +251,8 @@ export function decideCardAllocation(input: {
 /**
  * Posiciona o card de cada responsável do projeto na fila mensal
  * (data_posicionamento = desired_delivery_date - antecedence_days).
- * Nunca cria filas e nunca move cards que já estão em uma fila.
+ * Nunca cria filas e nunca move cards que já estão em uma fila ou que foram
+ * posicionados manualmente em "Sem fila".
  * Com `dryRun: true` apenas calcula (prévia), sem gravar nada.
  */
 export async function allocateProjectToMonthlyLanes(
@@ -339,6 +344,7 @@ export async function allocateProjectToMonthlyLanes(
       cardExists: !!existing,
       existingLaneId: validLaneId,
       targetLaneId: lane?.id ?? null,
+      manuallyPositioned: existing?.manually_positioned === true,
     });
     const outcome: AllocationOutcome = {
       runrunit_project_id,

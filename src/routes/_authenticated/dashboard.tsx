@@ -483,6 +483,7 @@ type GlobalRecoveryReport = {
   update_fields_sent: ["lane_id"];
   initial_without_lane: number;
   protected_cards_skipped: number;
+  manual_cards_skipped: number;
   effectively_directed: number;
   kept_without_date: number;
   kept_without_matching_lane: number;
@@ -1247,6 +1248,7 @@ function KanbanAuditPanel({
     setGlobalRecovery(null);
     let initialWithoutLane = 0;
     let protectedCardsSkipped = 0;
+    let manualCardsSkipped = 0;
     let stoppedOnError = false;
     let errorMessage: string | null = null;
     try {
@@ -1260,12 +1262,23 @@ function KanbanAuditPanel({
         runrunit_project_id: number;
         assignee_name: string | null;
         lane_id: string | null;
-      }>("dashboard_project_cards", "id,runrunit_project_id,assignee_name,lane_id", "id", (query) =>
-        query.is("lane_id", null),
+        manually_positioned: boolean | null;
+      }>(
+        "dashboard_project_cards",
+        "id,runrunit_project_id,assignee_name,lane_id,manually_positioned",
+        "id",
+        (query) => query.is("lane_id", null),
       );
       initialWithoutLane = allInitialCards.length;
-      const initialCards = allInitialCards.filter((card) => !protectedCardIds.has(card.id));
-      protectedCardsSkipped = allInitialCards.length - initialCards.length;
+      protectedCardsSkipped = allInitialCards.filter((card) =>
+        protectedCardIds.has(card.id),
+      ).length;
+      const initialCards = allInitialCards.filter(
+        (card) => !protectedCardIds.has(card.id) && card.manually_positioned !== true,
+      );
+      manualCardsSkipped = allInitialCards.filter(
+        (card) => !protectedCardIds.has(card.id) && card.manually_positioned === true,
+      ).length;
 
       const laneRows = await fetchAllPagedRows<RecoveryLane>(
         "dashboard_lanes",
@@ -1358,6 +1371,7 @@ function KanbanAuditPanel({
         update_fields_sent: ["lane_id"],
         initial_without_lane: initialWithoutLane,
         protected_cards_skipped: protectedCardsSkipped,
+        manual_cards_skipped: manualCardsSkipped,
         effectively_directed: updatedRows.filter((row) => row.outcome === "direcionado").length,
         kept_without_date: updatedRows.filter((row) => row.outcome === "sem_data").length,
         kept_without_matching_lane: updatedRows.filter((row) => row.outcome === "sem_coluna").length,
@@ -1385,6 +1399,7 @@ function KanbanAuditPanel({
         update_fields_sent: ["lane_id"],
         initial_without_lane: initialWithoutLane,
         protected_cards_skipped: protectedCardsSkipped,
+        manual_cards_skipped: manualCardsSkipped,
         effectively_directed: 0,
         kept_without_date: 0,
         kept_without_matching_lane: 0,
@@ -1656,6 +1671,7 @@ function KanbanAuditPanel({
             <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-3">
               <span>Inicialmente sem fila: {globalRecovery.initial_without_lane}</span>
               <span>Protegidos (Laura): {globalRecovery.protected_cards_skipped}</span>
+              <span>Manuais preservados: {globalRecovery.manual_cards_skipped}</span>
               <span>Direcionados: {globalRecovery.effectively_directed}</span>
               <span>Sem data: {globalRecovery.kept_without_date}</span>
               <span>Sem coluna correspondente: {globalRecovery.kept_without_matching_lane}</span>

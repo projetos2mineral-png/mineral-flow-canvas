@@ -893,7 +893,8 @@ export async function ensureDefaultMonthlyLanes(
 /**
  * Detecta duplicatas de filas mensais no mesmo responsável (mesmo título
  * ignorando caixa e espaços) e as consolida: mantém a de menor posição,
- * migra os cards das duplicatas para a canônica e apaga as extras.
+ * migra os cards não manuais das duplicatas para a canônica e apaga as extras
+ * que não contenham cards posicionados manualmente.
  * Retorna true se alguma limpeza foi feita.
  */
 export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
@@ -912,6 +913,14 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
     const keep = group[0];
     const drop = group.slice(1);
     for (const d of drop) {
+      const { data: manualCards, error: manualError } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select("id")
+        .eq("lane_id", d.id)
+        .eq("manually_positioned", true)
+        .limit(1);
+      if (manualError) throw manualError;
+      if ((manualCards ?? []).length > 0) continue;
       // Move cards da fila duplicada para a canônica
       await (supabase as any)
         .from("dashboard_project_cards")
