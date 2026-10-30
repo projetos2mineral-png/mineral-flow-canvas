@@ -268,6 +268,7 @@ function DashboardPage() {
   const { level } = useCurrentDashboardUser();
   const readOnly = (level ?? "").toLowerCase() === "comum";
   const isAdmin = (level ?? "").toLowerCase() === "administrador";
+  const [cardsComplementaryError, setCardsComplementaryError] = useState<unknown>(null);
 
   const projectsQ = useQuery({
     queryKey: ["dashboard", "projects"],
@@ -281,7 +282,10 @@ function DashboardPage() {
   });
   const cardsQ = useQuery({
     queryKey: ["dashboard", "cards"],
-    queryFn: fetchCards,
+    queryFn: () => {
+      setCardsComplementaryError(null);
+      return fetchCards({ onComplementaryError: setCardsComplementaryError });
+    },
     staleTime: 30_000,
   });
   const usersQ = useQuery({
@@ -622,6 +626,8 @@ function DashboardPage() {
                 allLanes={lanes}
                 reviewerOptions={reviewerOptions}
                 diagnosticCard={cards.find((c) => c.id === DIAGNOSTIC_CARD_ID) ?? null}
+                diagnosticCardsQuery={{ data: cardsQ.data ?? null, error: cardsQ.error ?? null }}
+                diagnosticCardsComplementaryError={cardsComplementaryError}
                 diagnosticLaneQuery={{ data: lanesQ.data ?? null, error: lanesQ.error ?? null }}
                 currentUserName={currentUserName}
                 qc={qc}
@@ -762,6 +768,8 @@ function AssigneeBoard({
   allLanes,
   reviewerOptions,
   diagnosticCard,
+  diagnosticCardsQuery,
+  diagnosticCardsComplementaryError,
   diagnosticLaneQuery,
   currentUserName,
   qc,
@@ -781,6 +789,8 @@ function AssigneeBoard({
   allLanes: Lane[];
   reviewerOptions: string[];
   diagnosticCard: ProjectCardRow | null;
+  diagnosticCardsQuery: { data: ProjectCardRow[] | null; error: unknown };
+  diagnosticCardsComplementaryError: unknown;
   diagnosticLaneQuery: { data: Lane[] | null; error: unknown };
   currentUserName: string;
   qc: ReturnType<typeof useQueryClient>;
@@ -1055,6 +1065,28 @@ function AssigneeBoard({
         assignee,
       )
     : null;
+  const diagnosticHydratedItem = hydrated.find((item) => item.runrunit_project_id === 3733527) ?? null;
+  const diagnosticItem = items.find((item) => item.runrunit_project_id === 3733527) ?? null;
+  const diagnosticCardByProject = cardByProject.get(3733527) ?? null;
+  const diagnosticResolveReason = !diagnosticCardsQuery.data
+    ? "cardsQ.data ainda não carregado"
+    : !diagnosticCard
+      ? "card não retornado por fetchCards/cardsQ.data"
+      : !diagnosticCardByProject
+        ? "chave 3733527 ausente em cardByProject"
+        : !diagnosticHydratedItem
+          ? "projeto ausente em hydrated"
+          : !diagnosticHydratedItem.card
+            ? "hydrated.card é null"
+            : !diagnosticItem
+              ? "projeto ausente em items"
+              : !diagnosticItem.card
+                ? "items.card é null"
+                : !diagnosticItem.lane_id
+                  ? "lane_id ausente no item"
+                  : !diagnosticResolvedLane
+                    ? "resolveCardLane retornou null"
+                    : "fila resolvida";
   const showDiagnostic = sameAssigneeName(assignee, DIAGNOSTIC_ASSIGNEE);
 
   useEffect(() => {
@@ -1063,6 +1095,14 @@ function AssigneeBoard({
       fetchLanes: {
         data: diagnosticLaneQuery.data,
         error: diagnosticLaneQuery.error,
+      },
+      fetchCards: {
+        data: diagnosticCardsQuery.data,
+        error: diagnosticCardsQuery.error,
+        complementaryError: diagnosticCardsComplementaryError,
+        dataLoaded: diagnosticCardsQuery.data !== null,
+        cardReturned: !!diagnosticCard,
+        lane_id: diagnosticCard?.lane_id ?? null,
       },
       targetLane: {
         id: DIAGNOSTIC_LANE_ID,
@@ -1077,11 +1117,25 @@ function AssigneeBoard({
       })),
       selectedAssignee: assignee,
       card: diagnosticCard,
+      cardByProject: {
+        hasProject: !!diagnosticCardByProject,
+        card: diagnosticCardByProject,
+      },
+      hydrated: {
+        hasProject: !!diagnosticHydratedItem,
+        card: diagnosticHydratedItem?.card ?? null,
+      },
+      items: {
+        hasProject: !!diagnosticItem,
+        card: diagnosticItem?.card ?? null,
+        lane_id: diagnosticItem?.lane_id ?? null,
+      },
       cardInItems: diagnosticCardInItems,
       sameAssigneeName: diagnosticSameAssignee,
       laneBelongsToAssignee: diagnosticLaneBelongs,
       mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
       resolveCardLane: diagnosticResolvedLane,
+      resolveCardLaneReason: diagnosticResolveReason,
     };
     console.groupCollapsed("[KANBAN-DIAGNOSTIC] Laura Fernandes / projeto 3733527");
     console.log(payload);
@@ -1093,11 +1147,17 @@ function AssigneeBoard({
     localLanes,
     assignee,
     diagnosticCard,
+    diagnosticCardsQuery,
+    diagnosticCardsComplementaryError,
+    diagnosticCardByProject,
+    diagnosticHydratedItem,
+    diagnosticItem,
     diagnosticCardInItems,
     diagnosticSameAssignee,
     diagnosticLaneBelongs,
     grouped,
     diagnosticResolvedLane,
+    diagnosticResolveReason,
   ]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -1625,6 +1685,14 @@ function AssigneeBoard({
             <pre className="mt-2 whitespace-pre-wrap break-words font-mono">
               {JSON.stringify(
                 {
+                  fetchCards: {
+                    data: diagnosticCardsQuery.data,
+                    error: diagnosticCardsQuery.error,
+                    complementaryError: diagnosticCardsComplementaryError,
+                    dataLoaded: diagnosticCardsQuery.data !== null,
+                    cardReturned: !!diagnosticCard,
+                    lane_id: diagnosticCard?.lane_id ?? null,
+                  },
                   fetchLanes: diagnosticLaneQuery,
                   targetLane: {
                     id: DIAGNOSTIC_LANE_ID,
@@ -1634,11 +1702,25 @@ function AssigneeBoard({
                   localLanes,
                   selectedAssignee: assignee,
                   card: diagnosticCard,
+                  cardByProject: {
+                    hasProject: !!diagnosticCardByProject,
+                    card: diagnosticCardByProject,
+                  },
+                  hydrated: {
+                    hasProject: !!diagnosticHydratedItem,
+                    card: diagnosticHydratedItem?.card ?? null,
+                  },
+                  items: {
+                    hasProject: !!diagnosticItem,
+                    card: diagnosticItem?.card ?? null,
+                    lane_id: diagnosticItem?.lane_id ?? null,
+                  },
                   cardInItems: diagnosticCardInItems,
                   sameAssigneeName: diagnosticSameAssignee,
                   laneBelongsToAssignee: diagnosticLaneBelongs,
                   mapHasTargetLane: grouped.has(DIAGNOSTIC_LANE_ID),
                   resolveCardLane: diagnosticResolvedLane,
+                  resolveCardLaneReason: diagnosticResolveReason,
                 },
                 null,
                 2,

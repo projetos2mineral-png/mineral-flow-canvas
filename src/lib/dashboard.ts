@@ -316,7 +316,9 @@ export async function fetchLanes(): Promise<Lane[]> {
   return (data ?? []) as Lane[];
 }
 
-export async function fetchCards(): Promise<ProjectCardRow[]> {
+export async function fetchCards(
+  options: { onComplementaryError?: (error: unknown) => void } = {},
+): Promise<ProjectCardRow[]> {
   const pageSize = 1000;
   const all: ProjectCardRow[] = [];
   let from = 0;
@@ -359,6 +361,7 @@ export async function fetchCards(): Promise<ProjectCardRow[]> {
     }
     if (error) {
       const value = error as { code?: string; message?: string; details?: string };
+      options.onComplementaryError?.(error);
       console.error("[dashboard] fetchCards complementary flags query failed", {
         code: value.code ?? null,
         message: value.message ?? null,
