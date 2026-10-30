@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Clock } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -182,8 +182,12 @@ function WeeklyRow({
             {subtitle}
           </div>
         )}
-        <div className="mt-2 text-[12px] leading-none text-muted-foreground tabular-nums">
-          Total: <span className="font-semibold text-foreground/80">{formatHoursCompact(weekHours)}</span>
+        <div
+          className="mt-2 inline-flex items-center gap-1 text-[12px] leading-none text-muted-foreground tabular-nums"
+          title="Total de horas estimadas"
+        >
+          <Clock className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          <span className="font-semibold text-foreground/80">{formatHoursCompact(weekHours)}</span>
         </div>
       </div>
       <div
