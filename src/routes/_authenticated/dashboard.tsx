@@ -2039,7 +2039,7 @@ function DashboardPage() {
         projectsError={projectsQ.error}
         planningError={planningQ.error ?? antecedencesQ.error}
         qc={qc}
-      />
+      />}
       {readOnly && (
         <div className="px-6 py-3 border-b border-border bg-card/40">
           <div className="inline-flex items-center gap-2 text-xs rounded-md border border-border bg-muted px-2 py-1 text-muted-foreground">
