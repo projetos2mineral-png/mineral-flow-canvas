@@ -61,3 +61,36 @@ export function exportProjectsToExcel(
   XLSX.utils.book_append_sheet(book, sheet, "Projetos");
   XLSX.writeFile(book, `projetos_kanban_${fileStamp()}.xlsx`);
 }
+
+export const LANE_EXPORT_HEADERS = ["Nome do projeto", "Cliente", "Data de entrega desejada"] as const;
+
+export interface LaneExportCard {
+  project: { project_name: string | null; client_name: string | null; desired_delivery_date: string | null };
+}
+
+/** Linhas da planilha da fila (exportado para teste). */
+export function buildLaneExportRows(cards: readonly LaneExportCard[]): string[][] {
+  return [
+    [...LANE_EXPORT_HEADERS],
+    ...cards.map((c) => [
+      c.project.project_name ?? "",
+      c.project.client_name ?? "",
+      formatDate(c.project.desired_delivery_date),
+    ]),
+  ];
+}
+
+/** Nome do arquivo a partir do título da fila: "Outubro/2026" -> "Outubro-2026.xlsx". */
+export function laneExportFileName(title: string): string {
+  const safe = title.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ") || "Fila";
+  return `${safe}.xlsx`;
+}
+
+/** Baixa um .xlsx com os cards da fila; somente leitura, não altera dados. */
+export function exportLaneCardsToExcel(title: string, cards: readonly LaneExportCard[]): void {
+  const sheet = XLSX.utils.aoa_to_sheet(buildLaneExportRows(cards));
+  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }];
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Fila");
+  XLSX.writeFile(book, laneExportFileName(title));
+}
