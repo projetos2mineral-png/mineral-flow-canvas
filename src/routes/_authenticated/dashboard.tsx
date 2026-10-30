@@ -337,6 +337,88 @@ const LAURA_VALIDATION_PAIRS = [
   ["e76aff8e-0ca4-4abc-a10a-28ea093180d8", "68b6406b-36b1-4f84-aa56-edb0d8abedac"],
 ] as const;
 
+const RECOVERY_PAGE_SIZE = 1000;
+const RECOVERY_IN_CHUNK_SIZE = 100;
+
+type RecoveryLane = {
+  id: string;
+  assignee_name: string;
+  title: string;
+  position: number;
+};
+
+function laneMatchKey(assigneeName: string, title: string): string {
+  return `${normalizeAssigneeName(assigneeName)}::${title.trim().toLocaleLowerCase("pt-BR")}`;
+}
+
+function buildLanesByKey(lanes: RecoveryLane[]): Map<string, RecoveryLane[]> {
+  const lanesByKey = new Map<string, RecoveryLane[]>();
+  for (const lane of lanes) {
+    const key = laneMatchKey(lane.assignee_name, lane.title);
+    const matches = lanesByKey.get(key) ?? [];
+    matches.push(lane);
+    lanesByKey.set(key, matches);
+  }
+  return lanesByKey;
+}
+
+async function fetchAllPagedRows<T>(
+  table: string,
+  select: string,
+  orderColumn: string,
+  apply?: (query: any) => any,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let from = 0;
+  while (from < 100_000) {
+    let query = (supabase as any)
+      .from(table)
+      .select(select)
+      .order(orderColumn, { ascending: true })
+      .range(from, from + RECOVERY_PAGE_SIZE - 1);
+    if (apply) query = apply(query);
+    const { data, error } = await query;
+    if (error) throw error;
+    const page = (data ?? []) as T[];
+    if (page.length === 0) break;
+    rows.push(...page);
+    from += page.length;
+  }
+  return rows;
+}
+
+async function fetchProjectDesiredDates(projectIds: number[]): Promise<Map<number, string | null>> {
+  const projectDates = new Map<number, string | null>();
+  const unique = [...new Set(projectIds)];
+  for (let from = 0; from < unique.length; from += RECOVERY_IN_CHUNK_SIZE) {
+    const { data, error } = await (supabase as any)
+      .from("runrunit_projects")
+      .select("runrunit_project_id,desired_delivery_date")
+      .in("runrunit_project_id", unique.slice(from, from + RECOVERY_IN_CHUNK_SIZE));
+    if (error) throw error;
+    for (const project of (data ?? []) as { runrunit_project_id: number; desired_delivery_date: string | null }[]) {
+      projectDates.set(project.runrunit_project_id, project.desired_delivery_date);
+    }
+  }
+  return projectDates;
+}
+
+async function fetchCardLaneIdsByIds(ids: string[]): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
+  const unique = [...new Set(ids)];
+  for (let from = 0; from < unique.length; from += RECOVERY_IN_CHUNK_SIZE) {
+    const { data, error } = await (supabase as any)
+      .from("dashboard_project_cards")
+      .select("id,lane_id")
+      .in("id", unique.slice(from, from + RECOVERY_IN_CHUNK_SIZE));
+    if (error) throw error;
+    for (const row of (data ?? []) as { id: string; lane_id: string | null }[]) {
+      result.set(row.id, row.lane_id);
+    }
+  }
+  return result;
+}
+
 type LauraValidationRow = {
   card_id: string;
   project_name: string | null;
@@ -406,6 +488,37 @@ type GlobalRecoveryReport = {
   }[];
 };
 
+type GlobalDiagnosticRow = {
+  card_id: string;
+  project_id: number;
+  assignee_name: string;
+  desired_delivery_date: string | null;
+  target_lane_id: string | null;
+  target_lane_title: string | null;
+  outcome: "com_data_e_coluna" | "sem_data" | "sem_coluna" | "coluna_ambigua";
+};
+
+type GlobalDiagnosticReport = {
+  generated_at: string;
+  read_only: true;
+  source: string;
+  initial_without_lane: number;
+  with_date_and_matching_lane: number;
+  without_date: number;
+  without_matching_lane: number;
+  ambiguous_lane: number;
+  query_error: string | null;
+  by_assignee: {
+    assignee_name: string;
+    total: number;
+    with_date_and_matching_lane: number;
+    without_date: number;
+    without_matching_lane: number;
+    ambiguous_lane: number;
+  }[];
+  rows: GlobalDiagnosticRow[];
+};
+
 function KanbanAuditPanel({
   cards,
   lanes,
@@ -416,6 +529,7 @@ function KanbanAuditPanel({
   lanesError,
   projectsError,
   planningError,
+  qc,
 }: {
   cards: ProjectCardRow[];
   lanes: Lane[];
@@ -426,6 +540,7 @@ function KanbanAuditPanel({
   lanesError: unknown;
   projectsError: unknown;
   planningError: unknown;
+  qc: ReturnType<typeof useQueryClient>;
 }) {
   const [copied, setCopied] = useState(false);
   const [recoveryCopied, setRecoveryCopied] = useState(false);
@@ -437,6 +552,9 @@ function KanbanAuditPanel({
   const [lauraCorrectionLoading, setLauraCorrectionLoading] = useState(false);
   const [globalRecovery, setGlobalRecovery] = useState<GlobalRecoveryReport | null>(null);
   const [globalRecoveryLoading, setGlobalRecoveryLoading] = useState(false);
+  const [globalDiagnostic, setGlobalDiagnostic] = useState<GlobalDiagnosticReport | null>(null);
+  const [globalDiagnosticLoading, setGlobalDiagnosticLoading] = useState(false);
+  const [globalDiagnosticCopied, setGlobalDiagnosticCopied] = useState(false);
   const audit = useMemo(() => {
     const projectNameById = new Map<number, string>();
     for (const project of projects) {
@@ -846,9 +964,135 @@ function KanbanAuditPanel({
     }
   };
 
+  const diagnoseUnassignedCards = async () => {
+    setGlobalDiagnosticLoading(true);
+    setGlobalDiagnostic(null);
+    try {
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) throw sessionError;
+      if (!sessionData.session) throw new Error("Nenhuma sessão autenticada ativa no Preview.");
+
+      const initialCards = await fetchAllPagedRows<{
+        id: string;
+        runrunit_project_id: number;
+        assignee_name: string;
+        lane_id: string | null;
+      }>("dashboard_project_cards", "id,runrunit_project_id,assignee_name,lane_id", "id", (query) =>
+        query.is("lane_id", null),
+      );
+      const laneRows = await fetchAllPagedRows<RecoveryLane>(
+        "dashboard_lanes",
+        "id,assignee_name,title,position",
+        "id",
+      );
+      const lanesByKey = buildLanesByKey(laneRows);
+      const projectDates = await fetchProjectDesiredDates(
+        initialCards.map((card) => card.runrunit_project_id),
+      );
+
+      const rows: GlobalDiagnosticRow[] = initialCards.map((card) => {
+        const desired = projectDates.get(card.runrunit_project_id) ?? null;
+        const title = desired ? monthlyLaneTitle(desired) : null;
+        const matches = title ? lanesByKey.get(laneMatchKey(card.assignee_name, title)) ?? [] : [];
+        const outcome: GlobalDiagnosticRow["outcome"] = !desired
+          ? "sem_data"
+          : matches.length === 0
+            ? "sem_coluna"
+            : matches.length > 1
+              ? "coluna_ambigua"
+              : "com_data_e_coluna";
+        return {
+          card_id: card.id,
+          project_id: card.runrunit_project_id,
+          assignee_name: card.assignee_name,
+          desired_delivery_date: desired,
+          target_lane_id: matches.length === 1 ? matches[0].id : null,
+          target_lane_title: title,
+          outcome,
+        };
+      });
+
+      const byAssignee = new Map<string, GlobalDiagnosticReport["by_assignee"][number]>();
+      for (const row of rows) {
+        const current = byAssignee.get(row.assignee_name) ?? {
+          assignee_name: row.assignee_name,
+          total: 0,
+          with_date_and_matching_lane: 0,
+          without_date: 0,
+          without_matching_lane: 0,
+          ambiguous_lane: 0,
+        };
+        current.total += 1;
+        if (row.outcome === "com_data_e_coluna") current.with_date_and_matching_lane += 1;
+        if (row.outcome === "sem_data") current.without_date += 1;
+        if (row.outcome === "sem_coluna") current.without_matching_lane += 1;
+        if (row.outcome === "coluna_ambigua") current.ambiguous_lane += 1;
+        byAssignee.set(row.assignee_name, current);
+      }
+
+      setGlobalDiagnostic({
+        generated_at: new Date().toISOString(),
+        read_only: true,
+        source:
+          "dashboard_project_cards + runrunit_projects + dashboard_lanes via authenticated application client",
+        initial_without_lane: rows.length,
+        with_date_and_matching_lane: rows.filter((row) => row.outcome === "com_data_e_coluna").length,
+        without_date: rows.filter((row) => row.outcome === "sem_data").length,
+        without_matching_lane: rows.filter((row) => row.outcome === "sem_coluna").length,
+        ambiguous_lane: rows.filter((row) => row.outcome === "coluna_ambigua").length,
+        query_error: null,
+        by_assignee: [...byAssignee.values()].sort(
+          (a, b) => b.total - a.total || a.assignee_name.localeCompare(b.assignee_name, "pt-BR"),
+        ),
+        rows,
+      });
+    } catch (error) {
+      setGlobalDiagnostic({
+        generated_at: new Date().toISOString(),
+        read_only: true,
+        source:
+          "dashboard_project_cards + runrunit_projects + dashboard_lanes via authenticated application client",
+        initial_without_lane: 0,
+        with_date_and_matching_lane: 0,
+        without_date: 0,
+        without_matching_lane: 0,
+        ambiguous_lane: 0,
+        query_error: error instanceof Error ? error.message : String(error),
+        by_assignee: [],
+        rows: [],
+      });
+    } finally {
+      setGlobalDiagnosticLoading(false);
+    }
+  };
+
+  const copyGlobalDiagnostic = async () => {
+    if (!globalDiagnostic) return;
+    const text = JSON.stringify(globalDiagnostic, null, 2);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setGlobalDiagnosticCopied(true);
+      window.setTimeout(() => setGlobalDiagnosticCopied(false), 2500);
+    } catch (error) {
+      console.error("[KANBAN-AUDIT] global diagnostic copy failed", error);
+    }
+  };
+
   const recoverAllUnassignedCards = async () => {
     setGlobalRecoveryLoading(true);
     setGlobalRecovery(null);
+    let initialWithoutLane = 0;
     let stoppedOnError = false;
     let errorMessage: string | null = null;
     try {
@@ -856,51 +1100,30 @@ function KanbanAuditPanel({
       if (sessionError) throw sessionError;
       if (!sessionData.session) throw new Error("Nenhuma sessão autenticada ativa no Preview.");
 
-      const initialCards: { id: string; runrunit_project_id: number; assignee_name: string; lane_id: string | null }[] = [];
-      for (let from = 0; from < 50_000; from += 1000) {
-        const { data, error } = await (supabase as any)
-          .from("dashboard_project_cards")
-          .select("id,runrunit_project_id,assignee_name,lane_id")
-          .is("lane_id", null)
-          .order("id", { ascending: true })
-          .range(from, from + 999);
-        if (error) throw error;
-        const rows = (data ?? []) as typeof initialCards;
-        initialCards.push(...rows);
-        if (rows.length < 1000) break;
-      }
+      const initialCards = await fetchAllPagedRows<{
+        id: string;
+        runrunit_project_id: number;
+        assignee_name: string;
+        lane_id: string | null;
+      }>("dashboard_project_cards", "id,runrunit_project_id,assignee_name,lane_id", "id", (query) =>
+        query.is("lane_id", null),
+      );
+      initialWithoutLane = initialCards.length;
 
-      const { data: laneRows, error: lanesError } = await (supabase as any)
-        .from("dashboard_lanes")
-        .select("id,assignee_name,title,position");
-      if (lanesError) throw lanesError;
-      const lanesByKey = new Map<string, { id: string; assignee_name: string; title: string; position: number }[]>();
-      for (const lane of (laneRows ?? []) as { id: string; assignee_name: string; title: string; position: number }[]) {
-        const key = `${normalizeAssigneeName(lane.assignee_name)}::${lane.title.trim().toLocaleLowerCase("pt-BR")}`;
-        const matches = lanesByKey.get(key) ?? [];
-        matches.push(lane);
-        lanesByKey.set(key, matches);
-      }
-
-      const projectDates = new Map<number, string | null>();
-      const projectIds = [...new Set(initialCards.map((card) => card.runrunit_project_id))];
-      for (let from = 0; from < projectIds.length; from += 150) {
-        const { data, error } = await (supabase as any)
-          .from("runrunit_projects")
-          .select("runrunit_project_id,desired_delivery_date")
-          .in("runrunit_project_id", projectIds.slice(from, from + 150));
-        if (error) throw error;
-        for (const project of (data ?? []) as { runrunit_project_id: number; desired_delivery_date: string | null }[]) {
-          projectDates.set(project.runrunit_project_id, project.desired_delivery_date);
-        }
-      }
+      const laneRows = await fetchAllPagedRows<RecoveryLane>(
+        "dashboard_lanes",
+        "id,assignee_name,title,position",
+        "id",
+      );
+      const lanesByKey = buildLanesByKey(laneRows);
+      const projectDates = await fetchProjectDesiredDates(
+        initialCards.map((card) => card.runrunit_project_id),
+      );
 
       const planned = initialCards.map((card) => {
         const desired = projectDates.get(card.runrunit_project_id) ?? null;
         const title = desired ? monthlyLaneTitle(desired) : null;
-        const matches = title
-          ? lanesByKey.get(`${normalizeAssigneeName(card.assignee_name)}::${title.trim().toLocaleLowerCase("pt-BR")}`) ?? []
-          : [];
+        const matches = title ? lanesByKey.get(laneMatchKey(card.assignee_name, title)) ?? [] : [];
         return {
           card,
           desired,
@@ -942,15 +1165,7 @@ function KanbanAuditPanel({
         }
       }
 
-      const { data: finalCards, error: finalError } = await (supabase as any)
-        .from("dashboard_project_cards")
-        .select("id,lane_id")
-        .in("id", initialCards.map((card) => card.id));
-      if (finalError) {
-        stoppedOnError = true;
-        errorMessage = errorMessage ?? finalError.message ?? String(finalError);
-      }
-      const finalById = new Map((finalCards ?? []).map((card: { id: string; lane_id: string | null }) => [card.id, card.lane_id]));
+      const finalById = await fetchCardLaneIdsByIds(initialCards.map((card) => card.id));
       const updatedRows = rows.map((row) => {
         const finalLaneId = finalById.get(row.card_id) ?? null;
         const directed = !!row.target_lane_id && finalLaneId === row.target_lane_id;
@@ -985,7 +1200,7 @@ function KanbanAuditPanel({
         by_assignee_month: [...byMonth.values()],
         rows: updatedRows,
       });
-      await Promise.all([
+      await Promise.allSettled([
         qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
         qc.invalidateQueries({ queryKey: ["dashboard", "projects"] }),
       ]);
@@ -993,7 +1208,7 @@ function KanbanAuditPanel({
       setGlobalRecovery({
         generated_at: new Date().toISOString(),
         update_fields_sent: ["lane_id"],
-        initial_without_lane: 0,
+        initial_without_lane: initialWithoutLane,
         effectively_directed: 0,
         kept_without_date: 0,
         kept_without_matching_lane: 0,
@@ -1132,6 +1347,76 @@ function KanbanAuditPanel({
             </pre>
           </div>
         )}
+        <div className="mt-3 border-t border-amber-500/20 pt-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={diagnoseUnassignedCards}
+              disabled={globalDiagnosticLoading}
+              className="rounded bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+            >
+              {globalDiagnosticLoading ? "Diagnosticando…" : "Diagnosticar cards sem lane_id (somente leitura)"}
+            </button>
+            <span className="text-muted-foreground">não executa UPDATE</span>
+          </div>
+          {globalDiagnostic && (
+            <div className="mt-2 rounded border border-blue-500/30 p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-blue-700">Diagnóstico somente leitura</span>
+                <button
+                  type="button"
+                  onClick={copyGlobalDiagnostic}
+                  className="rounded bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-900 shadow-sm transition hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                >
+                  Copiar diagnóstico JSON
+                </button>
+                {globalDiagnosticCopied && (
+                  <span className="font-semibold text-green-700" role="status">Diagnóstico copiado!</span>
+                )}
+              </div>
+              <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-3">
+                <span>Sem lane_id: {globalDiagnostic.initial_without_lane}</span>
+                <span>Com data e coluna: {globalDiagnostic.with_date_and_matching_lane}</span>
+                <span>Sem data: {globalDiagnostic.without_date}</span>
+                <span>Sem coluna correspondente: {globalDiagnostic.without_matching_lane}</span>
+                <span>Coluna ambígua (mais de uma): {globalDiagnostic.ambiguous_lane}</span>
+                <span>Somente leitura: {globalDiagnostic.read_only ? "sim" : "não"}</span>
+              </div>
+              {globalDiagnostic.query_error && (
+                <div className="mt-1 text-red-700">Falha na leitura: {globalDiagnostic.query_error}</div>
+              )}
+              <div className="mt-2 max-h-[35vh] overflow-auto rounded border border-blue-500/20">
+                <table className="w-full border-collapse text-left font-mono text-[10px]">
+                  <thead className="sticky top-0 bg-muted">
+                    <tr>
+                      <th className="p-1">responsável</th>
+                      <th className="p-1">total</th>
+                      <th className="p-1">com data/coluna</th>
+                      <th className="p-1">sem data</th>
+                      <th className="p-1">sem coluna</th>
+                      <th className="p-1">ambígua</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {globalDiagnostic.by_assignee.map((row) => (
+                      <tr key={row.assignee_name} className="border-t border-border">
+                        <td className="p-1">{row.assignee_name}</td>
+                        <td className="p-1">{row.total}</td>
+                        <td className="p-1">{row.with_date_and_matching_lane}</td>
+                        <td className="p-1">{row.without_date}</td>
+                        <td className="p-1">{row.without_matching_lane}</td>
+                        <td className="p-1">{row.ambiguous_lane}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <pre className="mt-2 max-h-[45vh] overflow-auto whitespace-pre-wrap break-words font-mono">
+                {JSON.stringify(globalDiagnostic, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
         <div className="mt-3 border-t border-amber-500/20 pt-3">
           <button
             type="button"
@@ -1510,6 +1795,7 @@ function DashboardPage() {
         lanesError={lanesQ.error}
         projectsError={projectsQ.error}
         planningError={planningQ.error ?? antecedencesQ.error}
+        qc={qc}
       />
       {readOnly && (
         <div className="px-6 py-3 border-b border-border bg-card/40">
