@@ -3478,16 +3478,12 @@ function LaneColumn({
   const collapsedStorageKey = `dashboard:collapsed-lane:${encodeURIComponent(assigneeName)}:${laneId}`;
   const [isCollapsed, setIsCollapsed] = useState(false);
   useEffect(() => {
-    if (!isMonthly) {
-      setIsCollapsed(false);
-      return;
-    }
     try {
       setIsCollapsed(window.localStorage.getItem(collapsedStorageKey) === "true");
     } catch {
       setIsCollapsed(false);
     }
-  }, [collapsedStorageKey, isMonthly]);
+  }, [collapsedStorageKey]);
   void lane;
 
   const qc = useQueryClient();
@@ -3568,7 +3564,7 @@ function LaneColumn({
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
         className={cn(
           "group px-2.5 flex shrink-0 flex-col justify-center bg-card min-h-[44px] gap-0.5 py-1",
-          isMonthly && isCollapsed ? "rounded-[9px]" : "border-b border-border/50 rounded-t-lg",
+          isCollapsed ? "rounded-[9px]" : "border-b border-border/50 rounded-t-lg",
         )}
       >
         {editing && onRename ? (
@@ -3646,42 +3642,40 @@ function LaneColumn({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              {isMonthly && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label={isCollapsed ? "Expandir fila" : "Recolher fila"}
-                        aria-expanded={!isCollapsed}
-                        className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground/45 hover:text-foreground hover:bg-muted/30 transition-all"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setIsCollapsed((previous) => {
-                            const next = !previous;
-                            try {
-                              window.localStorage.setItem(collapsedStorageKey, String(next));
-                            } catch {
-                              /* localStorage indisponível — estado fica em memória */
-                            }
-                            return next;
-                          });
-                        }}
-                      >
-                        <ChevronDown
-                          className={cn("h-3.5 w-3.5 transition-transform", isCollapsed && "-rotate-90")}
-                        />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="top"
-                      className="text-xs bg-neutral-900 text-white border-neutral-800"
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={isCollapsed ? "Expandir fila" : "Recolher fila"}
+                      aria-expanded={!isCollapsed}
+                      className="shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-muted-foreground/45 hover:text-foreground hover:bg-muted/30 transition-all"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setIsCollapsed((previous) => {
+                          const next = !previous;
+                          try {
+                            window.localStorage.setItem(collapsedStorageKey, String(next));
+                          } catch {
+                            /* localStorage indisponível — estado fica em memória */
+                          }
+                          return next;
+                        });
+                      }}
                     >
-                      <p>{isCollapsed ? "Expandir fila" : "Recolher fila"}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
+                      <ChevronDown
+                        className={cn("h-3.5 w-3.5 transition-transform", isCollapsed && "-rotate-90")}
+                      />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="top"
+                    className="text-xs bg-neutral-900 text-white border-neutral-800"
+                  >
+                    <p>{isCollapsed ? "Expandir fila" : "Recolher fila"}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {isMonthly && onOpenWeekly && (
                 <TooltipProvider>
                   <Tooltip>
@@ -3858,7 +3852,7 @@ function LaneColumn({
       >
         <DroppableLaneBody
           laneId={laneId}
-          collapsed={isMonthly && isCollapsed}
+          collapsed={isCollapsed}
           cards={cards}
           reviews={reviews}
           demands={demands}
