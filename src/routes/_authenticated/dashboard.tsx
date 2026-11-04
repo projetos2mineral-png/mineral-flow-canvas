@@ -152,6 +152,7 @@ import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
+import { OnlineUsersIndicator } from "@/components/dashboard/OnlineUsersIndicator";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -2073,6 +2074,9 @@ function DashboardPage() {
           className="flex-1 flex flex-col min-h-0 relative pb-[84px]"
           style={densityVars as React.CSSProperties}
         >
+          <div className="fixed right-4 top-[calc(3.5rem+10px)] z-30">
+            <OnlineUsersIndicator />
+          </div>
           {assignees.map((a) => (
             <TabsContent
               key={a}
