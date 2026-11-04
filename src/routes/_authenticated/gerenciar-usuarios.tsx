@@ -28,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RequireLevel } from "@/components/RequireLevel";
 import { Search } from "lucide-react";
+import { KanbanAssigneesVisibility } from "@/components/users/KanbanAssigneesVisibility";
 
 export const Route = createFileRoute("/_authenticated/gerenciar-usuarios")({
   head: () => ({
@@ -188,6 +189,8 @@ function GerenciarUsuariosPage() {
           </Table>
         </div>
       )}
+
+      <KanbanAssigneesVisibility />
     </div>
   );
 }
