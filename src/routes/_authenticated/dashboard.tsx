@@ -2347,6 +2347,7 @@ function AssigneeBoard({
       const key = r.lane_id && m.has(r.lane_id) ? r.lane_id : UNASSIGNED_LANE;
       m.get(key)!.push(r);
     }
+    for (const arr of m.values()) arr.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
     return m;
   }, [reviews, localLanes, normalizedSearch, projectNameById]);
 
@@ -2866,14 +2867,43 @@ function AssigneeBoard({
       const laneValue = toLane === UNASSIGNED_LANE ? null : toLane;
       const fromLane = laneOfReview(activeKey);
       console.info("[kanban] revisão: movendo", { reviewId, fromLane, toLane, overKey });
-      if (fromLane === toLane) return;
+      // Nova ordem das revisões na fila destino (reordenação dentro da mesma fila incluída).
+      const destList = (reviewsByLane.get(toLane) ?? []).filter((r) => r.id !== reviewId);
+      const moving = reviews.find((r) => r.id === reviewId);
+      if (!moving) return;
+      let idx = destList.length;
+      if (overKey.startsWith("rev:")) {
+        const overIdx = destList.findIndex((r) => `rev:${r.id}` === overKey);
+        if (overIdx >= 0) {
+          const oldIdx = (reviewsByLane.get(toLane) ?? []).findIndex((r) => r.id === reviewId);
+          const overOrig = (reviewsByLane.get(toLane) ?? []).findIndex((r) => `rev:${r.id}` === overKey);
+          // Mesma fila descendo: insere depois do alvo.
+          idx = fromLane === toLane && oldIdx >= 0 && oldIdx < overOrig ? overIdx + 1 : overIdx;
+        }
+      } else if (fromLane === toLane) {
+        return; // solto no corpo da mesma fila: sem mudança
+      }
+      const order = [...destList.slice(0, idx), moving, ...destList.slice(idx)];
+      const changes = order
+        .map((r, position) => ({ r, position }))
+        .filter(({ r, position }) => r.id === reviewId || r.position !== position || r.lane_id !== laneValue);
+      if (changes.length === 1 && fromLane === toLane && moving.position === changes[0].position) return;
+      const posById = new Map(changes.map(({ r, position }) => [r.id, position]));
       const prev = qc.getQueryData<ReviewRow[]>(["dashboard", "reviews"]);
       await qc.cancelQueries({ queryKey: ["dashboard", "reviews"] });
       qc.setQueryData<ReviewRow[]>(["dashboard", "reviews"], (old) =>
-        old?.map((r) => (r.id === reviewId ? { ...r, lane_id: laneValue, position: 0 } : r)),
+        old?.map((r) =>
+          posById.has(r.id) ? { ...r, lane_id: laneValue, position: posById.get(r.id)! } : r,
+        ),
       );
       try {
-        await updateReview(reviewId, { lane_id: laneValue, position: 0 });
+        // Reaproveita updateReview (com confirmação de gravação); o card arrastado primeiro.
+        await updateReview(reviewId, { lane_id: laneValue, position: posById.get(reviewId)! });
+        await Promise.all(
+          changes
+            .filter(({ r }) => r.id !== reviewId)
+            .map(({ r, position }) => updateReview(r.id, { lane_id: laneValue, position })),
+        );
         toast.success("Revisão movida.");
       } catch (err) {
         console.error("[kanban] revisão: falha ao gravar", err);
