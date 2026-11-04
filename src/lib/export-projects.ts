@@ -62,10 +62,17 @@ export function exportProjectsToExcel(
   XLSX.writeFile(book, `projetos_kanban_${fileStamp()}.xlsx`);
 }
 
-export const LANE_EXPORT_HEADERS = ["Nome do projeto", "Cliente", "Data de entrega desejada"] as const;
+export const LANE_EXPORT_HEADERS = ["Nome do projeto", "Cliente", "Data de entrega desejada", "Classificação"] as const;
 
 export interface LaneExportCard {
   project: { project_name: string | null; client_name: string | null; desired_delivery_date: string | null };
+  is_tec?: boolean | null;
+  is_geo?: boolean | null;
+}
+
+/** "TEC", "GEO", "TEC / GEO" ou vazio. */
+export function laneCardClassification(c: LaneExportCard): string {
+  return [c.is_tec ? "TEC" : null, c.is_geo ? "GEO" : null].filter(Boolean).join(" / ");
 }
 
 /** Linhas da planilha da fila (exportado para teste). */
@@ -76,6 +83,7 @@ export function buildLaneExportRows(cards: readonly LaneExportCard[]): string[][
       c.project.project_name ?? "",
       c.project.client_name ?? "",
       formatDate(c.project.desired_delivery_date),
+      laneCardClassification(c),
     ]),
   ];
 }
@@ -89,7 +97,7 @@ export function laneExportFileName(title: string): string {
 /** Baixa um .xlsx com os cards da fila; somente leitura, não altera dados. */
 export function exportLaneCardsToExcel(title: string, cards: readonly LaneExportCard[]): void {
   const sheet = XLSX.utils.aoa_to_sheet(buildLaneExportRows(cards));
-  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }];
+  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }, { wch: 16 }];
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "Fila");
   XLSX.writeFile(book, laneExportFileName(title));
