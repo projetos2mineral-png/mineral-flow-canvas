@@ -2843,8 +2843,47 @@ function AssigneeBoard({
       return;
     }
 
+    // Revisão recebida: move apenas lane_id/position da revisão.
+    const laneOfReview = (key: string): string | null => {
+      for (const [laneId, list] of reviewsByLane) {
+        if (list.some((r) => `rev:${r.id}` === key)) return laneId;
+      }
+      return null;
+    };
+    if (activeKey.startsWith("rev:")) {
+      const reviewId = activeKey.slice(4);
+      let toLane: string | null = null;
+      if (overKey.startsWith("lane:")) toLane = overKey.slice(5);
+      else if (overKey.startsWith("laneItem:")) toLane = overKey.slice(9);
+      else if (overKey.startsWith("rev:")) toLane = laneOfReview(overKey);
+      else toLane = laneOfCard(overKey);
+      if (!toLane || overKey === activeKey) return;
+      const laneValue = toLane === UNASSIGNED_LANE ? null : toLane;
+      const fromLane = laneOfReview(activeKey);
+      if (fromLane === toLane) return;
+      const prev = qc.getQueryData<ReviewRow[]>(["dashboard", "reviews"]);
+      await qc.cancelQueries({ queryKey: ["dashboard", "reviews"] });
+      qc.setQueryData<ReviewRow[]>(["dashboard", "reviews"], (old) =>
+        old?.map((r) => (r.id === reviewId ? { ...r, lane_id: laneValue, position: 0 } : r)),
+      );
+      try {
+        await updateReview(reviewId, { lane_id: laneValue, position: 0 });
+      } catch (err) {
+        if (prev) qc.setQueryData(["dashboard", "reviews"], prev);
+        toast.error("A revisão não foi movida: " + (err as Error).message);
+      }
+      qc.invalidateQueries({ queryKey: ["dashboard", "reviews"] });
+      return;
+    }
+
     const activeCard = items.find((i) => i.key === activeKey);
     if (!activeCard) return;
+    // Soltar um card de projeto sobre uma revisão equivale a soltar na fila dela.
+    if (overKey.startsWith("rev:")) {
+      const l = laneOfReview(overKey);
+      if (!l) return;
+      return onDragEnd({ ...e, over: { ...over, id: `lane:${l}` } } as DragEndEvent);
+    }
 
     // Destino explícito: "Sem fila" só quando o usuário soltou de fato nela.
     const target = resolveCardDropTarget(overKey, activeKey, dropContext);
@@ -3867,7 +3906,7 @@ function LaneColumn({
 
       <SortableContext
         id={`lane:${laneId}`}
-        items={cards.map((c) => c.key)}
+        items={[...reviews.map((r) => `rev:${r.id}`), ...cards.map((c) => c.key)]}
         strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
       >
         <DroppableLaneBody
@@ -4001,7 +4040,7 @@ function DroppableLaneBody({
         <>
           {reviews.map((r) => (
             <div key={`rev:${r.id}`} className={itemShell}>
-              <ReviewItemView
+              <SortableReview
                 review={r}
                 projectName={
                   projectNameById.get(r.runrunit_project_id) ?? `Projeto #${r.runrunit_project_id}`
@@ -4438,6 +4477,23 @@ function ReadRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 border-b border-border/50 pb-1.5">
       <span className="text-muted-foreground text-xs">{label}</span>
       <span className="text-right text-foreground/90 truncate">{value}</span>
+    </div>
+  );
+}
+
+function SortableReview(props: React.ComponentProps<typeof ReviewItemView>) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `rev:${props.review.id}`,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("cursor-grab active:cursor-grabbing touch-none", isDragging && "opacity-40")}
+      {...attributes}
+      {...listeners}
+    >
+      <ReviewItemView {...props} />
     </div>
   );
 }
