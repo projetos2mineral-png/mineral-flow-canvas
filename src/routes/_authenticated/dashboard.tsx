@@ -2723,7 +2723,12 @@ function AssigneeBoard({
   // Salva posição vertical da página também
   useEffect(() => {
     if (!isActive) return;
+    let t: ReturnType<typeof setTimeout> | null = null;
     const save = () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(doSave, 250);
+    };
+    const doSave = () => {
       const el = mainScrollRef.current;
       try {
         localStorage.setItem(
@@ -2739,8 +2744,30 @@ function AssigneeBoard({
       }
     };
     window.addEventListener("scroll", save, { passive: true });
-    return () => window.removeEventListener("scroll", save);
+    return () => {
+      window.removeEventListener("scroll", save);
+      if (t) clearTimeout(t);
+    };
   }, [isActive, scrollStorageKey]);
+
+  // Grava a rolagem com atraso: escrever no localStorage a cada quadro
+  // (inclusive durante a rolagem automática do arraste) travava a tela.
+  const scrollSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleScrollSave = () => {
+    if (scrollSaveTimerRef.current) clearTimeout(scrollSaveTimerRef.current);
+    scrollSaveTimerRef.current = setTimeout(() => {
+      const el = mainScrollRef.current;
+      if (!el) return;
+      try {
+        localStorage.setItem(
+          scrollStorageKey,
+          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY }),
+        );
+      } catch {
+        /* ignore */
+      }
+    }, 250);
+  };
 
   const onMainScroll = () => {
     if (kanbanSyncingRef.current) return;
@@ -2753,16 +2780,7 @@ function AssigneeBoard({
       // Sincroniza proporcionalmente — evita descompasso quando larguras visíveis diferem
       proxy.scrollLeft = (el.scrollLeft / elMax) * proxyMax;
     }
-    if (el) {
-      try {
-        localStorage.setItem(
-          scrollStorageKey,
-          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY }),
-        );
-      } catch {
-        /* ignore */
-      }
-    }
+    if (el) scheduleScrollSave();
     requestAnimationFrame(() => {
       kanbanSyncingRef.current = false;
     });
@@ -2777,14 +2795,7 @@ function AssigneeBoard({
       const elMax = Math.max(1, el.scrollWidth - el.clientWidth);
       const proxyMax = Math.max(1, proxy.scrollWidth - proxy.clientWidth);
       el.scrollLeft = (proxy.scrollLeft / proxyMax) * elMax;
-      try {
-        localStorage.setItem(
-          scrollStorageKey,
-          JSON.stringify({ x: el.scrollLeft, y: el.scrollTop, winY: window.scrollY }),
-        );
-      } catch {
-        /* ignore */
-      }
+      scheduleScrollSave();
     }
     requestAnimationFrame(() => {
       kanbanSyncingRef.current = false;
@@ -3294,8 +3305,8 @@ function AssigneeBoard({
           onDragEnd={readOnly ? undefined : onDragEnd}
           autoScroll={{
             threshold: { x: 0.18, y: 0.15 },
-            acceleration: 8,
-            interval: 5,
+            acceleration: 4,
+            interval: 16,
           }}
         >
           <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden">
