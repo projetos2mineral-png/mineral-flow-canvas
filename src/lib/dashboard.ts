@@ -1090,6 +1090,7 @@ export async function fetchReviews(): Promise<ReviewRow[]> {
     .select(
       "id,runrunit_project_id,source_card_id,original_assignee_name,reviewer_name,requested_by_name,review_status,correction_note,lane_id,position,finished_at"
     )
+    .order("position", { ascending: true })
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as ReviewRow[];
