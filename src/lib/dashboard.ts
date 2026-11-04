@@ -1117,11 +1117,21 @@ export async function updateReview(
   id: string,
   patch: Partial<Pick<ReviewRow, "review_status" | "correction_note" | "finished_at" | "lane_id" | "position">>
 ) {
-  const { error } = await (supabase as any)
+  const { data, error } = await (supabase as any)
     .from("dashboard_reviews")
     .update({ ...patch, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id, lane_id, position");
   if (error) throw error;
+  // Sob RLS, uma atualização bloqueada não gera erro: retorna 0 linhas.
+  if (!Array.isArray(data) || data.length === 0) {
+    throw new Error(
+      "o banco não gravou a alteração (sem permissão para editar esta revisão ou registro inexistente).",
+    );
+  }
+  if ("lane_id" in patch && (data[0].lane_id ?? null) !== (patch.lane_id ?? null)) {
+    throw new Error("o banco não confirmou a nova fila da revisão.");
+  }
 }
 
 // ---------- Planning ----------

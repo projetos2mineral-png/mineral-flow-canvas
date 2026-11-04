@@ -2857,9 +2857,15 @@ function AssigneeBoard({
       else if (overKey.startsWith("laneItem:")) toLane = overKey.slice(9);
       else if (overKey.startsWith("rev:")) toLane = laneOfReview(overKey);
       else toLane = laneOfCard(overKey);
-      if (!toLane || overKey === activeKey) return;
+      if (overKey === activeKey) return;
+      if (!toLane) {
+        console.warn("[kanban] revisão: destino não identificado", { overKey });
+        toast.warning("Não foi possível identificar a fila de destino. Solte a revisão dentro de uma fila.");
+        return;
+      }
       const laneValue = toLane === UNASSIGNED_LANE ? null : toLane;
       const fromLane = laneOfReview(activeKey);
+      console.info("[kanban] revisão: movendo", { reviewId, fromLane, toLane, overKey });
       if (fromLane === toLane) return;
       const prev = qc.getQueryData<ReviewRow[]>(["dashboard", "reviews"]);
       await qc.cancelQueries({ queryKey: ["dashboard", "reviews"] });
@@ -2868,7 +2874,9 @@ function AssigneeBoard({
       );
       try {
         await updateReview(reviewId, { lane_id: laneValue, position: 0 });
+        toast.success("Revisão movida.");
       } catch (err) {
+        console.error("[kanban] revisão: falha ao gravar", err);
         if (prev) qc.setQueryData(["dashboard", "reviews"], prev);
         toast.error("A revisão não foi movida: " + (err as Error).message);
       }
