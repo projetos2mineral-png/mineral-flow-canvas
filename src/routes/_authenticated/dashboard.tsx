@@ -2231,6 +2231,7 @@ function DashboardPage() {
 function AssigneeBoard({
   assignee,
   projects,
+  allProjects,
   lanes,
   cards,
   reviews,
