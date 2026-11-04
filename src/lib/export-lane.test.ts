@@ -15,7 +15,15 @@ describe("exportação da fila", () => {
       { project, is_tec: false, is_geo: true },
       { project, is_tec: false, is_geo: false },
     ]);
-    expect(rows.slice(1).map((r) => r[3])).toEqual(["TEC / GEO", "GEO", ""]);
+    expect(rows.slice(1).map((r) => r[3])).toEqual(["TEC, GEO", "GEO", ""]);
+  });
+  it("lê as etiquetas do card do Kanban", () => {
+    const rows = buildLaneExportRows([
+      { project, card: { is_tec: true, is_geo: true } },
+      { project, card: { is_tec: false, is_geo: true } },
+      { project, card: null },
+    ]);
+    expect(rows.slice(1).map((r) => r[3])).toEqual(["TEC, GEO", "GEO", ""]);
   });
   it("fila vazia gera só cabeçalhos", () => {
     expect(buildLaneExportRows([])).toHaveLength(1);
