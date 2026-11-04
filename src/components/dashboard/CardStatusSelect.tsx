@@ -33,8 +33,9 @@ export function CardStatusSelect({
   triggerClassName?: string;
   disabled?: boolean;
 }) {
-  // Selectable statuses exclude "em revisão" (only set by send-for-review action)
-  const selectableStatuses = STATUSES.filter((s) => s !== "em revisão");
+  // Todos os status são selecionáveis manualmente, inclusive "em revisão"
+  // (independente do fluxo de envio para revisão por outro usuário).
+  const selectableStatuses = STATUSES;
   return (
     <div
       className={cn("flex flex-col", className)}
