@@ -7,6 +7,8 @@ export const STATUSES = [
   "em revisão",
   "em correção",
   "aguardando informação",
+  "aguardando órgão",
+  "suspenso",
 ] as const;
 
 export type CardStatus = (typeof STATUSES)[number];
@@ -18,6 +20,8 @@ export const STATUS_LABEL: Record<CardStatus, string> = {
   "em revisão": "Em Revisão",
   "em correção": "Em Correção",
   "aguardando informação": "Aguardando Informação",
+  "aguardando órgão": "Aguardando Órgão",
+  "suspenso": "Suspenso",
 };
 
 // Tailwind classes for full-card background by status
@@ -34,6 +38,10 @@ export const STATUS_CARD_CLASS: Record<CardStatus, string> = {
     "bg-orange-100 border-orange-300 text-orange-950 dark:bg-[#3A2208] dark:border-orange-900/70 dark:text-orange-50",
   "aguardando informação":
     "bg-pink-100 border-pink-300 text-pink-950 dark:bg-[#3A1F2D] dark:border-pink-900/70 dark:text-pink-50",
+  "aguardando órgão":
+    "bg-pink-100 border-pink-300 text-pink-950 dark:bg-[#3A1F2D] dark:border-pink-900/70 dark:text-pink-50",
+  "suspenso":
+    "bg-slate-300 border-slate-400 text-slate-900 dark:bg-[#161616] dark:border-neutral-800 dark:text-neutral-300",
 };
 
 export const STATUS_DOT_CLASS: Record<CardStatus, string> = {
@@ -43,10 +51,13 @@ export const STATUS_DOT_CLASS: Record<CardStatus, string> = {
   "em revisão": "bg-purple-500",
   "em correção": "bg-orange-500",
   "aguardando informação": "bg-pink-500",
+  "aguardando órgão": "bg-pink-500",
+  "suspenso": "bg-slate-800 dark:bg-slate-300",
 };
 
 export function normalizeStatus(s: string | null | undefined): CardStatus {
-  const v = (s ?? "").toLowerCase().trim();
+  let v = (s ?? "").toLowerCase().trim();
+  if (v === "aguardando orgao") v = "aguardando órgão";
   return (STATUSES as readonly string[]).includes(v) ? (v as CardStatus) : "a iniciar";
 }
 
