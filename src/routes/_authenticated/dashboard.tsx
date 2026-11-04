@@ -2086,6 +2086,7 @@ function DashboardPage() {
               <AssigneeBoard
                 assignee={a}
                 projects={projects.filter((p) => sameAssigneeName(p.assignee_name ?? UNASSIGNED, a))}
+                allProjects={projects}
                 lanes={filterByAssignee(lanes, a)}
                 cards={filterByAssignee(cards, a)}
                 reviews={reviews.filter(
@@ -2251,6 +2252,7 @@ function AssigneeBoard({
 }: {
   assignee: string;
   projects: DashboardProject[];
+  allProjects?: DashboardProject[];
   lanes: Lane[];
   cards: ProjectCardRow[];
   reviews: ReviewRow[];
@@ -2296,9 +2298,12 @@ function AssigneeBoard({
   // Project name lookup for review demands (which may reference projects not in this assignee's set)
   const projectNameById = useMemo(() => {
     const m = new Map<number, string>();
-    for (const p of projects) m.set(p.runrunit_project_id, p.project_name);
+    // Usa a lista completa: revisões podem referenciar projetos de outros responsáveis.
+    for (const p of allProjects ?? projects) {
+      if (!m.has(p.runrunit_project_id)) m.set(p.runrunit_project_id, p.project_name);
+    }
     return m;
-  }, [projects]);
+  }, [allProjects, projects]);
 
   const UNASSIGNED_LANE = "__unassigned__";
   const normalizedSearch = (search ?? "").trim().toLowerCase();
