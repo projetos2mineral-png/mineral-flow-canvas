@@ -141,6 +141,7 @@ import {
   upsertBoardAntecedence,
   calculatePositioningDate,
 } from "@/lib/board-antecedence";
+import { fetchHiddenAssignees } from "@/lib/board-visibility";
 import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1783,6 +1784,12 @@ function DashboardPage() {
     [demandsQ.data, users],
   );
 
+  const hiddenAssigneesQ = useQuery({
+    queryKey: ["dashboard", "hidden-assignees"],
+    queryFn: fetchHiddenAssignees,
+    staleTime: 30_000,
+  });
+
   const assignees = useMemo(() => {
     const names = new Map<string, string>();
     const add = (name: string) => {
@@ -1791,8 +1798,11 @@ function DashboardPage() {
     };
     for (const p of projects) add(p.assignee_name ?? UNASSIGNED);
     for (const d of demandCards) add(d.assigneeName);
-    return Array.from(names.values()).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [projects, demandCards]);
+    const hidden = hiddenAssigneesQ.data ?? new Set<string>();
+    return Array.from(names.values())
+      .filter((n) => n === UNASSIGNED || !hidden.has(normalizeAssigneeName(n)))
+      .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [projects, demandCards, hiddenAssigneesQ.data]);
 
   const [activeAssignee, setActiveAssignee] = useState<string>("");
   const [search, setSearch] = useState<string>("");
