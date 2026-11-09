@@ -4260,94 +4260,22 @@ function CardDetailsDialog({
 
         <div className="max-h-[70vh] overflow-y-auto">
           <div className="px-6 py-4 space-y-4">
-            {/* Prazos — destaque */}
-            {formattedDelivery && (
-              <div className="rounded-lg border border-primary/20 bg-primary/[0.04] dark:bg-primary/10 p-4">
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  <CalendarDays className="h-3.5 w-3.5" />
-                  Prazo
-                </div>
-                <div className="flex flex-wrap items-baseline justify-between gap-3">
-                  <div>
-                    <div className="text-xs text-muted-foreground">Entrega desejada</div>
-                    <div className="text-[15px] font-semibold tracking-tight font-mono tabular-nums">
-                      {formattedDelivery}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">Runrun.it</div>
-                  </div>
-                  {p.last_synced_at && (
-                    <div className="text-right">
-                      <div className="text-[11px] text-muted-foreground">Última sincronização</div>
-                      <div className="text-xs font-mono tabular-nums text-muted-foreground">
-                        {new Date(p.last_synced_at).toLocaleString("pt-BR")}
-                      </div>
-                    </div>
-                  )}
-                </div>
+            {/* Resumo compacto */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/20 p-3">
+              <div className="min-w-0">
+                <div className="text-[11px] text-muted-foreground">Entrega desejada</div>
+                <div className="text-sm font-semibold font-mono tabular-nums">{formattedDelivery ?? "—"}</div>
               </div>
-            )}
-
-            {/* Informações agrupadas — metadados secundários */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Projeto
-                </div>
-                <div className="space-y-2.5">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">Cliente</span>
-                    <span className="text-sm text-foreground/80 truncate">
-                      {p.client_name ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">Grupo</span>
-                    <span className="text-sm text-foreground/80 truncate">
-                      {p.project_group_name ?? "—"}
-                    </span>
-                  </div>
-                  {card.card?.calculation_details ? (
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[11px] text-muted-foreground">
-                        Origem da estimativa
-                      </span>
-                      <span className="text-xs text-foreground/70 leading-snug">
-                        {estimateSourceLabel(card.card.calculation_details as any) || "—"}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
+              <div className="min-w-0">
+                <div className="text-[11px] text-muted-foreground">Time</div>
+                <div className="text-sm truncate">{p.team_name ?? "—"}</div>
               </div>
-              <div className="space-y-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Responsáveis
+              {card.card?.calculation_details ? (
+                <div className="min-w-0">
+                  <div className="text-[11px] text-muted-foreground">Origem da estimativa</div>
+                  <div className="text-xs truncate">{estimateSourceLabel(card.card.calculation_details as any) || "—"}</div>
                 </div>
-                <div className="space-y-2.5">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">Responsável</span>
-                    <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
-                      <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground/60" />
-                      {p.assignee_name ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">Time</span>
-                    <span className="inline-flex items-center gap-1.5 text-sm text-foreground/80">
-                      <Users className="h-3 w-3 text-muted-foreground/60" />
-                      {p.team_name ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[11px] text-muted-foreground">Status</span>
-                    <span className="inline-flex items-center gap-1.5 text-sm">
-                      <span
-                        className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])}
-                      />
-                      {STATUS_LABEL[card.status]}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              ) : null}
             </div>
 
             {card.correction_note && (
@@ -4364,9 +4292,6 @@ function CardDetailsDialog({
             <div className="space-y-3">
               <div>
                 <h4 className="text-sm font-semibold">Classificações</h4>
-                <p className="text-xs text-muted-foreground">
-                  Classificações internas do projeto.
-                </p>
               </div>
               <div className="flex flex-wrap gap-x-5 gap-y-2">
                 <label className="inline-flex items-center gap-2 text-sm">
@@ -4432,9 +4357,6 @@ function CardDetailsDialog({
                 <div className="space-y-3">
                   <div>
                     <h4 className="text-sm font-semibold">Estimativa de horas</h4>
-                    <p className="text-xs text-muted-foreground">
-                      A estimativa automática continua sendo calculada. Preencha um valor para substituí-la neste card.
-                    </p>
                   </div>
                   <div className="flex flex-wrap items-end gap-4">
                     <div className="flex flex-col gap-0.5">
@@ -4491,15 +4413,12 @@ function CardDetailsDialog({
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 <h4 className="text-sm font-semibold">Observações internas</h4>
-                <span className="text-[11px] text-muted-foreground">
-                  · visível apenas internamente
-                </span>
               </div>
               <Textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Anote algo sobre este projeto…"
-                rows={4}
+                rows={3}
                 className="resize-none"
               />
               <div className="flex justify-end">
