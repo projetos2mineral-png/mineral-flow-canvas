@@ -3427,6 +3427,7 @@ function AssigneeBoard({
         onSaveClassifications={handleSaveClassifications}
         onSaveManualEstimate={handleSaveManualEstimate}
         readOnly={readOnly}
+        onStatusChange={handleStatusChange}
         onSendForReview={(c) => {
           setOpenCard(null);
           setReviewCard(c);
@@ -4171,6 +4172,7 @@ function CardDetailsDialog({
   onSaveManualEstimate,
   readOnly,
   onSendForReview,
+  onStatusChange,
 }: {
   card: DashboardCard | null;
   onClose: () => void;
@@ -4182,6 +4184,7 @@ function CardDetailsDialog({
   onSaveManualEstimate: (c: DashboardCard, hours: number | null) => Promise<void>;
   readOnly: boolean;
   onSendForReview: (c: DashboardCard) => void;
+  onStatusChange?: (c: DashboardCard, s: CardStatus) => Promise<void> | void;
 }) {
   const [note, setNote] = useState("");
   const [isTec, setIsTec] = useState(false);
@@ -4189,7 +4192,9 @@ function CardDetailsDialog({
   const [savingClassifications, setSavingClassifications] = useState(false);
   const [manualHours, setManualHours] = useState("");
   const [savingEstimate, setSavingEstimate] = useState(false);
+  const [localStatus, setLocalStatus] = useState<CardStatus>("a fazer" as CardStatus);
   useEffect(() => {
+    if (card) setLocalStatus(card.status);
     const manual = card?.card?.manual_estimated_hours;
     setManualHours(manual == null ? "" : hoursToClockInput(Number(manual)));
     setNote(card?.internal_note ?? "");
@@ -4228,18 +4233,33 @@ function CardDetailsDialog({
                 {p.project_group_name}
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium bg-background">
-              <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[card.status])} />
-              {STATUS_LABEL[card.status]}
-            </span>
+            {p.assignee_name && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+                <UserCircle2 className="h-3 w-3" />
+                {p.assignee_name}
+              </span>
+            )}
+            {onStatusChange && !readOnly ? (
+              <CardStatusSelect
+                card={{ ...card, status: localStatus }}
+                onStatusChange={(c, s) => {
+                  setLocalStatus(s);
+                  void onStatusChange(c, s);
+                }}
+                triggerClassName="h-7 rounded-full text-xs px-2.5 bg-background text-foreground font-medium"
+              />
+            ) : (
+              <span className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium bg-background">
+                <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[localStatus])} />
+                {STATUS_LABEL[localStatus]}
+              </span>
+            )}
           </div>
-          <DialogDescription className="text-xs leading-relaxed">
-            Dados do Runrun.it são somente leitura. Observações e revisões são internas.
-          </DialogDescription>
+          <DialogDescription className="sr-only">Detalhes do projeto</DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[68vh] overflow-y-auto">
-          <div className="px-6 py-5 space-y-6">
+        <div className="max-h-[70vh] overflow-y-auto">
+          <div className="px-6 py-4 space-y-4">
             {/* Prazos — destaque */}
             {formattedDelivery && (
               <div className="rounded-lg border border-primary/20 bg-primary/[0.04] dark:bg-primary/10 p-4">
