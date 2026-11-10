@@ -124,13 +124,64 @@ END $$;
 
 -- Limite de 3 tentativas entre execuções relacionadas + T6 isolamento + status final.
 DO $$ DECLARE b jsonb := (SELECT v FROM ctx WHERE k='B'); run uuid := (b->>'run_id')::uuid; tok bigint := (b->>'fencing_token')::bigint;
-  it jsonb; f jsonb; i int; st text; att int; BEGIN
-  UPDATE dashboard_sync_run_items SET next_attempt_at = now() WHERE run_id = run;
-  -- P2 tem 1 tentativa herdada: falha mais 2 vezes -> 3 = definitivo
-  FOR i IN 1..2 LOOP
-    UPDATE dashboard_sync_run_items SET next_attempt_at = now() WHERE run_id = run AND runrunit_project_id = 2;
-    SELECT * INTO it FROM sync_claim_next(run, tok) AS x(v) ; -- jsonb
+  it jsonb; f jsonb; i int; st text; att int; fails int := 0; BEGIN
+  FOR i IN 1..10 LOOP
     it := sync_claim_next(run, tok);
-    EXIT WHEN it IS NULL;
+    IF it IS NULL THEN
+      -- simula a passagem do tempo de backoff
+      UPDATE dashboard_sync_run_items SET next_attempt_at = now() WHERE run_id = run AND status = 'failed';
+      it := sync_claim_next(run, tok);
+      EXIT WHEN it IS NULL;
+    END IF;
+    IF it->>'runrunit_project_id' = '2' THEN
+      PERFORM sync_record_failure(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid, 'HTTP 404 permanente');
+      fails := fails + 1;
+    ELSE
+      PERFORM sync_persist_project(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid,
+        '{"runrunit_project_id":3,"name":"P3","is_open":true,"desired_delivery_date":"2026-12-05"}', '[]', '[{"assignee_name":"Laura"}]');
+      PERFORM sync_complete_item(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid);
+    END IF;
   END LOOP;
+  SELECT status, attempts INTO st, att FROM dashboard_sync_run_items WHERE run_id = run AND runrunit_project_id = 2;
+  ASSERT st = 'failed' AND att = 3, format('P2: esperava failed/3, veio %s/%s', st, att);
+  ASSERT fails = 2, format('com 1 tentativa herdada, só cabem mais 2 (vieram %s)', fails);
+  SELECT status INTO st FROM dashboard_sync_run_items WHERE run_id = run AND runrunit_project_id = 3;
+  ASSERT st = 'completed', 'falha do P2 não pode impedir o P3';
+  ASSERT EXISTS (SELECT 1 FROM dashboard_project_cards WHERE runrunit_project_id=3 AND assignee_name='Laura'
+                 AND lane_id='00000000-0000-0000-0000-0000000000a2'), 'P3 deveria ir para Dezembro/2026';
+  f := sync_finalize(run, tok);
+  ASSERT (f->>'done')::boolean AND f->>'status' = 'completed_with_errors', 'finalização: ' || f::text;
+  ASSERT NOT (SELECT is_locked FROM dashboard_sync_lock), 'trava deveria ser liberada';
+  ASSERT (SELECT failed_count FROM dashboard_sync_runs WHERE id = run) = 1;
+  RAISE WARNING 'OK T6 + tentativas: P2 parou em 3 tentativas somando execuções relacionadas; P3 concluiu; completed_with_errors; trava liberada';
+END $$;
+
+-- Esgotados não voltam para pending numa nova retomada.
+DO $$ DECLARE r jsonb; run uuid; tok bigint; rec jsonb; st text; BEGIN
+  r := sync_acquire_lock('manual_batch','u@x',ARRAY[2,3]::bigint[]);
+  run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
+  UPDATE dashboard_sync_run_items SET attempts = 3, status = 'failed' WHERE run_id = run AND runrunit_project_id = 2;
+  UPDATE dashboard_sync_lock SET heartbeat_at = now() - interval '10 minutes';
+  rec := sync_recover_stale();
+  SELECT status INTO st FROM dashboard_sync_run_items WHERE run_id=(rec->>'run_id')::uuid AND runrunit_project_id=2;
+  ASSERT st = 'failed', 'item esgotado voltou para ' || st;
+  ASSERT (sync_claim_next((rec->>'run_id')::uuid, (rec->>'fencing_token')::bigint))->>'runrunit_project_id' = '3';
+  ASSERT sync_claim_next((rec->>'run_id')::uuid, (rec->>'fencing_token')::bigint) IS NULL, 'esgotado foi reclamado';
+  RAISE WARNING 'OK tentativas: item esgotado permanece failed após retomada pelo watchdog';
+END $$;
+
+-- Aquisição sobre trava vencida não inicia processo paralelo: recupera e recusa.
+DO $$ DECLARE r jsonb; BEGIN
+  UPDATE dashboard_sync_lock SET heartbeat_at = now() - interval '10 minutes';
+  r := sync_acquire_lock('manual_single','u@x',ARRAY[1]::bigint[]);
+  ASSERT NOT (r->>'acquired')::boolean AND r->>'reason' = 'recovering', r::text;
+  RAISE WARNING 'OK: manual sobre trava vencida aciona retomada em vez de abrir execução paralela';
+END $$;
+
+-- Permissões: authenticated não executa RPCs de escrita.
+DO $$ BEGIN
+  ASSERT NOT has_function_privilege('authenticated', 'sync_acquire_lock(text,text,bigint[],uuid)', 'EXECUTE');
+  ASSERT NOT has_function_privilege('anon', 'sync_persist_project(uuid,bigint,uuid,uuid,jsonb,jsonb,jsonb)', 'EXECUTE');
+  ASSERT has_function_privilege('service_role', 'sync_claim_next(uuid,bigint)', 'EXECUTE');
+  RAISE WARNING 'OK segurança: RPCs de escrita só para service_role';
 END $$;
