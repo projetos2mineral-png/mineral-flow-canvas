@@ -10,11 +10,8 @@ import {
   setProjectsTrackingBulk,
   ignoreNewCandidate,
   ignoreAllNewCandidates,
-  invokeSyncSingleProject,
   invokeDiscoverProjects,
   invokeSyncVisibleProjects,
-  allocateProjectToMonthlyLanes,
-  syncAndAllocateProject,
   reallocateAllTrackedProjects,
   countClosedTrackedProjects,
   clearClosedTrackedProjects,
@@ -291,7 +288,7 @@ function SelecionarProjetosPage() {
   };
 
   // Processamento em lote orquestrado pelo store global (batch-update-store):
-  // lotes de 30, concorrência 3, invokeSyncSingleProject + allocateProjectToMonthlyLanes.
+  // executado no servidor com trava compartilhada (ver src/lib/sync).
   // Vive fora do ciclo de vida desta página — continua durante a navegação.
   const handleUpdateSelected = () => {
     if (guardBatchConflict()) return;
