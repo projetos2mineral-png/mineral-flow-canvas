@@ -71,6 +71,7 @@ export async function runSlice(deps: SyncDeps, run: RunHandle, opts: SliceOption
   const worker = async () => {
     while (!res.lockLost && taken < opts.maxItems && deps.now() - started < opts.maxMillis) {
       let item: ClaimedItem | null;
+      taken++; // reserva a vaga ANTES do await: evita estourar o limite da fatia
       try {
         item = await deps.claimNext(run);
       } catch (e) {
@@ -79,7 +80,6 @@ export async function runSlice(deps: SyncDeps, run: RunHandle, opts: SliceOption
         return;
       }
       if (!item) return;
-      taken++;
       try {
         const payload = await deps.fetchProject(item.projectId);
         await deps.persistProject(run, item, payload);
