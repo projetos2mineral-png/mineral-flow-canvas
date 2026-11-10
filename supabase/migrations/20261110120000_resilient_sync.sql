@@ -216,7 +216,7 @@ BEGIN
    WHERE run_id = p_run_id
      AND (status = 'pending' OR (status = 'failed' AND attempts < sync_max_attempts()))
      AND next_attempt_at <= now()
-   ORDER BY attempts, created_at, id
+   ORDER BY attempts, created_at, runrunit_project_id
    LIMIT 1 FOR UPDATE SKIP LOCKED;
   IF NOT FOUND THEN RETURN NULL; END IF;
   UPDATE dashboard_sync_run_items SET status = 'processing', attempts = attempts + 1,
