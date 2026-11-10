@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS public.dashboard_sync_run_items (
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','processing','completed','failed')),
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  claim_id uuid,
   error_message text,
   started_at timestamptz,
   completed_at timestamptz,
@@ -207,6 +208,10 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE it dashboard_sync_run_items%ROWTYPE;
 BEGIN
   PERFORM sync_assert_fence(p_run_id, p_token);
+  -- Reserva expirada (worker morreu no meio): conta como tentativa falhada.
+  UPDATE dashboard_sync_run_items SET status = 'failed', claim_id = NULL, next_attempt_at = now(),
+         error_message = 'Processamento interrompido (reserva expirada)', completed_at = now(), updated_at = now()
+   WHERE run_id = p_run_id AND status = 'processing' AND started_at < now() - interval '5 minutes';
   SELECT * INTO it FROM dashboard_sync_run_items
    WHERE run_id = p_run_id
      AND (status = 'pending' OR (status = 'failed' AND attempts < sync_max_attempts()))
@@ -215,10 +220,10 @@ BEGIN
    LIMIT 1 FOR UPDATE SKIP LOCKED;
   IF NOT FOUND THEN RETURN NULL; END IF;
   UPDATE dashboard_sync_run_items SET status = 'processing', attempts = attempts + 1,
-         started_at = now(), updated_at = now()
+         claim_id = gen_random_uuid(), started_at = now(), updated_at = now()
    WHERE id = it.id RETURNING * INTO it;
   UPDATE dashboard_sync_lock SET heartbeat_at = now() WHERE id = 1 AND current_run_id = p_run_id;
-  RETURN jsonb_build_object('item_id', it.id, 'runrunit_project_id', it.runrunit_project_id,
+  RETURN jsonb_build_object('item_id', it.id, 'claim_id', it.claim_id, 'runrunit_project_id', it.runrunit_project_id,
                             'project_name', it.project_name, 'attempts', it.attempts);
 END $$;
 
@@ -271,13 +276,14 @@ END $$;
 -- Persistência atômica de UM projeto: fencing + projeto + tarefas + pessoas
 -- + alocação na mesma transação. Qualquer erro desfaz tudo.
 CREATE OR REPLACE FUNCTION public.sync_persist_project(
-  p_run_id uuid, p_token bigint, p_item_id uuid, p_project jsonb, p_tasks jsonb, p_people jsonb)
+  p_run_id uuid, p_token bigint, p_item_id uuid, p_claim_id uuid, p_project jsonb, p_tasks jsonb, p_people jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE pid bigint; is_open_v boolean; allocated int := 0;
 BEGIN
   PERFORM sync_assert_fence(p_run_id, p_token);
-  PERFORM 1 FROM dashboard_sync_run_items WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing' FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ITEM_NOT_PROCESSING: item % não está em processamento nesta execução', p_item_id; END IF;
+  PERFORM 1 FROM dashboard_sync_run_items
+   WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing' AND claim_id = p_claim_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'CLAIM_LOST: item % não está mais reservado para este worker', p_item_id; END IF;
 
   pid := (p_project->>'runrunit_project_id')::bigint;
   is_open_v := COALESCE((p_project->>'is_open')::boolean, true);
@@ -326,29 +332,29 @@ BEGIN
   RETURN jsonb_build_object('is_open', is_open_v, 'cards_allocated', allocated);
 END $$;
 
-CREATE OR REPLACE FUNCTION public.sync_complete_item(p_run_id uuid, p_token bigint, p_item_id uuid)
+CREATE OR REPLACE FUNCTION public.sync_complete_item(p_run_id uuid, p_token bigint, p_item_id uuid, p_claim_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   PERFORM sync_assert_fence(p_run_id, p_token);
-  UPDATE dashboard_sync_run_items SET status = 'completed', error_message = NULL, completed_at = now(), updated_at = now()
-   WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing';
-  IF NOT FOUND THEN RAISE EXCEPTION 'ITEM_NOT_PROCESSING: item %', p_item_id; END IF;
+  UPDATE dashboard_sync_run_items SET status = 'completed', claim_id = NULL, error_message = NULL, completed_at = now(), updated_at = now()
+   WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing' AND claim_id = p_claim_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'CLAIM_LOST: item %', p_item_id; END IF;
   PERFORM sync_refresh_counts(p_run_id);
 END $$;
 
 -- Falha registrada em transação SEPARADA da persistência desfeita.
 -- Backoff: 30s após a 1ª falha, 120s após a 2ª; na 3ª é definitiva.
-CREATE OR REPLACE FUNCTION public.sync_record_failure(p_run_id uuid, p_token bigint, p_item_id uuid, p_error text)
+CREATE OR REPLACE FUNCTION public.sync_record_failure(p_run_id uuid, p_token bigint, p_item_id uuid, p_claim_id uuid, p_error text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE it dashboard_sync_run_items%ROWTYPE;
 BEGIN
   PERFORM sync_assert_fence(p_run_id, p_token);
-  UPDATE dashboard_sync_run_items SET status = 'failed', error_message = left(p_error, 2000), completed_at = now(),
+  UPDATE dashboard_sync_run_items SET status = 'failed', claim_id = NULL, error_message = left(p_error, 2000), completed_at = now(),
          next_attempt_at = now() + CASE WHEN attempts <= 1 THEN interval '30 seconds' ELSE interval '120 seconds' END,
          updated_at = now()
-   WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing'
+   WHERE id = p_item_id AND run_id = p_run_id AND status = 'processing' AND claim_id = p_claim_id
   RETURNING * INTO it;
-  IF NOT FOUND THEN RAISE EXCEPTION 'ITEM_NOT_PROCESSING: item %', p_item_id; END IF;
+  IF NOT FOUND THEN RAISE EXCEPTION 'CLAIM_LOST: item %', p_item_id; END IF;
   PERFORM sync_refresh_counts(p_run_id);
   RETURN jsonb_build_object('attempts', it.attempts, 'definitive', it.attempts >= sync_max_attempts());
 END $$;
@@ -408,8 +414,8 @@ BEGIN
   FOREACH f IN ARRAY ARRAY[
     'sync_assert_fence(uuid,bigint)','sync_refresh_counts(uuid)','sync_recover_stale()',
     'sync_acquire_lock(text,text,bigint[],uuid)','sync_heartbeat(uuid,bigint)','sync_claim_next(uuid,bigint)',
-    'sync_allocate_project_cards(bigint)','sync_persist_project(uuid,bigint,uuid,jsonb,jsonb,jsonb)',
-    'sync_complete_item(uuid,bigint,uuid)','sync_record_failure(uuid,bigint,uuid,text)',
+    'sync_allocate_project_cards(bigint)','sync_persist_project(uuid,bigint,uuid,uuid,jsonb,jsonb,jsonb)',
+    'sync_complete_item(uuid,bigint,uuid,uuid)','sync_record_failure(uuid,bigint,uuid,uuid,text)',
     'sync_finalize(uuid,bigint)','sync_fail_run(uuid,bigint,text)','sync_current_run()']
   LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION public.%s FROM PUBLIC, anon, authenticated', f);
