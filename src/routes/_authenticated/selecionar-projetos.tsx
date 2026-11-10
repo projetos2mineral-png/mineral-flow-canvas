@@ -39,7 +39,8 @@ import {
 import { DemandDialog } from "@/components/demands/DemandDialog";
 import { RecoverUnassignedDialog } from "@/components/projects/RecoverUnassignedDialog";
 import { exportProjectsToExcel } from "@/lib/export-projects";
-import { startBatchUpdate, useBatchUpdate, BATCH_BLOCKED_TITLE, guardBatchConflict } from "@/lib/batch-update-store";
+import { startBatchUpdate, runSingleSync, useBatchUpdate, BATCH_BLOCKED_TITLE, guardBatchConflict } from "@/lib/batch-update-store";
+import { SyncRunPanel } from "@/components/projects/SyncRunPanel";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -185,7 +186,9 @@ function SelecionarProjetosPage() {
     }
     setImportLoading(true);
     try {
-      await invokeSyncSingleProject(idNum);
+      const r = await runSingleSync(idNum, qc);
+      if (!r) return;
+      if (!r.ok) throw new Error(r.error ?? "Falha");
       toast.success(`Projeto ${idNum} sincronizado`);
       setImportId("");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
@@ -347,13 +350,8 @@ function SelecionarProjetosPage() {
     try {
       await setProjectTracking(project.runrunit_project_id, next);
       if (next) {
-        try {
-          await invokeSyncSingleProject(project.runrunit_project_id);
-          await allocateProjectToMonthlyLanes(project.runrunit_project_id);
-        } catch (e) {
-          console.error("invokeSyncSingleProject (toggle) error:", e);
-          toast.error("Sincronização do projeto falhou: " + (e as Error).message);
-        }
+        const r = await runSingleSync(project.runrunit_project_id, qc);
+        if (r && !r.ok) toast.error("Sincronização do projeto falhou: " + r.error);
         toast.success("Projeto exibido na Central de Planejamento");
       } else {
         toast.success("Projeto removido da Central de Planejamento");
@@ -395,57 +393,8 @@ function SelecionarProjetosPage() {
       
       // Se for ativação, processa sincronização
       if (value) {
-        // Marcamos como ocupados para feedback visual individual se necessário
-        // Mas a ação em massa segue em background para não travar a UI
-        ids.forEach(id => markBusy(id, true));
-
-        // Processamento assíncrono das sincronizações para não bloquear
-        const processSync = async () => {
-          let failures: number[] = [];
-          
-          // Controle de concorrência: 3 por vez para não sobrecarregar
-          const concurrency = 3;
-          const chunks: number[][] = [];
-          for (let i = 0; i < ids.length; i += concurrency) {
-            chunks.push(ids.slice(i, i + concurrency));
-          }
-
-          for (const chunk of chunks) {
-            await Promise.all(
-              chunk.map(async (id) => {
-                try {
-                  await invokeSyncSingleProject(id);
-                  await allocateProjectToMonthlyLanes(id);
-                } catch (e) {
-                  console.error(`Falha na sincronização do projeto ${id}:`, e);
-                  failures.push(id);
-                } finally {
-                  markBusy(id, false);
-                }
-              })
-            );
-          }
-          
-          // Invalidação final para garantir consistência
-          qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
-          qc.invalidateQueries({ queryKey: ["dashboard"] });
-          
-          const successCount = ids.length - failures.length;
-          if (failures.length > 0) {
-            toast.error(
-              `${successCount} projetos exibidos com sucesso. ${failures.length} apresentaram erro na sincronização.`,
-              {
-                description: `IDs com erro: ${failures.join(", ")}`,
-                duration: 6000,
-              }
-            );
-          } else {
-            toast.success(`${ids.length} projetos exibidos e sincronizados com sucesso.`);
-          }
-        };
-
-        processSync(); // Executa em background
-        toast.success(`${ids.length} projeto(s) sendo ativados e sincronizados...`);
+        // Mesma trava compartilhada e processamento no servidor do lote.
+        void startBatchUpdate(ids, qc);
       } else {
         toast.success(`${ids.length} projeto(s) removido(s) da Central de Planejamento`);
         qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -465,13 +414,8 @@ function SelecionarProjetosPage() {
     markBusy(project.runrunit_project_id, true);
     try {
       await setProjectTracking(project.runrunit_project_id, true);
-      try {
-        await invokeSyncSingleProject(project.runrunit_project_id);
-        await allocateProjectToMonthlyLanes(project.runrunit_project_id);
-      } catch (e) {
-        console.error("invokeSyncSingleProject (candidate) error:", e);
-        toast.error("Sincronização do projeto falhou: " + (e as Error).message);
-      }
+      const r = await runSingleSync(project.runrunit_project_id, qc);
+      if (r && !r.ok) toast.error("Sincronização do projeto falhou: " + r.error);
       toast.success("Projeto exibido na Central de Planejamento");
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -551,16 +495,11 @@ function SelecionarProjetosPage() {
     if (guardBatchConflict()) return;
     markBusy(project.runrunit_project_id, true);
     try {
-      const r = await syncAndAllocateProject(project.runrunit_project_id);
-      if (r.allocationError) throw new Error(`alocação: ${r.allocationError}`);
-      if (r.syncError) {
-        toast.warning(`Sincronização de "${project.name}" falhou; alocação feita com os dados já salvos.`, {
-          description: r.syncError,
-        });
-      } else {
-        toast.success(`Projeto "${project.name}" sincronizado`);
-      }
-      
+      const r = await runSingleSync(project.runrunit_project_id, qc);
+      if (!r) return;
+      if (!r.ok) throw new Error(r.error ?? "Falha");
+      toast.success(`Projeto "${project.name}" sincronizado`);
+
       // Atualiza o estado local para refletir a nova data de sincronização e outros dados
       qc.invalidateQueries({ queryKey: ["runrunit_projects", sortAsc ? "asc" : "desc"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -647,6 +586,7 @@ function SelecionarProjetosPage() {
         </div>
 
         <div className="flex flex-col items-end gap-1.5">
+          <SyncRunPanel />
           <div className="flex items-center gap-1">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
