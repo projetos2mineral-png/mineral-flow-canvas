@@ -1,5 +1,7 @@
 -- Esquema mínimo (espelho das colunas usadas) para testar as RPCs em Postgres local.
-CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role;
+DO $$ BEGIN CREATE ROLE anon; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE service_role; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE TABLE runrunit_projects (id uuid DEFAULT gen_random_uuid(), runrunit_project_id bigint PRIMARY KEY, name text NOT NULL,
   client_name text, project_group_name text, project_sub_group_name text, status text, is_open boolean, raw_data jsonb,
   desired_delivery_date date, created_at_runrunit timestamptz, updated_at_runrunit timestamptz, last_synced_at timestamptz,
