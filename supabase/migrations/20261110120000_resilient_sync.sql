@@ -51,7 +51,6 @@ CREATE TABLE IF NOT EXISTS public.dashboard_sync_lock (
   locked_by text,
   fencing_token bigint NOT NULL DEFAULT 0,
   locked_at timestamptz,
-  heartbeat_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO public.dashboard_sync_lock (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
@@ -113,11 +112,11 @@ DECLARE
 BEGIN
   SELECT * INTO l FROM dashboard_sync_lock WHERE id = 1 FOR UPDATE;
   IF NOT l.is_locked THEN RETURN jsonb_build_object('recovered', false, 'reason', 'idle'); END IF;
-  IF l.heartbeat_at >= now() - sync_stale_after() THEN
+  SELECT * INTO old_run FROM dashboard_sync_runs WHERE id = l.current_run_id;
+  IF old_run.heartbeat_at >= now() - sync_stale_after() THEN
     RETURN jsonb_build_object('recovered', false, 'reason', 'alive', 'run_id', l.current_run_id);
   END IF;
 
-  SELECT * INTO old_run FROM dashboard_sync_runs WHERE id = l.current_run_id;
   UPDATE dashboard_sync_runs SET status = 'abandoned', finished_at = now(), updated_at = now(),
          error_message = 'Execução interrompida (sem heartbeat); retomada em nova execução'
    WHERE id = l.current_run_id;
@@ -135,7 +134,7 @@ BEGIN
    WHERE i.run_id = old_run.id AND i.status <> 'completed';
 
   UPDATE dashboard_sync_lock SET current_run_id = new_id, fencing_token = new_token,
-         locked_by = 'watchdog', heartbeat_at = now(), updated_at = now()
+         locked_by = 'watchdog', updated_at = now()
    WHERE id = 1;
   PERFORM sync_refresh_counts(new_id);
   RETURN jsonb_build_object('recovered', true, 'run_id', new_id, 'fencing_token', new_token, 'parent_run_id', old_run.id);
@@ -163,7 +162,7 @@ BEGIN
 
   SELECT * INTO l FROM dashboard_sync_lock WHERE id = 1 FOR UPDATE;
   IF l.is_locked THEN
-    IF l.heartbeat_at < now() - sync_stale_after() THEN
+    IF (SELECT heartbeat_at FROM dashboard_sync_runs WHERE id = l.current_run_id) < now() - sync_stale_after() THEN
       rec := sync_recover_stale();
       RETURN jsonb_build_object('acquired', false, 'reason', 'recovering', 'run_id', rec->>'run_id',
         'message', 'Uma sincronização interrompida está sendo retomada. Aguarde o término.');
@@ -188,7 +187,7 @@ BEGIN
   END IF;
 
   UPDATE dashboard_sync_lock SET is_locked = true, current_run_id = new_id, lock_type = p_sync_type,
-         locked_by = p_locked_by, fencing_token = new_token, locked_at = now(), heartbeat_at = now(), updated_at = now()
+         locked_by = p_locked_by, fencing_token = new_token, locked_at = now(), updated_at = now()
    WHERE id = 1;
   PERFORM sync_refresh_counts(new_id);
   RETURN jsonb_build_object('acquired', true, 'run_id', new_id, 'fencing_token', new_token);
@@ -198,7 +197,6 @@ CREATE OR REPLACE FUNCTION public.sync_heartbeat(p_run_id uuid, p_token bigint)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   PERFORM sync_assert_fence(p_run_id, p_token);
-  UPDATE dashboard_sync_lock SET heartbeat_at = now() WHERE id = 1 AND current_run_id = p_run_id AND fencing_token = p_token;
   UPDATE dashboard_sync_runs SET heartbeat_at = now() WHERE id = p_run_id;
 END $$;
 
@@ -222,7 +220,7 @@ BEGIN
   UPDATE dashboard_sync_run_items SET status = 'processing', attempts = attempts + 1,
          claim_id = gen_random_uuid(), started_at = now(), updated_at = now()
    WHERE id = it.id RETURNING * INTO it;
-  UPDATE dashboard_sync_lock SET heartbeat_at = now() WHERE id = 1 AND current_run_id = p_run_id;
+  UPDATE dashboard_sync_runs SET heartbeat_at = now() WHERE id = p_run_id;
   RETURN jsonb_build_object('item_id', it.id, 'claim_id', it.claim_id, 'runrunit_project_id', it.runrunit_project_id,
                             'project_name', it.project_name, 'attempts', it.attempts);
 END $$;
@@ -328,7 +326,7 @@ BEGIN
     allocated := sync_allocate_project_cards(pid);
   END IF;
 
-  UPDATE dashboard_sync_lock SET heartbeat_at = now() WHERE id = 1 AND current_run_id = p_run_id;
+  UPDATE dashboard_sync_runs SET heartbeat_at = now() WHERE id = p_run_id;
   RETURN jsonb_build_object('is_open', is_open_v, 'cards_allocated', allocated);
 END $$;
 
@@ -381,7 +379,7 @@ BEGIN
   PERFORM sync_refresh_counts(p_run_id);
   UPDATE dashboard_sync_runs SET status = st, finished_at = now(), updated_at = now() WHERE id = p_run_id;
   UPDATE dashboard_sync_lock SET is_locked = false, current_run_id = NULL, lock_type = NULL, locked_by = NULL,
-         locked_at = NULL, heartbeat_at = NULL, updated_at = now()
+         locked_at = NULL, updated_at = now()
    WHERE id = 1 AND current_run_id = p_run_id AND fencing_token = p_token;
   RETURN jsonb_build_object('done', true, 'status', st);
 END $$;
@@ -396,16 +394,16 @@ BEGIN
   UPDATE dashboard_sync_runs SET status = 'failed', error_message = left(p_error, 2000), finished_at = now(), updated_at = now()
    WHERE id = p_run_id;
   UPDATE dashboard_sync_lock SET is_locked = false, current_run_id = NULL, lock_type = NULL, locked_by = NULL,
-         locked_at = NULL, heartbeat_at = NULL, updated_at = now()
+         locked_at = NULL, updated_at = now()
    WHERE id = 1 AND current_run_id = p_run_id;
 END $$;
 
 CREATE OR REPLACE FUNCTION public.sync_current_run()
 RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path = public AS $$
-  SELECT CASE WHEN is_locked THEN jsonb_build_object('run_id', current_run_id, 'fencing_token', fencing_token,
-         'heartbeat_age_seconds', extract(epoch FROM now() - heartbeat_at)::int,
-         'stale', heartbeat_at < now() - sync_stale_after()) END
-    FROM dashboard_sync_lock WHERE id = 1
+  SELECT CASE WHEN l.is_locked THEN jsonb_build_object('run_id', l.current_run_id, 'fencing_token', l.fencing_token,
+         'heartbeat_age_seconds', extract(epoch FROM now() - r.heartbeat_at)::int,
+         'stale', r.heartbeat_at < now() - sync_stale_after()) END
+    FROM dashboard_sync_lock l LEFT JOIN dashboard_sync_runs r ON r.id = l.current_run_id WHERE l.id = 1
 $$;
 
 DO $$

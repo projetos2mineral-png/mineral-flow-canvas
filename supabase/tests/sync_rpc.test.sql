@@ -86,7 +86,7 @@ DO $$ DECLARE a jsonb := (SELECT v FROM ctx WHERE k='A'); run uuid := (a->>'run_
 END $$;
 
 -- T4 + T5: heartbeat vencido -> watchdog recupera; worker antigo é rejeitado.
-UPDATE dashboard_sync_lock SET heartbeat_at = now() - interval '10 minutes';
+UPDATE dashboard_sync_runs SET heartbeat_at = now() - interval '10 minutes' WHERE id = (SELECT current_run_id FROM dashboard_sync_lock);
 DO $$ DECLARE a jsonb := (SELECT v FROM ctx WHERE k='A'); old_run uuid := (a->>'run_id')::uuid; old_tok bigint := (a->>'fencing_token')::bigint;
   it3 jsonb := (SELECT v FROM ctx WHERE k='item3'); r jsonb; n int; st text; att int; BEGIN
   r := sync_recover_stale();
@@ -161,7 +161,7 @@ DO $$ DECLARE r jsonb; run uuid; tok bigint; rec jsonb; st text; BEGIN
   r := sync_acquire_lock('manual_batch','u@x',ARRAY[2,3]::bigint[]);
   run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
   UPDATE dashboard_sync_run_items SET attempts = 3, status = 'failed' WHERE run_id = run AND runrunit_project_id = 2;
-  UPDATE dashboard_sync_lock SET heartbeat_at = now() - interval '10 minutes';
+  UPDATE dashboard_sync_runs SET heartbeat_at = now() - interval '10 minutes' WHERE id = (SELECT current_run_id FROM dashboard_sync_lock);
   rec := sync_recover_stale();
   SELECT status INTO st FROM dashboard_sync_run_items WHERE run_id=(rec->>'run_id')::uuid AND runrunit_project_id=2;
   ASSERT st = 'failed', 'item esgotado voltou para ' || st;
@@ -172,7 +172,7 @@ END $$;
 
 -- Aquisição sobre trava vencida não inicia processo paralelo: recupera e recusa.
 DO $$ DECLARE r jsonb; BEGIN
-  UPDATE dashboard_sync_lock SET heartbeat_at = now() - interval '10 minutes';
+  UPDATE dashboard_sync_runs SET heartbeat_at = now() - interval '10 minutes' WHERE id = (SELECT current_run_id FROM dashboard_sync_lock);
   r := sync_acquire_lock('manual_single','u@x',ARRAY[1]::bigint[]);
   ASSERT NOT (r->>'acquired')::boolean AND r->>'reason' = 'recovering', r::text;
   RAISE WARNING 'OK: manual sobre trava vencida aciona retomada em vez de abrir execução paralela';
