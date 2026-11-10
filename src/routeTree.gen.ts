@@ -20,6 +20,7 @@ import { Route as AuthenticatedGerenciarUsuariosRouteImport } from './routes/_au
 import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authenticated/planejamento'
 import { Route as AuthenticatedQuemFazOQueRouteImport } from './routes/_authenticated/quem-faz-o-que'
 import { Route as AuthenticatedSelecionarProjetosRouteImport } from './routes/_authenticated/selecionar-projetos'
+import { Route as ApiPublicSyncOrchestratorRouteImport } from './routes/api/public/sync-orchestrator'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -80,6 +81,12 @@ const AuthenticatedSelecionarProjetosRoute =
     path: '/selecionar-projetos',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const ApiPublicSyncOrchestratorRoute =
+  ApiPublicSyncOrchestratorRouteImport.update({
+    id: '/api/public/sync-orchestrator',
+    path: '/api/public/sync-orchestrator',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
+  '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -104,6 +112,7 @@ export interface FileRoutesByTo {
   '/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
+  '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -118,6 +127,7 @@ export interface FileRoutesById {
   '/_authenticated/planejamento': typeof AuthenticatedPlanejamentoRoute
   '/_authenticated/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/_authenticated/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
+  '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -132,6 +142,7 @@ export interface FileRouteTypes {
     | '/planejamento'
     | '/quem-faz-o-que'
     | '/selecionar-projetos'
+    | '/api/public/sync-orchestrator'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,6 +155,7 @@ export interface FileRouteTypes {
     | '/planejamento'
     | '/quem-faz-o-que'
     | '/selecionar-projetos'
+    | '/api/public/sync-orchestrator'
   id:
     | '__root__'
     | '/'
@@ -157,6 +169,7 @@ export interface FileRouteTypes {
     | '/_authenticated/planejamento'
     | '/_authenticated/quem-faz-o-que'
     | '/_authenticated/selecionar-projetos'
+    | '/api/public/sync-orchestrator'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -164,6 +177,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicSyncOrchestratorRoute: typeof ApiPublicSyncOrchestratorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -245,6 +259,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSelecionarProjetosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/sync-orchestrator': {
+      id: '/api/public/sync-orchestrator'
+      path: '/api/public/sync-orchestrator'
+      fullPath: '/api/public/sync-orchestrator'
+      preLoaderRoute: typeof ApiPublicSyncOrchestratorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -276,6 +297,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicSyncOrchestratorRoute: ApiPublicSyncOrchestratorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
