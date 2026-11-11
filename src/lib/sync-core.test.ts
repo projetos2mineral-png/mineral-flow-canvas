@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { runSlice, type ClaimedItem, type RunHandle, type SyncDeps, MAX_ATTEMPTS } from "@/lib/sync/core";
+import {
+  manualSingleNeedsFailure,
+  mapProject,
+  mapTasks,
+  runSlice,
+  shouldChainNow,
+  type ClaimedItem,
+  type RunHandle,
+  type SyncDeps,
+  MAX_ATTEMPTS,
+} from "@/lib/sync/core";
 
 /**
  * Banco falso que reproduz a semântica das RPCs: trava com fencing token,
@@ -20,7 +30,11 @@ function makeDb(pids: number[], opts: { failPids?: number[]; persistFailPids?: n
     now: () => clock,
     async claimNext(run) {
       fence(run);
-      const it = items.find((i) => (i.status === "pending" || (i.status === "failed" && i.attempts < MAX_ATTEMPTS)) && i.next <= clock);
+      const it = items.find(
+        (i) =>
+          ((i.status === "pending" || i.status === "failed") && i.attempts < MAX_ATTEMPTS) &&
+          i.next <= clock,
+      );
       if (!it) return null;
       it.status = "processing";
       it.attempts++;
@@ -51,9 +65,12 @@ function makeDb(pids: number[], opts: { failPids?: number[]; persistFailPids?: n
     },
     async finalize(run) {
       fence(run);
-      const busy = items.filter((i) => i.status === "pending" || i.status === "processing").length;
-      const waiting = items.filter((i) => i.status === "failed" && i.attempts < MAX_ATTEMPTS);
-      if (busy || waiting.length) return { done: false, busy, waitSeconds: 0 };
+      const pending = items.filter((i) => i.status === "pending").length;
+      const processing = items.filter((i) => i.status === "processing").length;
+      const waiting = items.filter((i) => i.status === "failed" && i.attempts < MAX_ATTEMPTS).length;
+      if (pending || processing || waiting) {
+        return { done: false, busy: pending + processing, pending, processing, waiting, waitSeconds: 0 };
+      }
       lock.locked = false;
       return { done: true, status: items.some((i) => i.status === "failed") ? "completed_with_errors" : "completed" };
     },
@@ -142,5 +159,67 @@ describe("sincronização resiliente", () => {
     const after = await runSlice(db.deps, RUN, SLICE);
     expect(after.processed).toBe(0);
     expect(last.finalize?.done).toBe(true);
+  });
+
+  it("CLAIM_LOST não conta como falha do projeto nem chama recordFailure", async () => {
+    const db = makeDb([1]);
+    let failures = 0;
+    db.deps.persistProject = async () => {
+      throw new Error("CLAIM_LOST: item reservado por outro worker");
+    };
+    const recordFailure = db.deps.recordFailure;
+    db.deps.recordFailure = async (...args) => {
+      failures++;
+      return recordFailure(...args);
+    };
+    const r = await runSlice(db.deps, RUN, SLICE);
+    expect(failures).toBe(0);
+    expect(r.failed).toBe(0);
+    expect(db.items[0].status).toBe("processing");
+  });
+
+  it("só encadeia com trabalho pendente e nenhum worker processando", () => {
+    expect(
+      shouldChainNow({ done: false, busy: 2, pending: 2, processing: 0, waiting: 0, waitSeconds: 0 }),
+    ).toBe(true);
+    expect(
+      shouldChainNow({ done: false, busy: 1, pending: 0, processing: 0, waiting: 1, waitSeconds: 30 }),
+    ).toBe(false);
+    expect(
+      shouldChainNow({ done: false, busy: 1, pending: 0, processing: 1, waiting: 0, waitSeconds: 0 }),
+    ).toBe(false);
+    expect(shouldChainNow({ done: true, status: "completed" })).toBe(false);
+    expect(shouldChainNow(null)).toBe(false);
+  });
+
+  it("manual single só libera a trava quando não há worker processando", () => {
+    const base = { processed: 1, succeeded: 0, failed: 0, lockLost: false };
+    expect(manualSingleNeedsFailure({ ...base, finalize: null })).toBe(true);
+    expect(
+      manualSingleNeedsFailure({
+        ...base,
+        finalize: { done: false, busy: 1, pending: 0, processing: 1, waiting: 0, waitSeconds: 0 },
+      }),
+    ).toBe(false);
+    expect(
+      manualSingleNeedsFailure({
+        ...base,
+        finalize: { done: false, busy: 1, pending: 1, processing: 0, waiting: 0, waitSeconds: 0 },
+      }),
+    ).toBe(true);
+    expect(
+      manualSingleNeedsFailure({
+        ...base,
+        finalize: { done: false, busy: 1, pending: 0, processing: 1, waiting: 0, waitSeconds: 0 },
+        lockLost: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("mapTasks deduplica ids e mapProject não grava data vazia", () => {
+    expect(mapTasks([{ id: 1, title: "a" }, { id: 1, title: "b" }])).toEqual([
+      expect.objectContaining({ runrunit_task_id: 1, title: "b" }),
+    ]);
+    expect(mapProject({ id: 1, desired_date: "" }).desired_delivery_date).toBeNull();
   });
 });

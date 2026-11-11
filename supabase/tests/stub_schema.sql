@@ -18,4 +18,10 @@ CREATE TABLE dashboard_project_cards (id uuid PRIMARY KEY DEFAULT gen_random_uui
   assignee_name text NOT NULL, lane_id uuid, status text, position int, review_status text, manually_positioned boolean,
   updated_at timestamptz, UNIQUE (runrunit_project_id, assignee_name));
 CREATE TABLE dashboard_board_settings (assignee_name text PRIMARY KEY, antecedence_days int NOT NULL DEFAULT 0);
-CREATE TABLE dashboard_project_estimates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), runrunit_project_id bigint);
+CREATE TABLE dashboard_project_estimates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), runrunit_project_id bigint NOT NULL,
+  assignee_name text, total_tasks integer, total_estimated_hours numeric, calculation_details jsonb, updated_at timestamptz);
+CREATE VIEW v_dashboard_projects AS
+SELECT p.runrunit_project_id, pp.assignee_name
+  FROM runrunit_projects p
+  JOIN runrunit_project_people pp ON pp.runrunit_project_id = p.runrunit_project_id
+ WHERE p.is_open = true AND p.is_tracking_enabled = true;

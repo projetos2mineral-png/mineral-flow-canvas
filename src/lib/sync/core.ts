@@ -19,7 +19,16 @@ export type ProjectPayload = {
   people: Record<string, unknown>[];
 };
 
-export type FinalizeResult = { done: true; status: string } | { done: false; busy: number; waitSeconds: number };
+export type FinalizeResult =
+  | { done: true; status: string }
+  | {
+      done: false;
+      busy: number;
+      pending: number;
+      processing: number;
+      waiting: number;
+      waitSeconds: number;
+    };
 
 export interface SyncDeps {
   claimNext(run: RunHandle): Promise<ClaimedItem | null>;
@@ -50,6 +59,33 @@ export type SliceResult = {
 export function isLockLost(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
   return msg.includes("LOCK_LOST");
+}
+
+/** O item deixou de pertencer a este worker, mas a execução ainda é dona da trava. */
+export function isClaimLost(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e);
+  return msg.includes("CLAIM_LOST");
+}
+
+/**
+ * Só encadeia uma nova fatia quando existe trabalho pendente e nenhum worker
+ * está processando. Itens em backoff (waiting) não devem gerar chamadas em
+ * loop: o watchdog retoma quando o prazo vencer.
+ */
+export function shouldChainNow(finalize: FinalizeResult | null): boolean {
+  return !!finalize && !finalize.done && finalize.pending > 0 && finalize.processing === 0;
+}
+
+/**
+ * Uma execução manual de um único projeto não pode terminar deixando a trava
+ * presa. Exceção: se ainda existe item em `processing`, a trava NÃO pode ser
+ * liberada; o watchdog recupera a execução quando o heartbeat vencer.
+ */
+export function manualSingleNeedsFailure(result: SliceResult): boolean {
+  if (result.lockLost) return false;
+  if (!result.finalize) return true;
+  if (result.finalize.done) return false;
+  return result.finalize.processing === 0;
 }
 
 export function errorText(e: unknown): string {
@@ -91,6 +127,9 @@ export async function runSlice(deps: SyncDeps, run: RunHandle, opts: SliceOption
           res.lockLost = true;
           return;
         }
+        // CLAIM_LOST significa que outro worker/recuperação assumiu o item.
+        // Não é uma falha do projeto e não pode ser registrada por este worker.
+        if (isClaimLost(e)) return;
         try {
           await deps.recordFailure(run, item, errorText(e));
         } catch (e2) {
@@ -98,6 +137,7 @@ export async function runSlice(deps: SyncDeps, run: RunHandle, opts: SliceOption
             res.lockLost = true;
             return;
           }
+          if (isClaimLost(e2)) return;
           throw e2;
         }
         res.failed++;
@@ -107,7 +147,9 @@ export async function runSlice(deps: SyncDeps, run: RunHandle, opts: SliceOption
     }
   };
 
-  await Promise.all(Array.from({ length: Math.max(1, opts.concurrency) }, worker));
+  const settled = await Promise.allSettled(Array.from({ length: Math.max(1, opts.concurrency) }, worker));
+  const rejected = settled.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (rejected) throw rejected.reason;
   if (!res.lockLost) {
     try {
       res.finalize = await deps.finalize(run);
@@ -132,25 +174,30 @@ export function mapProject(p: any): ProjectPayload["project"] {
     status: p.is_closed === true ? "closed" : "open",
     is_open: p.is_closed !== true,
     raw_data: p,
-    desired_delivery_date: typeof p.desired_date === "string" ? p.desired_date.slice(0, 10) : null,
+    desired_delivery_date:
+      typeof p.desired_date === "string" && p.desired_date.trim() ? p.desired_date.slice(0, 10) : null,
     created_at_runrunit: p.created_at ?? null,
     updated_at_runrunit: p.updated_at ?? null,
   };
 }
 
 export function mapTasks(tasks: any[]): Record<string, unknown>[] {
-  return tasks.map((t) => ({
-    runrunit_task_id: t.id,
-    title: t.title ?? "Sem título",
-    responsible_name: t.responsible_name ?? null,
-    team_name: t.team_name ?? null,
-    task_type: t.type_name ?? null,
-    status: t.is_closed ? "closed" : "open",
-    board_stage_name: t.board_stage_name ?? null,
-    desired_date: t.desired_date ?? null,
-    close_date: t.close_date ?? null,
-    raw_data: t,
-  }));
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const t of tasks) {
+    byId.set(String(t.id), {
+      runrunit_task_id: t.id,
+      title: t.title ?? "Sem título",
+      responsible_name: t.responsible_name ?? null,
+      team_name: t.team_name ?? null,
+      task_type: t.type_name ?? null,
+      status: t.is_closed ? "closed" : "open",
+      board_stage_name: t.board_stage_name ?? null,
+      desired_date: t.desired_date ?? null,
+      close_date: t.close_date ?? null,
+      raw_data: t,
+    });
+  }
+  return [...byId.values()];
 }
 
 export function mapPeople(tasks: any[]): Record<string, unknown>[] {

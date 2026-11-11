@@ -1,5 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { acquire, chainNext, failRun, processSlice, readSyncEnv, watchdog } from "@/lib/sync/orchestrator.server";
+import { shouldChainNow } from "@/lib/sync/core";
+import {
+  acquire,
+  chainNext,
+  failRun,
+  isTransientChainError,
+  processSlice,
+  readSyncEnv,
+  watchdog,
+} from "@/lib/sync/orchestrator.server";
 
 /**
  * Endpoint chamado apenas pelo agendador do banco (pg_cron) e pelo próprio
@@ -22,10 +31,10 @@ export const Route = createFileRoute("/api/public/sync-orchestrator")({
         } catch {
           return Response.json({ error: "JSON inválido" }, { status: 400 });
         }
-        const origin = new URL(request.url).origin;
+        let env: ReturnType<typeof readSyncEnv> | null = null;
+        let run: { runId: string; token: number } | null = null;
         try {
-          const env = readSyncEnv();
-          let run: { runId: string; token: number } | null = null;
+          env = readSyncEnv();
           if (body.action === "daily") {
             const r = await acquire(env, "automatic", "agendamento 06:00 (Cuiabá)", null, null);
             if (!r.acquired) return Response.json({ started: false, reason: r.reason, message: r.message });
@@ -39,16 +48,40 @@ export const Route = createFileRoute("/api/public/sync-orchestrator")({
             return Response.json({ error: "ação inválida" }, { status: 400 });
           }
           const res = await processSlice(env, run);
-          if (!res.lockLost && res.finalize && !res.finalize.done) await chainNext(origin, secret, run);
+          if (!res.lockLost && shouldChainNow(res.finalize)) {
+            if (!env.appOrigin) {
+              return Response.json({
+                ok: true,
+                run_id: run.runId,
+                ...res,
+                chained: false,
+                recovery: "watchdog",
+                reason: "APP_BASE_URL não configurada",
+              });
+            }
+            try {
+              await chainNext(env, secret, run);
+            } catch (e) {
+              const chainMsg = e instanceof Error ? e.message : String(e);
+              if (isTransientChainError(e)) {
+                return Response.json({
+                  ok: true,
+                  run_id: run.runId,
+                  ...res,
+                  chained: false,
+                  recovery: "watchdog",
+                });
+              }
+              await failRun(env, run, chainMsg);
+              return Response.json({ ok: false, error: chainMsg, run_id: run.runId }, { status: 502 });
+            }
+          }
           return Response.json({ ok: true, run_id: run.runId, ...res });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           console.error("sync-orchestrator:", msg);
-          if (body.run_id && body.fencing_token) {
-            try {
-              const env = readSyncEnv();
-              if (msg.startsWith("Configuração ausente")) await failRun(env, { runId: body.run_id, token: Number(body.fencing_token) }, msg);
-            } catch { /* sem env */ }
+          if (env && run && !msg.includes("LOCK_LOST") && !isTransientChainError(e)) {
+            await failRun(env, run, msg);
           }
           return Response.json({ ok: false, error: msg }, { status: 500 });
         }

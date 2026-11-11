@@ -10,8 +10,6 @@ import {
   setProjectsTrackingBulk,
   ignoreNewCandidate,
   ignoreAllNewCandidates,
-  invokeDiscoverProjects,
-  invokeSyncVisibleProjects,
   reallocateAllTrackedProjects,
   countClosedTrackedProjects,
   clearClosedTrackedProjects,
@@ -37,6 +35,7 @@ import { DemandDialog } from "@/components/demands/DemandDialog";
 import { RecoverUnassignedDialog } from "@/components/projects/RecoverUnassignedDialog";
 import { exportProjectsToExcel } from "@/lib/export-projects";
 import { startBatchUpdate, runSingleSync, useBatchUpdate, BATCH_BLOCKED_TITLE, guardBatchConflict } from "@/lib/batch-update-store";
+import { discoverProjects } from "@/lib/sync/sync.functions";
 import { SyncRunPanel } from "@/components/projects/SyncRunPanel";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -135,7 +134,6 @@ function SelecionarProjetosPage() {
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [discoverLoading, setDiscoverLoading] = useState(false);
-  const [tasksLoading, setTasksLoading] = useState(false);
   const [busyIds, setBusyIds] = useState<Set<number>>(new Set());
   const batch = useBatchUpdate();
   const batchBlocked = batch.status === "running";
@@ -468,7 +466,7 @@ function SelecionarProjetosPage() {
     if (guardBatchConflict()) return;
     setDiscoverLoading(true);
     try {
-      await invokeDiscoverProjects("Manual");
+      await discoverProjects();
       toast.success("Verificação de novos projetos concluída");
       
       // 1. Invalida as queries relacionadas

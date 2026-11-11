@@ -1,11 +1,19 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 function jsonResponse(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }); }
 Deno.serve(async (req) => {
-  let scopeIds: number[] | null = null;
+  const supabaseUrl = Deno.env.get("SUPABASE_URL"); const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ success:false, error:"Secrets ausentes" },500);
+  if (req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) {
+    return jsonResponse({ success:false, error:"unauthorized" },401);
+  }
+
+  let scopeIds: number[] = [];
+  let runId: string | null = null;
+  let fencingToken: number | null = null;
   try {
-    // Escopo OPCIONAL: quando informado, a mesma regra de cálculo é aplicada
-    // somente aos projetos listados (tarefas, cards e delete+insert restritos).
-    // Sem body/escopo, o comportamento é idêntico ao original: rebuild total.
+    // Escopo obrigatório: chamadas vazias não podem apagar/reconstruir todas
+    // as estimativas. O novo orquestrador e os workers internos sempre passam
+    // um projeto (ou uma lista explícita).
     const body = await req.json().catch(() => ({}));
     const many = Array.isArray((body as any)?.runrunit_project_ids)
       ? ((body as any).runrunit_project_ids as unknown[]).map(Number).filter((n) => Number.isFinite(n))
@@ -13,17 +21,35 @@ Deno.serve(async (req) => {
     const single = Number((body as any)?.runrunit_project_id);
     if (many.length) scopeIds = many;
     else if (Number.isFinite(single) && single > 0) scopeIds = [single];
-  } catch { scopeIds = null; }
-  const supabaseUrl = Deno.env.get("SUPABASE_URL"); const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !serviceRoleKey) return jsonResponse({ success:false, error:"Secrets ausentes" },500);
+    if (typeof (body as any)?.run_id === "string") runId = (body as any).run_id;
+    const token = Number((body as any)?.fencing_token);
+    if (Number.isFinite(token)) fencingToken = token;
+  } catch {
+    return jsonResponse({ success:false, error:"JSON inválido" },400);
+  }
+  if (scopeIds.length === 0) {
+    return jsonResponse({ success:false, error:"Informe runrunit_project_id ou runrunit_project_ids" },400);
+  }
+  // Sem execução e token não há fencing: uma chamada antiga/avulsa não pode
+  // substituir estimativas e concorrer com o orquestrador.
+  if (!runId || fencingToken === null) {
+    return jsonResponse({ success:false, error:"run_id e fencing_token são obrigatórios" },400);
+  }
+  const activeRunId = runId;
+  const activeFencingToken = fencingToken;
   const supabase=createClient(supabaseUrl,serviceRoleKey);
+  const checkFence = async () => {
+    const { error } = await supabase.rpc("sync_heartbeat", { p_run_id: activeRunId, p_token: activeFencingToken });
+    return error ? error.message : null;
+  };
   try {
+    const initialFenceError = await checkFence();
+    if (initialFenceError) return jsonResponse({ success:false, error: initialFenceError },409);
     const pageSize = 1000;
     const tasks = [];
     let pagesProcessed = 0;
     for (let start = 0; ; start += pageSize) {
-      const taskQuery = supabase.from("runrunit_tasks").select("runrunit_task_id,runrunit_project_id,title,responsible_name,task_type,raw_data").not("runrunit_project_id","is",null);
-      if (scopeIds) taskQuery.in("runrunit_project_id", scopeIds);
+      const taskQuery = supabase.from("runrunit_tasks").select("runrunit_task_id,runrunit_project_id,title,responsible_name,task_type,raw_data").not("runrunit_project_id","is",null).in("runrunit_project_id", scopeIds);
       const {data:taskPage,error:tasksError}=await taskQuery.order("runrunit_task_id",{ascending:true}).range(start,start+pageSize-1);
       if(tasksError)return jsonResponse({success:false,error:"Erro buscando tarefas",details:tasksError},500);
       const pageTasks = taskPage ?? [];
@@ -33,8 +59,7 @@ Deno.serve(async (req) => {
     }
     const cardKeys = new Set();
     for (let start = 0; ; start += pageSize) {
-      const cardQuery = supabase.from("dashboard_project_cards").select("runrunit_project_id,assignee_name");
-      if (scopeIds) cardQuery.in("runrunit_project_id", scopeIds);
+      const cardQuery = supabase.from("dashboard_project_cards").select("runrunit_project_id,assignee_name").in("runrunit_project_id", scopeIds);
       const {data:cardPage,error:cardsError}=await cardQuery.order("runrunit_project_id",{ascending:true}).order("assignee_name",{ascending:true}).range(start,start+pageSize-1);
       if(cardsError)return jsonResponse({success:false,error:"Erro buscando cards",details:cardsError},500);
       const pageCards = cardPage ?? [];
@@ -113,9 +138,15 @@ Deno.serve(async (req) => {
       }
     }
     const registros=Array.from(projetos.values()).map(({task_ids,...item})=>({...item,total_estimated_hours:Number(item.total_estimated_hours.toFixed(2)),updated_at:new Date().toISOString()}));
-    const deleteQuery = supabase.from("dashboard_project_estimates").delete();
-    const {error:deleteError}=scopeIds ? await deleteQuery.in("runrunit_project_id", scopeIds) : await deleteQuery.not("id","is",null);if(deleteError)return jsonResponse({success:false,error:"Erro limpando estimativas antigas",details:deleteError},500);
-    if(registros.length){const {error:insertError}=await supabase.from("dashboard_project_estimates").insert(registros);if(insertError)return jsonResponse({success:false,error:"Erro inserindo estimativas",details:insertError},500)}
-    return jsonResponse({success:true,tarefas_processadas:tasks.length,paginas_processadas:pagesProcessed,regras_carregadas:estimativas.length,paginas_regras_processadas:rulePagesProcessed,estimativas_geradas:registros.length,total_horas_estimadas:registros.reduce((a,i)=>a+i.total_estimated_hours,0)});
+    // DELETE + INSERT na MESMA transação, com fencing revalidado dentro dela.
+    // Se o token foi perdido, nada é apagado nem inserido.
+    const {data:replaced,error:replaceError}=await supabase.rpc("sync_replace_project_estimates",{
+      p_run_id:activeRunId,p_token:activeFencingToken,p_project_ids:scopeIds,p_rows:registros,
+    });
+    if(replaceError){
+      const message=replaceError.message;
+      return jsonResponse({success:false,error:message},message.includes("LOCK_LOST")?409:500);
+    }
+    return jsonResponse({success:true,tarefas_processadas:tasks.length,paginas_processadas:pagesProcessed,regras_carregadas:estimativas.length,paginas_regras_processadas:rulePagesProcessed,estimativas_geradas:registros.length,total_horas_estimadas:registros.reduce((a,i)=>a+i.total_estimated_hours,0),estimativas_gravadas:Number(replaced??registros.length)});
   } catch(error){return jsonResponse({success:false,error:error instanceof Error?error.message:String(error)},500)}
 });

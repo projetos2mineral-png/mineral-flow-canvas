@@ -62,7 +62,6 @@ import {
   allocateProjectToMonthlyLanes,
   allocateManyProjects,
   decideCardAllocation,
-  syncAndAllocateProject,
   targetLaneTitleFor,
 } from "./projects";
 import { dedupeMonthlyLanes, positionPatch } from "./dashboard";
@@ -141,13 +140,30 @@ describe("alocação automática em fila mensal", () => {
     expect(db.tables.dashboard_project_cards).toHaveLength(0);
   });
 
-  it("6. falha na sincronização preserva card manual em Sem fila", async () => {
-    db.syncFails = true;
+  it("6. alocação não move card manual em Sem fila", async () => {
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: true });
-    const r = await syncAndAllocateProject(1);
-    expect(r.syncError).not.toBeNull();
-    expect(r.outcomes[0].reason).toBe("manual_sem_fila");
+    const [o] = await allocateProjectToMonthlyLanes(1);
+    expect(o.reason).toBe("manual_sem_fila");
     expect(card(1)?.lane_id).toBeNull();
+  });
+
+  it("6b. usa o responsável das tarefas quando pessoas e view estão vazias", async () => {
+    db.tables.runrunit_project_people = [];
+    db.tables.v_dashboard_projects = [];
+    db.tables.runrunit_tasks = [
+      {
+        runrunit_task_id: 11,
+        runrunit_project_id: 1,
+        responsible_name: "Ana",
+        raw_data: { assignments: [{ assignee_name: "Ana" }] },
+      },
+    ];
+    db.tables.dashboard_lanes.push({ id: "ana-nov", assignee_name: "Ana", title: "Novembro/2026" });
+    await allocateProjectToMonthlyLanes(1);
+    const anaCard = db.tables.dashboard_project_cards.find(
+      (c) => c.runrunit_project_id === 1 && c.assignee_name === "Ana",
+    );
+    expect(anaCard?.lane_id).toBe("ana-nov");
   });
 
   it("7. entrega em 17/11/2026 com 30 dias de antecedência vai para Outubro/2026", async () => {
@@ -168,7 +184,7 @@ describe("alocação automática em fila mensal", () => {
   });
 
   it("10. lote e individual gravam o mesmo destino", async () => {
-    await syncAndAllocateProject(1);
+    await allocateProjectToMonthlyLanes(1);
     await allocateManyProjects([2]);
     expect(card(1)?.lane_id).toBe("nov");
     expect(card(2)?.lane_id).toBe(card(1)?.lane_id);

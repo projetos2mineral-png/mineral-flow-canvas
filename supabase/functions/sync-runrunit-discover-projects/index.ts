@@ -238,6 +238,16 @@ serve(async (req) => {
       );
     }
 
+    if (req.headers.get("Authorization") !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) {
+      return jsonResponse(
+        {
+          success: false,
+          error: "unauthorized",
+        },
+        401,
+      );
+    }
+
     if (!RUNRUNIT_APP_TOKEN || !RUNRUNIT_USER_TOKEN) {
       return jsonResponse(
         {

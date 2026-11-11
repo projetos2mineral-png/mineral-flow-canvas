@@ -124,70 +124,6 @@ export async function ignoreAllNewCandidates() {
   if (error) throw error;
 }
 
-// ---------- Edge function invocations ----------
-/**
- * Extrai a mensagem real de erro retornada pela Edge Function.
- * O `FunctionsHttpError` do supabase-js encapsula a resposta HTTP; o corpo
- * (JSON com { error } ou texto) contém a causa real do problema.
- */
-async function extractFunctionError(error: unknown, fnName: string): Promise<Error> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const anyErr = error as any;
-  let detail = anyErr?.message ?? String(error);
-  try {
-    const ctx = anyErr?.context;
-    if (ctx && typeof ctx.text === "function") {
-      const raw = await ctx.text();
-      if (raw) {
-        try {
-          const j = JSON.parse(raw);
-          detail = j?.error || j?.message || raw;
-        } catch {
-          detail = raw;
-        }
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  const err = new Error(`[${fnName}] ${detail}`);
-  console.error(`Edge function ${fnName} falhou:`, error, "→", detail);
-  return err;
-}
-
-export async function invokeSyncSingleProject(runrunit_project_id: number) {
-  const { data, error } = await supabase.functions.invoke("sync-runrunit-single-project", {
-    body: { runrunit_project_id },
-  });
-  if (error) throw await extractFunctionError(error, "sync-runrunit-single-project");
-  return data;
-}
-
-export async function invokeDiscoverProjects(source: "Manual" | "Automática" = "Automática") {
-  const { data, error } = await supabase.functions.invoke("sync-runrunit-discover-projects", {
-    body: { source },
-  });
-  if (error) throw await extractFunctionError(error, "sync-runrunit-discover-projects");
-  return data;
-}
-
-export async function invokeSyncTasks() {
-  const { data, error } = await supabase.functions.invoke("sync-runrunit-tasks", {
-    body: {},
-  });
-  if (error) throw await extractFunctionError(error, "sync-runrunit-tasks");
-  return data;
-}
-
-export async function invokeSyncVisibleProjects(limit = 100) {
-  const { data, error } = await supabase.functions.invoke(
-    "sync-runrunit-visible-projects",
-    { body: { limit } }
-  );
-  if (error) throw await extractFunctionError(error, "sync-runrunit-visible-projects");
-  return data;
-}
-
 // ---------- Alocação automática em filas mensais (regra única) ----------
 
 export type AllocationReason =
@@ -284,18 +220,37 @@ export async function allocateProjectToMonthlyLanes(
       if (n) names.add(n);
     }
   };
-  const [peopleRes, cardsRes, viewRes] = await Promise.all([
+  const [peopleRes, cardsRes, viewRes, tasksRes] = await Promise.all([
     (supabase as any).from("runrunit_project_people").select("assignee_name").eq("runrunit_project_id", runrunit_project_id),
     (supabase as any).from("dashboard_project_cards").select("assignee_name").eq("runrunit_project_id", runrunit_project_id),
     (supabase as any)
       .from("v_dashboard_projects")
       .select("assignee_name,desired_delivery_date,is_open")
       .eq("runrunit_project_id", runrunit_project_id),
+    (supabase as any)
+      .from("runrunit_tasks")
+      .select("responsible_name,raw_data")
+      .eq("runrunit_project_id", runrunit_project_id),
   ]);
-  if (peopleRes.error && cardsRes.error && viewRes.error) throw peopleRes.error;
+  if (peopleRes.error && cardsRes.error && viewRes.error && tasksRes.error) throw peopleRes.error;
   addNames(peopleRes.data);
   addNames(cardsRes.data);
   addNames(viewRes.data);
+  // A view versionada faz JOIN em runrunit_project_people; quando essa tabela
+  // está vazia, os responsáveis ainda existem no raw_data.assignments das
+  // tarefas. Usamos essa fonte para não perder a alocação automática.
+  for (const task of (tasksRes.data ?? []) as {
+    responsible_name?: string | null;
+    raw_data?: { assignments?: unknown };
+  }[]) {
+    const responsible = task.responsible_name?.trim();
+    if (responsible) names.add(responsible);
+    const assignments = Array.isArray(task.raw_data?.assignments) ? task.raw_data.assignments : [];
+    for (const assignment of assignments as { assignee_name?: unknown }[]) {
+      const name = typeof assignment?.assignee_name === "string" ? assignment.assignee_name.trim() : "";
+      if (name) names.add(name);
+    }
+  }
   const viewRow = ((viewRes.data ?? []) as { desired_delivery_date: string | null; is_open: boolean | null }[])[0];
 
   const desired = (proj?.desired_delivery_date as string | null) ?? viewRow?.desired_delivery_date ?? null;
@@ -667,29 +622,4 @@ export async function clearClosedTrackedProjects(): Promise<number> {
   // independentemente de já estarem desmarcados. Isso reflete quantos serão
   // removidos/confirmados fora da lista Selecionar Projetos e do Painel.
   return allClosedIds.length;
-}
-
-/**
- * Fluxo único de "Atualizar projeto" (individual e em lote): sincroniza com o
- * Runrun.it e, mesmo se a sincronização falhar, tenta alocar com os dados
- * locais já gravados. Erros de sincronização e de alocação são separados.
- */
-export async function syncAndAllocateProject(id: number): Promise<{
-  syncError: string | null;
-  allocationError: string | null;
-  outcomes: AllocationOutcome[];
-}> {
-  let syncError: string | null = null;
-  try {
-    await invokeSyncSingleProject(id);
-  } catch (e) {
-    syncError = e instanceof Error ? e.message : String(e);
-  }
-  try {
-    const outcomes = await allocateProjectToMonthlyLanes(id);
-    const failed = outcomes.find((o) => o.error);
-    return { syncError, allocationError: failed?.error ?? null, outcomes };
-  } catch (e) {
-    return { syncError, allocationError: e instanceof Error ? e.message : String(e), outcomes: [] };
-  }
 }

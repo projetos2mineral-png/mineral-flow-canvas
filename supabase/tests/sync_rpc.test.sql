@@ -4,7 +4,10 @@ SET client_min_messages = warning;
 
 INSERT INTO runrunit_projects (runrunit_project_id, name, is_open, is_tracking_enabled, desired_delivery_date) VALUES
   (1,'P1',true,true,'2026-11-09'),(2,'P2',true,true,'2026-11-20'),(3,'P3',true,true,'2026-12-05'),
-  (4,'Fora (não exibido)',true,false,'2026-11-01'),(5,'Fora (sem data)',true,true,NULL),(6,'Fora (fechado)',false,true,'2026-11-01');
+  (4,'Fora (não exibido)',true,false,'2026-11-01'),(5,'Fora (sem data)',true,true,NULL),(6,'Fora (fechado)',false,true,'2026-11-01'),
+  (7,'P7 tracking desligado',true,false,'2026-11-01'),(8,'P8 fallback responsável',true,false,'2026-11-10');
+INSERT INTO runrunit_tasks (runrunit_task_id, runrunit_project_id, title, raw_data) VALUES
+  (81,8,'tarefa com assignment','{"assignments":[{"assignee_name":"Ana"}]}');
 INSERT INTO dashboard_lanes (id, assignee_name, title) VALUES
   ('00000000-0000-0000-0000-0000000000a1','Laura','Novembro/2026'),
   ('00000000-0000-0000-0000-0000000000a2','Laura','Dezembro/2026'),
@@ -34,7 +37,20 @@ DO $$ DECLARE r jsonb; BEGIN
   ASSERT NOT (r->>'acquired')::boolean, 'lote manual deveria ser recusado';
   BEGIN PERFORM sync_acquire_lock('manual','x',ARRAY[1]::bigint[]); ASSERT false, 'tipo inválido aceito';
   EXCEPTION WHEN raise_exception THEN NULL; END;
-  RAISE WARNING 'OK T2: manual recusada durante execução ativa; lock_type inválido rejeitado';
+  BEGIN PERFORM sync_acquire_lock('manual_single','x',NULL); ASSERT false, 'manual_single sem projeto aceito';
+  EXCEPTION WHEN raise_exception THEN NULL; END;
+  RAISE WARNING 'OK T2: manual recusada durante execução ativa; lock_type inválido e single sem projeto rejeitados';
+END $$;
+
+-- Fallback de responsável: pessoas/view vazias, mas tarefa tem assignment.
+DO $$ BEGIN
+  ASSERT sync_allocate_project_cards(8) = 1, 'deveria alocar o responsável vindo da tarefa';
+  ASSERT EXISTS (
+    SELECT 1 FROM dashboard_project_cards
+     WHERE runrunit_project_id = 8 AND assignee_name = 'Ana'
+       AND lane_id = '00000000-0000-0000-0000-0000000000b1'
+  ), 'fallback de responsável da tarefa não alocou o card';
+  RAISE WARNING 'OK fallback: responsável recuperado de runrunit_tasks quando pessoas/view estão vazias';
 END $$;
 
 -- Claim + persistência atômica + preservação manual.
@@ -178,10 +194,105 @@ DO $$ DECLARE r jsonb; BEGIN
   RAISE WARNING 'OK: manual sobre trava vencida aciona retomada em vez de abrir execução paralela';
 END $$;
 
+-- Tracking desligado é preservado; tarefas que sumiram são removidas.
+DO $$ DECLARE run uuid; tok bigint; r jsonb; it jsonb; BEGIN
+  SELECT current_run_id, fencing_token INTO run, tok FROM dashboard_sync_lock WHERE is_locked;
+  IF run IS NOT NULL THEN PERFORM sync_fail_run(run, tok, 'limpeza do teste'); END IF;
+
+  r := sync_acquire_lock('manual_single','teste',ARRAY[7]::bigint[]);
+  run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
+  it := sync_claim_next(run, tok);
+  PERFORM sync_persist_project(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid,
+    '{"runrunit_project_id":7,"name":"P7","is_open":true,"desired_delivery_date":"2026-11-01"}',
+    '[{"runrunit_task_id":71,"title":"nova"}]', '[]');
+  PERFORM sync_complete_item(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid);
+  ASSERT NOT (SELECT is_tracking_enabled FROM runrunit_projects WHERE runrunit_project_id=7),
+    'sync reativou tracking desligado';
+  PERFORM sync_finalize(run, tok);
+
+  r := sync_acquire_lock('manual_single','teste',ARRAY[1]::bigint[]);
+  run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
+  it := sync_claim_next(run, tok);
+  PERFORM sync_persist_project(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid,
+    '{"runrunit_project_id":1,"name":"P1","is_open":true,"desired_delivery_date":"2026-11-09"}',
+    '[{"runrunit_task_id":12,"title":"nova"}]', '[]');
+  PERFORM sync_complete_item(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid);
+  ASSERT NOT EXISTS (SELECT 1 FROM runrunit_tasks WHERE runrunit_task_id=11),
+    'tarefa removida do Runrun.it continuou no banco';
+  ASSERT EXISTS (SELECT 1 FROM runrunit_tasks WHERE runrunit_task_id=12),
+    'tarefa nova não foi gravada';
+  PERFORM sync_finalize(run, tok);
+  RAISE WARNING 'OK: tracking desligado preservado; tarefas órfãs removidas';
+END $$;
+
+-- Estimativas: substituição atômica, escopo e fencing.
+DO $$ DECLARE r jsonb; run uuid; tok bigint; n int; BEGIN
+  SELECT current_run_id, fencing_token INTO run, tok FROM dashboard_sync_lock WHERE is_locked;
+  IF run IS NOT NULL THEN PERFORM sync_fail_run(run, tok, 'limpeza do teste'); END IF;
+
+  r := sync_acquire_lock('manual_single','teste-estimativas',ARRAY[1]::bigint[]);
+  run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
+  n := sync_replace_project_estimates(run, tok, ARRAY[1]::bigint[],
+    '[{"runrunit_project_id":1,"assignee_name":"Laura","total_tasks":2,"total_estimated_hours":3.5,"calculation_details":[],"updated_at":null}]');
+  ASSERT n = 1, 'deveria inserir 1 estimativa';
+  ASSERT (SELECT count(*) FROM dashboard_project_estimates WHERE runrunit_project_id=1) = 1;
+
+  BEGIN
+    PERFORM sync_replace_project_estimates(run, tok, ARRAY[1]::bigint[],
+      '[{"runrunit_project_id":1,"assignee_name":"Laura","total_tasks":"inválido"}]');
+    ASSERT false, 'estimativa inválida deveria falhar';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'estimativa inválida%' THEN RAISE; END IF;
+  END;
+  ASSERT (SELECT count(*) FROM dashboard_project_estimates WHERE runrunit_project_id=1) = 1,
+    'falha no INSERT deveria desfazer o DELETE';
+
+  BEGIN
+    PERFORM sync_replace_project_estimates(run, tok, ARRAY[1]::bigint[],
+      '[{"runrunit_project_id":2,"assignee_name":"Ana","total_tasks":1}]');
+    ASSERT false, 'estimativa fora do escopo deveria falhar';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE 'estimativa fora do escopo%' THEN RAISE; END IF;
+  END;
+  ASSERT (SELECT count(*) FROM dashboard_project_estimates WHERE runrunit_project_id=1) = 1,
+    'escopo inválido não pode alterar estimativas existentes';
+
+  BEGIN
+    PERFORM sync_replace_project_estimates(run, tok - 1, ARRAY[1]::bigint[], '[]');
+    ASSERT false, 'token antigo deveria falhar';
+  EXCEPTION WHEN OTHERS THEN
+    ASSERT SQLERRM LIKE 'LOCK_LOST%', 'esperava LOCK_LOST, veio ' || SQLERRM;
+  END;
+  ASSERT (SELECT count(*) FROM dashboard_project_estimates WHERE runrunit_project_id=1) = 1,
+    'worker antigo não pode apagar estimativas';
+  PERFORM sync_fail_run(run, tok, 'limpeza do teste');
+  RAISE WARNING 'OK estimativas: DELETE+INSERT atômico, escopo validado e fencing preservado';
+END $$;
+
+-- Falha não pode liberar a trava enquanto houver item em processamento.
+DO $$ DECLARE r jsonb; run uuid; tok bigint; it jsonb; BEGIN
+  SELECT current_run_id, fencing_token INTO run, tok FROM dashboard_sync_lock WHERE is_locked;
+  IF run IS NOT NULL THEN PERFORM sync_fail_run(run, tok, 'limpeza do teste'); END IF;
+
+  r := sync_acquire_lock('manual_single','teste-fail-processing',ARRAY[8]::bigint[]);
+  run := (r->>'run_id')::uuid; tok := (r->>'fencing_token')::bigint;
+  it := sync_claim_next(run, tok);
+  PERFORM sync_fail_run(run, tok, 'falha durante processamento');
+  ASSERT (SELECT is_locked FROM dashboard_sync_lock), 'trava liberada com item em processing';
+  ASSERT (SELECT status FROM dashboard_sync_runs WHERE id=run) <> 'failed', 'execução não podia ser finalizada';
+
+  PERFORM sync_record_failure(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid, 'limpeza');
+  PERFORM sync_fail_run(run, tok, 'limpeza');
+  ASSERT NOT (SELECT is_locked FROM dashboard_sync_lock), 'trava deveria liberar sem item em processing';
+  RAISE WARNING 'OK trava: fail_run não libera enquanto há worker processando; watchdog retoma';
+END $$;
+
 -- Permissões: authenticated não executa RPCs de escrita.
 DO $$ BEGIN
   ASSERT NOT has_function_privilege('authenticated', 'sync_acquire_lock(text,text,bigint[],uuid)', 'EXECUTE');
   ASSERT NOT has_function_privilege('anon', 'sync_persist_project(uuid,bigint,uuid,uuid,jsonb,jsonb,jsonb)', 'EXECUTE');
+  ASSERT NOT has_function_privilege('authenticated', 'sync_replace_project_estimates(uuid,bigint,bigint[],jsonb)', 'EXECUTE');
   ASSERT has_function_privilege('service_role', 'sync_claim_next(uuid,bigint)', 'EXECUTE');
+  ASSERT has_function_privilege('service_role', 'sync_replace_project_estimates(uuid,bigint,bigint[],jsonb)', 'EXECUTE');
   RAISE WARNING 'OK segurança: RPCs de escrita só para service_role';
 END $$;

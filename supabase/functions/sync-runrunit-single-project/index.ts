@@ -8,7 +8,7 @@ const BASE = "https://runrun.it/api/v1.0";
 const json = (b: any, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
 const hdr = (a: string, u: string) => ({ "App-Key": a, "User-Token": u, "Content-Type": "application/json" });
 async function rr(path: string, a: string, u: string) {
-  const r = await fetch(`${BASE}${path}`, { headers: hdr(a, u) });
+  const r = await fetch(`${BASE}${path}`, { headers: hdr(a, u), signal: AbortSignal.timeout(20_000) });
   return { ok: r.ok, status: r.status, data: r.ok ? await r.json() : null, body: r.ok ? null : await r.text() };
 }
 function tasksRows(id: number, tasks: any[], now: string) {
@@ -59,11 +59,18 @@ async function invokeOfficialEstimateCalc(url: string, key: string, runrunit_pro
 Deno.serve(async req => {
   if (req.method === "OPTIONS") return json({ ok: true });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key || req.headers.get("Authorization") !== `Bearer ${key}`) return json({ error: "unauthorized" }, 401);
+  // Caminho legado desativado por padrão: toda escrita deve passar pelo
+  // orquestrador resiliente, que usa fencing e transações no banco.
+  if (Deno.env.get("LEGACY_SYNC_FUNCTIONS_ENABLED") !== "true") {
+    return json({ success: false, error: "Função legada desativada. Use a sincronização resiliente." }, 410);
+  }
   const body = await req.json().catch(() => ({}));
   const id = Number((body as any).runrunit_project_id);
   if (!id) return json({ error: "Informe runrunit_project_id" }, 400);
-  const a = Deno.env.get("RUNRUNIT_APP_TOKEN"), u = Deno.env.get("RUNRUNIT_USER_TOKEN"), url = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!a || !u || !url || !key) return json({ error: "Secrets ausentes" }, 500);
+  const a = Deno.env.get("RUNRUNIT_APP_TOKEN"), u = Deno.env.get("RUNRUNIT_USER_TOKEN"), url = Deno.env.get("SUPABASE_URL");
+  if (!a || !u || !url) return json({ error: "Secrets ausentes" }, 500);
   const s = createClient(url, key), now = new Date().toISOString();
   const pr = await rr(`/projects/${id}`, a, u);
   if (!pr.ok) return json({ success: false, error: "Erro ao buscar projeto no Runrun.it", status: pr.status, body: pr.body }, pr.status === 429 ? 429 : 500);
@@ -90,9 +97,15 @@ Deno.serve(async req => {
     await s.from("dashboard_project_estimates").delete().eq("runrunit_project_id", id);
     return json({ success: true, project_id: id, is_open: false, tasks_saved: 0, people_inserted: 0 });
   }
-  const tr = await rr(`/tasks?project_id=${id}`, a, u);
-  if (!tr.ok) return json({ success: false, error: "Erro ao buscar tarefas no Runrun.it", status: tr.status, body: tr.body }, tr.status === 429 ? 429 : 500);
-  const tasks = Array.isArray(tr.data) ? tr.data : [], rows = tasksRows(id, tasks, now);
+  const tasks: any[] = [];
+  for (let page = 1; page <= 100; page++) {
+    const tr = await rr(`/tasks?project_id=${id}&page=${page}&per_page=100`, a, u);
+    if (!tr.ok) return json({ success: false, error: "Erro ao buscar tarefas no Runrun.it", status: tr.status, body: tr.body }, tr.status === 429 ? 429 : 500);
+    const list = Array.isArray(tr.data) ? tr.data : [];
+    tasks.push(...list);
+    if (list.length < 100) break;
+  }
+  const rows = tasksRows(id, tasks, now);
   if (rows.length) {
     const { error: e } = await s.from("runrunit_tasks").upsert(rows, { onConflict: "runrunit_task_id" });
     if (e) return json({ success: false, error: e.message }, 500);
@@ -105,7 +118,6 @@ Deno.serve(async req => {
     if (e) return json({ success: false, error: e.message }, 500);
   }
   await s.from("runrunit_projects").update({
-    is_tracking_enabled: true,
     is_new_candidate: false,
     last_project_detail_synced_at: now,
     last_people_synced_at: now,

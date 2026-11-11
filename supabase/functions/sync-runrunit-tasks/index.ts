@@ -7,7 +7,7 @@ const BASE = "https://runrun.it/api/v1.0";
 const json = (b: any, s = 200) => new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" } });
 const hdr = (a: string, u: string) => ({ "App-Key": a, "User-Token": u, "Content-Type": "application/json" });
 async function rr(path: string, a: string, u: string, page = 1) {
-  const r = await fetch(`${BASE}${path}${path.includes("?") ? "&" : "?"}page=${page}&per_page=100`, { headers: hdr(a, u) });
+  const r = await fetch(`${BASE}${path}${path.includes("?") ? "&" : "?"}page=${page}&per_page=100`, { headers: hdr(a, u), signal: AbortSignal.timeout(20_000) });
   return { ok: r.ok, status: r.status, data: r.ok ? await r.json() : null, body: r.ok ? null : await r.text() };
 }
 function projectIdsFromTasks(tasks: any[]) {
@@ -32,8 +32,15 @@ async function invokeOfficialEstimateCalcScope(url: string, key: string, ids: nu
 Deno.serve(async req => {
   if (req.method === "OPTIONS") return json({ ok: true });
   if (req.method !== "POST") return json({ error: "Use POST" }, 405);
-  const a = Deno.env.get("RUNRUNIT_APP_TOKEN"), u = Deno.env.get("RUNRUNIT_USER_TOKEN"), url = Deno.env.get("SUPABASE_URL"), key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!a || !u || !url || !key) return json({ error: "Secrets ausentes" }, 500);
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key || req.headers.get("Authorization") !== `Bearer ${key}`) return json({ error: "unauthorized" }, 401);
+  // Caminho legado desativado por padrão: toda escrita deve passar pelo
+  // orquestrador resiliente, que usa fencing e transações no banco.
+  if (Deno.env.get("LEGACY_SYNC_FUNCTIONS_ENABLED") !== "true") {
+    return json({ success: false, error: "Função legada desativada. Use a sincronização resiliente." }, 410);
+  }
+  const a = Deno.env.get("RUNRUNIT_APP_TOKEN"), u = Deno.env.get("RUNRUNIT_USER_TOKEN"), url = Deno.env.get("SUPABASE_URL");
+  if (!a || !u || !url) return json({ error: "Secrets ausentes" }, 500);
   const s = createClient(url, key), now = new Date().toISOString();
   const all: any[] = [], processedProjectIds = new Set<number>();
   for (let page = 1; page <= 10; page++) {

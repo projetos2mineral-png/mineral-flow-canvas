@@ -1,5 +1,6 @@
 -- Agendamentos da sincronização resiliente (executar UMA vez no SQL Editor,
--- depois de aplicar a migration 20261110120000_resilient_sync.sql).
+-- depois de aplicar as migrations 20261110120000_resilient_sync.sql e
+-- 20261110130000_sync_hardening.sql).
 --
 -- Pré-requisitos:
 --   1) Extensões pg_cron e pg_net habilitadas (Database > Extensions).
