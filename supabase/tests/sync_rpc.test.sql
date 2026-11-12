@@ -287,6 +287,53 @@ DO $$ DECLARE r jsonb; run uuid; tok bigint; it jsonb; BEGIN
   RAISE WARNING 'OK trava: fail_run não libera enquanto há worker processando; watchdog retoma';
 END $$;
 
+-- Histórico manual: flag true, flag false/null com timestamp, e card elegível.
+-- A transação é revertida para não deixar dados deste cenário no banco de teste.
+BEGIN;
+INSERT INTO runrunit_projects (runrunit_project_id, name, is_open, is_tracking_enabled, desired_delivery_date)
+VALUES (9, 'P9 proteção manual', true, true, '2026-11-09');
+INSERT INTO dashboard_lanes (id, assignee_name, title) VALUES
+  ('00000000-0000-0000-0000-0000000000c1', 'Teste True', 'Novembro/2026'),
+  ('00000000-0000-0000-0000-0000000000c2', 'Teste False Data', 'Novembro/2026'),
+  ('00000000-0000-0000-0000-0000000000c3', 'Teste Null Data', 'Novembro/2026'),
+  ('00000000-0000-0000-0000-0000000000c4', 'Teste Elegivel', 'Novembro/2026');
+INSERT INTO dashboard_project_cards
+  (runrunit_project_id, assignee_name, lane_id, manually_positioned, manually_positioned_at)
+VALUES
+  (9, 'Teste True', NULL, true, NULL),
+  (9, 'Teste False Data', NULL, false, now()),
+  (9, 'Teste Null Data', NULL, NULL, now()),
+  (9, 'Teste Elegivel', NULL, false, NULL);
+
+DO $$ DECLARE moved int; c record; BEGIN
+  moved := sync_allocate_project_cards(9);
+  ASSERT moved = 1, format('esperava mover só o card elegível, veio %s', moved);
+
+  SELECT * INTO c FROM dashboard_project_cards
+   WHERE runrunit_project_id = 9 AND assignee_name = 'Teste True';
+  ASSERT c.lane_id IS NULL AND c.manually_positioned IS TRUE,
+    'card com manually_positioned=true foi realocado';
+
+  SELECT * INTO c FROM dashboard_project_cards
+   WHERE runrunit_project_id = 9 AND assignee_name = 'Teste False Data';
+  ASSERT c.lane_id IS NULL AND c.manually_positioned IS FALSE AND c.manually_positioned_at IS NOT NULL,
+    'card false com histórico manual foi realocado';
+
+  SELECT * INTO c FROM dashboard_project_cards
+   WHERE runrunit_project_id = 9 AND assignee_name = 'Teste Null Data';
+  ASSERT c.lane_id IS NULL AND c.manually_positioned IS NULL AND c.manually_positioned_at IS NOT NULL,
+    'card null com histórico manual foi realocado';
+
+  SELECT * INTO c FROM dashboard_project_cards
+   WHERE runrunit_project_id = 9 AND assignee_name = 'Teste Elegivel';
+  ASSERT c.lane_id = '00000000-0000-0000-0000-0000000000c4'
+     AND c.manually_positioned IS FALSE AND c.manually_positioned_at IS NULL,
+    'card sem histórico manual não foi realocado para a fila válida';
+
+  RAISE WARNING 'OK histórico manual: true, false+timestamp e null+timestamp preservados; elegível realocado';
+END $$;
+ROLLBACK;
+
 -- Permissões: authenticated não executa RPCs de escrita.
 DO $$ BEGIN
   ASSERT NOT has_function_privilege('authenticated', 'sync_acquire_lock(text,text,bigint[],uuid)', 'EXECUTE');

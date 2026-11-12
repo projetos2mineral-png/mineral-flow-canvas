@@ -164,15 +164,16 @@ BEGIN
     SELECT id INTO target FROM dashboard_lanes
      WHERE assignee_name = who AND lower(btrim(title)) = lower(sync_month_title(desired - GREATEST(ante,0)))
      ORDER BY created_at NULLS LAST, id LIMIT 1;
-    SELECT id, lane_id, manually_positioned INTO c FROM dashboard_project_cards
+    SELECT id, lane_id, manually_positioned, manually_positioned_at INTO c FROM dashboard_project_cards
      WHERE runrunit_project_id = p_project_id AND assignee_name = who LIMIT 1;
     IF FOUND THEN
       valid := c.lane_id IS NOT NULL AND EXISTS (SELECT 1 FROM dashboard_lanes WHERE id = c.lane_id AND assignee_name = who);
       CONTINUE WHEN valid;
-      CONTINUE WHEN c.manually_positioned IS TRUE;
+      CONTINUE WHEN c.manually_positioned IS TRUE OR c.manually_positioned_at IS NOT NULL;
       CONTINUE WHEN target IS NULL;
       UPDATE dashboard_project_cards SET lane_id = target, manually_positioned = false, updated_at = now()
-       WHERE id = c.id AND lane_id IS NOT DISTINCT FROM c.lane_id AND manually_positioned IS NOT TRUE;
+       WHERE id = c.id AND lane_id IS NOT DISTINCT FROM c.lane_id AND manually_positioned IS NOT TRUE
+         AND manually_positioned_at IS NULL;
       n := n + 1;
     ELSIF target IS NOT NULL THEN
       INSERT INTO dashboard_project_cards (runrunit_project_id, assignee_name, lane_id, status, position, review_status, manually_positioned)

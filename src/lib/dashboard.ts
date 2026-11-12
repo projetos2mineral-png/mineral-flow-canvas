@@ -678,9 +678,15 @@ export async function updateLane(id: string, patch: Partial<Pick<Lane, "title" |
 export async function deleteLane(id: string) {
   // Move os cards e revisões da fila para "Sem fila" (lane_id = null) antes
   // de excluir, para não perder nada nem violar chaves estrangeiras.
+  const now = new Date().toISOString();
   const { error: cardsErr } = await (supabase as any)
     .from("dashboard_project_cards")
-    .update({ lane_id: null })
+    .update({
+      lane_id: null,
+      manually_positioned: true,
+      manually_positioned_at: now,
+      updated_at: now,
+    })
     .eq("lane_id", id);
   if (cardsErr) throw cardsErr;
   const { error: reviewsErr } = await (supabase as any)
