@@ -124,6 +124,7 @@ export type ProjectCardRow = {
   review_requested_to: string | null;
   correction_note: string | null;
   manually_positioned: boolean | null;
+  manually_positioned_at?: string | null;
   total_tasks?: number | null;
   total_estimated_hours?: number | null;
   calculation_details?: CalculationDetails | null;
