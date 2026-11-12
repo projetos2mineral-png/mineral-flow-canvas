@@ -105,7 +105,6 @@ Deno.serve(async req => {
     if (e) return json({ success: false, error: e.message }, 500);
   }
   await s.from("runrunit_projects").update({
-    is_tracking_enabled: true,
     is_new_candidate: false,
     last_project_detail_synced_at: now,
     last_people_synced_at: now,

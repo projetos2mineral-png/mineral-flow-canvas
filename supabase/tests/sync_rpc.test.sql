@@ -42,6 +42,7 @@ DO $$ DECLARE a jsonb := (SELECT v FROM ctx WHERE k='A'); run uuid := (a->>'run_
   it jsonb; c record; BEGIN
   it := sync_claim_next(run, tok);
   ASSERT it->>'runrunit_project_id' = '1';
+  UPDATE runrunit_projects SET is_tracking_enabled = false WHERE runrunit_project_id = 1;
   PERFORM sync_persist_project(run, tok, (it->>'item_id')::uuid, (it->>'claim_id')::uuid,
     '{"runrunit_project_id":1,"name":"P1","is_open":true,"desired_delivery_date":"2026-11-09"}',
     '[{"runrunit_task_id":11,"title":"t"}]', '[{"assignee_name":"Laura"},{"assignee_name":"Ana"}]');
@@ -50,7 +51,22 @@ DO $$ DECLARE a jsonb := (SELECT v FROM ctx WHERE k='A'); run uuid := (a->>'run_
   ASSERT c.lane_id IS NULL AND c.manually_positioned, 'card manual em SEM FILA foi alterado!';
   SELECT * INTO c FROM dashboard_project_cards WHERE runrunit_project_id=1 AND assignee_name='Ana';
   ASSERT c.lane_id = '00000000-0000-0000-0000-0000000000b1', 'card novo deveria ir para Novembro/2026 da Ana';
-  RAISE WARNING 'OK manual: SEM FILA manual preservado; card novo alocado na fila do mês';
+  ASSERT NOT (SELECT is_tracking_enabled FROM runrunit_projects WHERE runrunit_project_id=1),
+    'sincronização reativou tracking desabilitado pelo usuário';
+  RAISE WARNING 'OK manual: SEM FILA manual preservado; card novo alocado; tracking desabilitado preservado';
+END $$;
+
+-- Card em Sem fila com manually_positioned_at não pode ser realocado.
+DO $$ DECLARE c record; n int; BEGIN
+  INSERT INTO runrunit_projects (runrunit_project_id, name, is_open, is_tracking_enabled, desired_delivery_date)
+    VALUES (7,'P7',true,true,'2026-11-09');
+  INSERT INTO dashboard_project_cards (runrunit_project_id, assignee_name, lane_id, manually_positioned, manually_positioned_at)
+    VALUES (7,'Ana',NULL,false,now());
+  n := sync_allocate_project_cards(7);
+  SELECT * INTO c FROM dashboard_project_cards WHERE runrunit_project_id=7 AND assignee_name='Ana';
+  ASSERT n = 0 AND c.lane_id IS NULL AND c.manually_positioned_at IS NOT NULL,
+    'card com manually_positioned_at foi realocado';
+  RAISE WARNING 'OK manual: card com manually_positioned_at preservado em SEM FILA';
 END $$;
 
 -- Rollback da persistência + falha registrada em operação separada.

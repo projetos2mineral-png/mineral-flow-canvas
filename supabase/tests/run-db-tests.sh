@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 PSQL="${PSQL:-psql}"
 DB=sync_test
 $PSQL -q -d postgres -c "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB"
-$PSQL -q -d $DB -v ON_ERROR_STOP=1 -f supabase/tests/stub_schema.sql -f supabase/migrations/20261110120000_resilient_sync.sql >/dev/null 2>&1
+$PSQL -q -d $DB -v ON_ERROR_STOP=1 -f supabase/tests/stub_schema.sql -f supabase/migrations/20261110120000_resilient_sync.sql -f supabase/migrations/20261112120000_sync_tracking_manual_preservation.sql >/dev/null 2>&1
 $PSQL -q -d $DB -v ON_ERROR_STOP=1 -f supabase/tests/sync_rpc.test.sql 2>&1 | sed 's/^.*WARNING:  //'
 
 # T2 (concorrência real): 8 sessões simultâneas disputam a trava; só 1 pode vencer.

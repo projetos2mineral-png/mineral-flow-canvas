@@ -1266,9 +1266,10 @@ function KanbanAuditPanel({
         assignee_name: string | null;
         lane_id: string | null;
         manually_positioned: boolean | null;
+        manually_positioned_at: string | null;
       }>(
         "dashboard_project_cards",
-        "id,runrunit_project_id,assignee_name,lane_id,manually_positioned",
+        "id,runrunit_project_id,assignee_name,lane_id,manually_positioned,manually_positioned_at",
         "id",
         (query) => query.is("lane_id", null),
       );
@@ -1277,10 +1278,15 @@ function KanbanAuditPanel({
         protectedCardIds.has(card.id),
       ).length;
       const initialCards = allInitialCards.filter(
-        (card) => !protectedCardIds.has(card.id) && card.manually_positioned !== true,
+        (card) =>
+          !protectedCardIds.has(card.id) &&
+          card.manually_positioned !== true &&
+          !card.manually_positioned_at,
       );
       manualCardsSkipped = allInitialCards.filter(
-        (card) => !protectedCardIds.has(card.id) && card.manually_positioned === true,
+        (card) =>
+          !protectedCardIds.has(card.id) &&
+          (card.manually_positioned === true || !!card.manually_positioned_at),
       ).length;
 
       const laneRows = await fetchAllPagedRows<RecoveryLane>(

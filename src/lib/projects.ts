@@ -241,9 +241,12 @@ export function decideCardAllocation(input: {
   cardExists: boolean;
   targetLaneId: string | null;
   manuallyPositioned: boolean | null | undefined;
+  manuallyPositionedAt?: string | null | undefined;
 }): AllocationReason {
   if (input.cardExists && input.existingLaneId) return "ja_alocado";
-  if (input.cardExists && input.manuallyPositioned === true) return "manual_sem_fila";
+  if (input.cardExists && (input.manuallyPositioned === true || input.manuallyPositionedAt)) {
+    return "manual_sem_fila";
+  }
   if (!input.targetLaneId) return "sem_fila_mensal";
   return "alocar";
 }
@@ -329,7 +332,7 @@ export async function allocateProjectToMonthlyLanes(
 
     const { data: existing, error: exErr } = await (supabase as any)
       .from("dashboard_project_cards")
-      .select("id,lane_id,manually_positioned")
+      .select("id,lane_id,manually_positioned,manually_positioned_at")
       .eq("runrunit_project_id", runrunit_project_id)
       .eq("assignee_name", assignee)
       .maybeSingle();
@@ -345,6 +348,7 @@ export async function allocateProjectToMonthlyLanes(
       existingLaneId: validLaneId,
       targetLaneId: lane?.id ?? null,
       manuallyPositioned: existing?.manually_positioned === true,
+      manuallyPositionedAt: existing?.manually_positioned_at ?? null,
     });
     const outcome: AllocationOutcome = {
       runrunit_project_id,
@@ -480,7 +484,7 @@ export async function allocateManyProjects(
 /**
  * Realoca todos os cards de um quadro específico com base na antecedência configurada.
  * Usado quando a antecedência do quadro é alterada.
- * Respeita cards com manually_positioned = true (não move).
+ * Respeita cards com manually_positioned = true ou manually_positioned_at (não move).
  */
 export async function reallocateBoardCardsForAntecedence(assigneeName: string): Promise<number> {
   const name = assigneeName?.trim();
@@ -505,12 +509,18 @@ export async function reallocateBoardCardsForAntecedence(assigneeName: string): 
   // Busca cards do quadro que não são manualmente posicionados
   const { data: cards, error: cardsErr } = await (supabase as any)
     .from("dashboard_project_cards")
-    .select("id,runrunit_project_id,manually_positioned,lane_id")
+    .select("id,runrunit_project_id,manually_positioned,manually_positioned_at,lane_id")
     .eq("assignee_name", name);
   if (cardsErr) throw cardsErr;
-  const toProcess = ((cards ?? []) as { id: string; runrunit_project_id: number; manually_positioned: boolean | null; lane_id: string | null }[]).filter(
-    (c) => c.manually_positioned !== true
-  );
+  const toProcess = (
+    (cards ?? []) as {
+      id: string;
+      runrunit_project_id: number;
+      manually_positioned: boolean | null;
+      manually_positioned_at: string | null;
+      lane_id: string | null;
+    }[]
+  ).filter((c) => c.manually_positioned !== true && !c.manually_positioned_at);
   if (toProcess.length === 0) return 0;
 
   // Busca datas desejadas dos projetos correspondentes
@@ -565,7 +575,7 @@ export async function reallocateBoardCardsForAntecedence(assigneeName: string): 
 /**
  * Após uma sincronização em massa (`sync-runrunit-tasks`), re-executa a
  * alocação para todos os projetos exibidos e abertos, respeitando cards
- * marcados como `manually_positioned = true`.
+ * marcados como `manually_positioned = true` ou com `manually_positioned_at`.
  */
 export async function reallocateAllTrackedProjects() {
   const { data, error } = await (supabase as any)

@@ -112,6 +112,21 @@ describe("alocação automática em fila mensal", () => {
     expect(card(1)?.manually_positioned).toBe(true);
   });
 
+  it("1b. card sem fila com manually_positioned_at permanece em Sem fila", async () => {
+    db.tables.dashboard_project_cards.push({
+      id: "c1",
+      runrunit_project_id: 1,
+      assignee_name: "Laura",
+      lane_id: null,
+      manually_positioned: false,
+      manually_positioned_at: "2026-11-01T00:00:00Z",
+    });
+    const [o] = await allocateProjectToMonthlyLanes(1);
+    expect(o.reason).toBe("manual_sem_fila");
+    expect(o.applied).toBe(false);
+    expect(card(1)?.lane_id).toBeNull();
+  });
+
   it("2. card sem fila não manual vai para Novembro/2026", async () => {
     db.tables.dashboard_project_cards.push({ id: "c1", runrunit_project_id: 1, assignee_name: "Laura", lane_id: null, manually_positioned: false });
     await allocateProjectToMonthlyLanes(1);

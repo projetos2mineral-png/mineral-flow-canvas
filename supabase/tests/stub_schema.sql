@@ -16,6 +16,6 @@ CREATE TABLE dashboard_lanes (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), ass
   position int, created_at timestamptz DEFAULT now());
 CREATE TABLE dashboard_project_cards (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), runrunit_project_id bigint NOT NULL,
   assignee_name text NOT NULL, lane_id uuid, status text, position int, review_status text, manually_positioned boolean,
-  updated_at timestamptz, UNIQUE (runrunit_project_id, assignee_name));
+  manually_positioned_at timestamptz, updated_at timestamptz, UNIQUE (runrunit_project_id, assignee_name));
 CREATE TABLE dashboard_board_settings (assignee_name text PRIMARY KEY, antecedence_days int NOT NULL DEFAULT 0);
 CREATE TABLE dashboard_project_estimates (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), runrunit_project_id bigint);
