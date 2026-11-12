@@ -22,12 +22,12 @@ type Env = { url: string; serviceKey: string; rrApp: string; rrUser: string };
 
 export function readSyncEnv(): Env {
   const url = process.env.SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey = process.env.DB_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   const rrApp = process.env.RUNRUNIT_APP_TOKEN;
   const rrUser = process.env.RUNRUNIT_USER_TOKEN;
   const missing = [
     !url && "SUPABASE_URL",
-    !serviceKey && "SUPABASE_SERVICE_ROLE_KEY",
+    !serviceKey && "DB_SERVICE_ROLE_KEY",
     !rrApp && "RUNRUNIT_APP_TOKEN",
     !rrUser && "RUNRUNIT_USER_TOKEN",
   ].filter(Boolean);
