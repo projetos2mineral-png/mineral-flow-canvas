@@ -157,6 +157,7 @@ import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-dem
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
+import { WeeklyWorkedHoursButton } from "@/components/dashboard/WeeklyWorkedHours";
 import { CardStatusSelect } from "@/components/dashboard/CardStatusSelect";
 import { OnlineUsersIndicator } from "@/components/dashboard/OnlineUsersIndicator";
 
@@ -2231,6 +2232,10 @@ function DashboardPage() {
               </div>
 
               <div className="h-5 w-px shrink-0 bg-border/30 hidden sm:block" aria-hidden="true" />
+
+              <div className="shrink-0">
+                <WeeklyWorkedHoursButton assignee={activeAssignee} />
+              </div>
 
               {/* Modo visual — botão único cíclico, minimalista */}
               <div className="shrink-0">
