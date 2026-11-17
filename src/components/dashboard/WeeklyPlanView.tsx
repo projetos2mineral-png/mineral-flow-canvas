@@ -188,25 +188,19 @@ function WeeklyRow({
           </div>
         )}
         {variant === "week" ? (
-          <div
-            className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] leading-none tabular-nums"
-            title={`${formatHoursCompact(workedHours)} trabalhadas / ${formatHoursCompact(weekHours)} planejadas`}
+          <dl
+            className="mt-2 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1 text-[11px] leading-none tabular-nums"
+            title={`${formatHoursCompact(workedHours)} trabalhadas · ${formatHoursCompact(weekHours)} planejadas`}
           >
-            <Clock className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden="true" />
-            <span className="inline-flex items-center gap-1">
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {formatHoursCompact(workedHours)}
-              </span>
-              <span className="text-muted-foreground/70">trabalhadas</span>
-            </span>
-            <span className="text-muted-foreground/30">/</span>
-            <span className="inline-flex items-center gap-1">
-              <span className="font-semibold text-sky-600 dark:text-sky-400">
-                {formatHoursCompact(weekHours)}
-              </span>
-              <span className="text-muted-foreground/70">planejadas</span>
-            </span>
-          </div>
+            <dt className="text-muted-foreground/70">Trabalhadas</dt>
+            <dd className="text-right font-medium text-emerald-600 dark:text-emerald-400">
+              {formatHoursCompact(workedHours)}
+            </dd>
+            <dt className="text-muted-foreground/70">Planejadas</dt>
+            <dd className="text-right font-medium text-sky-600 dark:text-sky-400">
+              {formatHoursCompact(weekHours)}
+            </dd>
+          </dl>
         ) : (
           <div
             className="mt-2 inline-flex items-center gap-1 text-[12px] leading-none text-muted-foreground tabular-nums"
