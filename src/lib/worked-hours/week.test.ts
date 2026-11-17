@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DailyWorkedRow } from "@/lib/worked-hours";
 import {
   addDaysISO,
+  dateToISODate,
   formatWeekRange,
   shiftWeekISO,
   startOfWeekISO,
@@ -38,6 +39,11 @@ describe("semanas de horas trabalhadas", () => {
       "2026-11-22",
     ]);
     expect(formatWeekRange("2026-11-16")).toBe("16/11/2026 a 22/11/2026");
+  });
+
+  it("converte datas locais para ISO sem deslocamento de fuso", () => {
+    expect(dateToISODate(new Date(2026, 0, 3, 23, 30))).toBe("2026-01-03");
+    expect(dateToISODate(new Date(2026, 10, 17, 0, 15))).toBe("2026-11-17");
   });
 
   it("navega entre semanas atravessando mes e ano", () => {

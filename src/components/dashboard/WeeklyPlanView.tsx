@@ -28,7 +28,10 @@ import {
 } from "@/lib/weekly-plan";
 import { computeMonthWeeks } from "@/lib/weekly-weeks";
 import { planWeeklyMove } from "@/lib/weekly-move";
-import { monthlyTitleToDateISO, type CardStatus } from "@/lib/dashboard";
+import { monthlyTitleToDateISO, normalizeAssigneeName, type CardStatus } from "@/lib/dashboard";
+import { fetchDailyWorkedHours, secondsToHours } from "@/lib/worked-hours";
+import { monthTitleToRange } from "@/lib/worked-hours/period";
+import { dateToISODate, summarizeWeeklyWorkedHours } from "@/lib/worked-hours/week";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import type { DemandBoardCard } from "@/lib/dashboard-demands";
@@ -143,6 +146,7 @@ function WeeklyRow({
   isAdmin = false,
   isCurrentWeek = false,
   emptyLabel,
+  workedHours = 0,
 }: {
   bucket: number;
   title: string;
@@ -156,6 +160,7 @@ function WeeklyRow({
   isAdmin?: boolean;
   isCurrentWeek?: boolean;
   emptyLabel?: string;
+  workedHours?: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: rowIdForBucket(bucket) });
   const weekHours =
@@ -182,13 +187,35 @@ function WeeklyRow({
             {subtitle}
           </div>
         )}
-        <div
-          className="mt-2 inline-flex items-center gap-1 text-[12px] leading-none text-muted-foreground tabular-nums"
-          title="Total de horas estimadas"
-        >
-          <Clock className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-          <span className="font-semibold text-foreground/80">{formatHoursCompact(weekHours)}</span>
-        </div>
+        {variant === "week" ? (
+          <div
+            className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[10px] leading-none tabular-nums"
+            title={`${formatHoursCompact(workedHours)} trabalhadas / ${formatHoursCompact(weekHours)} planejadas`}
+          >
+            <Clock className="h-3 w-3 shrink-0 text-muted-foreground/50" aria-hidden="true" />
+            <span className="inline-flex items-center gap-1">
+              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                {formatHoursCompact(workedHours)}
+              </span>
+              <span className="text-muted-foreground/70">trabalhadas</span>
+            </span>
+            <span className="text-muted-foreground/30">/</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="font-semibold text-sky-600 dark:text-sky-400">
+                {formatHoursCompact(weekHours)}
+              </span>
+              <span className="text-muted-foreground/70">planejadas</span>
+            </span>
+          </div>
+        ) : (
+          <div
+            className="mt-2 inline-flex items-center gap-1 text-[12px] leading-none text-muted-foreground tabular-nums"
+            title="Total de horas estimadas"
+          >
+            <Clock className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+            <span className="font-semibold text-foreground/80">{formatHoursCompact(weekHours)}</span>
+          </div>
+        )}
       </div>
       <div
         ref={setNodeRef}
@@ -249,6 +276,7 @@ export function WeeklyPlanView({
   isAdmin?: boolean;
 }) {
   const referenceMonth = monthlyTitleToDateISO(monthTitle);
+  const workedRange = useMemo(() => monthTitleToRange(monthTitle), [monthTitle]);
   const qc = useQueryClient();
 
   const weeks = useMemo(() => {
@@ -256,6 +284,35 @@ export function WeeklyPlanView({
     const [y, m] = referenceMonth.split("-").map(Number);
     return computeMonthWeeks(y, m - 1);
   }, [referenceMonth]);
+
+  const { data: workedRows } = useQuery({
+    queryKey: [
+      "dashboard",
+      "worked-hours",
+      "month",
+      normalizeAssigneeName(assigneeName),
+      workedRange?.start ?? referenceMonth ?? "none",
+    ],
+    queryFn: () => fetchDailyWorkedHours(workedRange ?? undefined),
+    enabled: open && !!workedRange,
+  });
+
+  const workedHoursByBucket = useMemo(() => {
+    const rows = workedRows ?? [];
+    const result = new Map<number, number>();
+    weeks.forEach((week, index) => {
+      if (!week.rangeLabel) {
+        result.set(index + 1, 0);
+        return;
+      }
+      const start = dateToISODate(week.start);
+      result.set(
+        index + 1,
+        secondsToHours(summarizeWeeklyWorkedHours(rows, assigneeName, start).totalSeconds),
+      );
+    });
+    return result;
+  }, [assigneeName, weeks, workedRows]);
 
   /**
    * Semana destacada: a que contém a data local de hoje. `null` quando o
@@ -511,6 +568,7 @@ export function WeeklyPlanView({
                   disabled={readOnly}
                   isAdmin={isAdmin}
                   isCurrentWeek={i + 1 === currentWeekBucket}
+                  workedHours={workedHoursByBucket.get(i + 1) ?? 0}
                 />
               ))}
             </div>

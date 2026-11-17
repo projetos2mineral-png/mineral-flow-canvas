@@ -148,6 +148,8 @@ import {
 } from "@/lib/board-antecedence";
 import { fetchHiddenAssignees } from "@/lib/board-visibility";
 import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
+import { aggregateWorkedHours, fetchDailyWorkedHours, secondsToHours } from "@/lib/worked-hours";
+import { monthTitleToRange } from "@/lib/worked-hours/period";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -3808,6 +3810,40 @@ function NewLaneDialog({
   );
 }
 
+function LaneHeaderMetric({
+  label,
+  value,
+  valueClassName,
+  compact,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+  compact: boolean;
+}) {
+  return (
+    <div className="flex shrink-0 flex-col items-end leading-none">
+      <span
+        className={cn(
+          "font-semibold tabular-nums text-foreground/75",
+          compact ? "text-[10.5px]" : "text-[9px]",
+          valueClassName,
+        )}
+      >
+        {value}
+      </span>
+      <span
+        className={cn(
+          "mt-0.5 uppercase tracking-wide text-muted-foreground/50",
+          compact ? "text-[8px]" : "text-[7px]",
+        )}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function LaneColumn({
   lane,
   laneId,
@@ -3897,6 +3933,24 @@ function LaneColumn({
       setCapacity(data?.capacity_hours ?? null);
     });
   }, [isMonthly, assigneeName, title]);
+
+  const workedRange = useMemo(() => monthTitleToRange(title), [title]);
+  const { data: workedRows } = useQuery({
+    queryKey: [
+      "dashboard",
+      "worked-hours",
+      "month",
+      normalizeAssigneeName(assigneeName),
+      workedRange?.start ?? "none",
+    ],
+    queryFn: () => fetchDailyWorkedHours(workedRange ?? undefined),
+    enabled: isMonthly && !!workedRange,
+  });
+  const workedByAssignee = useMemo(() => aggregateWorkedHours(workedRows ?? []), [workedRows]);
+  const workedHours = useMemo(
+    () => secondsToHours(workedByAssignee.get(normalizeAssigneeName(assigneeName))?.totalSeconds ?? 0),
+    [assigneeName, workedByAssignee],
+  );
 
   // Horas planejadas da coluna — recalculadas sempre que os cards mudam,
   // portanto atualizam em tempo real ao mover cards entre colunas.
@@ -4091,29 +4145,41 @@ function LaneColumn({
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {isAdmin && isMonthly && (plannedHours > 0 || capacity != null) && (
+              {isAdmin && isMonthly && (plannedHours > 0 || capacity != null || workedHours > 0) && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span
+                      <div
                         className={cn(
-                          "shrink-0 whitespace-nowrap tabular-nums tracking-wide cursor-default select-none font-normal leading-none",
-                          horizontal ? "text-[10.5px]" : "text-[7px]",
-                          overCapacity
-                            ? "text-red-600 dark:text-red-400"
-                            : "text-muted-foreground/55",
+                          "flex shrink-0 cursor-default select-none items-start tabular-nums",
+                          horizontal ? "gap-2.5" : "gap-1.5",
                         )}
                       >
-                        {capacity != null ? formatHoursCompact(capacity) : "—"} /{" "}
-                        {formatHoursCompact(plannedHours)}
-                      </span>
+                        <LaneHeaderMetric
+                          compact={horizontal}
+                          label="Trabalhadas"
+                          value={formatHoursCompact(workedHours)}
+                          valueClassName="text-emerald-600 dark:text-emerald-400"
+                        />
+                        <LaneHeaderMetric
+                          compact={horizontal}
+                          label="Capacidade"
+                          value={capacity != null ? formatHoursCompact(capacity) : "—"}
+                        />
+                        <LaneHeaderMetric
+                          compact={horizontal}
+                          label="Planejadas"
+                          value={formatHoursCompact(plannedHours)}
+                        />
+                      </div>
                     </TooltipTrigger>
                     <TooltipContent
                       side="top"
                       className="text-xs bg-neutral-900 text-white border-neutral-800"
                     >
+                      <p>Trabalhadas: {formatHoursCompact(workedHours)}</p>
                       <p>Capacidade: {capacity != null ? formatHoursCompact(capacity) : "—"}</p>
-                      <p>Planejado: {formatHoursCompact(plannedHours)}</p>
+                      <p>Planejadas: {formatHoursCompact(plannedHours)}</p>
                       {overCapacity && <p>Excedente: {formatHoursCompact(excess)}</p>}
                     </TooltipContent>
                   </Tooltip>
