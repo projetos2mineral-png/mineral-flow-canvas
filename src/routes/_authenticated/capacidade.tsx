@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, X } from "lucide-react";
+import { Check, ChevronsUpDown, RefreshCw, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { RequireLevel } from "@/components/RequireLevel";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -31,6 +32,14 @@ import {
   type CapacityRow,
 } from "@/lib/capacity-overview";
 import { monthlyLaneTitle } from "@/lib/dashboard";
+import {
+  aggregateWorkedHours,
+  fetchDailyWorkedHours,
+  fetchWorkedHoursImports,
+  type WorkedHoursImportRow,
+} from "@/lib/worked-hours";
+import { monthTitleToRange } from "@/lib/worked-hours/period";
+import { importWorkedHoursNow } from "@/lib/worked-hours/import.functions";
 
 export const Route = createFileRoute("/_authenticated/capacidade")({
   head: () => ({
@@ -69,6 +78,42 @@ function CapacityPage() {
   const cards = useQuery({ queryKey: ["dashboard", "cards"], queryFn: () => fetchCards() });
   const demands = useQuery({ queryKey: ["manual-demands"], queryFn: fetchManualDemands });
   const capacities = useQuery({ queryKey: ["dashboard", "capacities"], queryFn: fetchAllCapacities });
+
+  const workedRange = useMemo(
+    () => (month === ALL ? undefined : (monthTitleToRange(month) ?? undefined)),
+    [month],
+  );
+  const worked = useQuery({
+    queryKey: ["dashboard", "worked-hours", month],
+    queryFn: () => fetchDailyWorkedHours(workedRange),
+  });
+  const workedImports = useQuery({
+    queryKey: ["dashboard", "worked-hours-imports"],
+    queryFn: () => fetchWorkedHoursImports(5),
+  });
+  const queryClient = useQueryClient();
+  const importMutation = useMutation({
+    mutationFn: () => importWorkedHoursNow(),
+    onSuccess: (result) => {
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        `Horas importadas: ${result.rowsUpserted} dia(s) atualizado(s), ${result.rowsChanged} alteração(ões).`,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "worked-hours"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "worked-hours-imports"] });
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Falha ao importar horas.");
+    },
+  });
+
+  const workedByUser = useMemo(
+    () => aggregateWorkedHours(worked.data ?? []),
+    [worked.data],
+  );
 
   const loading =
     projects.isLoading || users.isLoading || lanes.isLoading || cards.isLoading || demands.isLoading || capacities.isLoading;
@@ -124,11 +169,12 @@ function CapacityPage() {
       cards: cards.data ?? [],
       demands: demands.data ?? [],
       capacities: capacities.data ?? [],
+      workedHours: workedByUser,
       months: month === ALL ? [] : [month],
     });
     if (selectedPeople.length === 0) return all;
     return all.filter((r) => selectedPeople.includes(r.userName));
-  }, [loading, error, people, users.data, lanes.data, cards.data, demands.data, capacities.data, month, selectedPeople]);
+  }, [loading, error, people, users.data, lanes.data, cards.data, demands.data, capacities.data, workedByUser, month, selectedPeople]);
 
   if (loading) return <LoadingScreen label="Carregando capacidade…" />;
 
@@ -250,6 +296,24 @@ function CapacityPage() {
         )}
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-foreground">Horas trabalhadas · Runrun.it</p>
+          <p className="text-xs text-muted-foreground">
+            {formatLastImport(workedImports.data?.[0])}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => importMutation.mutate()}
+          disabled={importMutation.isPending}
+        >
+          <RefreshCw className={cn("mr-2 h-4 w-4", importMutation.isPending && "animate-spin")} />
+          {importMutation.isPending ? "Importando…" : "Importar horas agora"}
+        </Button>
+      </div>
+
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -258,6 +322,7 @@ function CapacityPage() {
                 <th className="px-4 py-2 text-left font-medium">Colaborador</th>
                 <th className="px-4 py-2 text-right font-medium">Disponíveis</th>
                 <th className="px-4 py-2 text-right font-medium">Planejadas</th>
+                <th className="px-4 py-2 text-right font-medium">Trabalhadas</th>
                 <th className="px-4 py-2 text-left font-medium w-[220px]">Ocupação</th>
                 <th className="px-4 py-2 text-left font-medium">Indicador</th>
               </tr>
@@ -265,7 +330,7 @@ function CapacityPage() {
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                     Nenhum colaborador para os filtros selecionados.
                   </td>
                 </tr>
@@ -277,6 +342,22 @@ function CapacityPage() {
                       {r.availableHours > 0 ? formatHours(r.availableHours) : "—"}
                     </td>
                     <td className="px-4 py-2 text-right">{formatHours(r.estimatedHours)}</td>
+                    <td className="px-4 py-2 text-right">
+                      {r.workedDays > 0 ? (
+                        <div>
+                          <div>{formatHours(r.workedHours)}</div>
+                          <div
+                            className="text-[11px] text-muted-foreground"
+                            title="Horas manuais e automáticas importadas do Runrun.it"
+                          >
+                            {formatHours(r.workedManualHours)} manual ·{" "}
+                            {formatHours(r.workedAutomaticHours)} auto
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2">
                       {r.occupancy === null ? (
                         <span className="text-muted-foreground">—</span>
@@ -310,8 +391,32 @@ function CapacityPage() {
       <p className="text-xs text-muted-foreground">
         Horas disponíveis vêm da capacidade mensal cadastrada nas filas da Central de Planejamento. Horas
         planejadas somam os projetos do Runrun.it posicionados em filas mensais e as horas individuais das
-        demandas avulsas.
+        demandas avulsas. Horas trabalhadas são importadas do relatório de horas do Runrun.it e não alteram
+        a capacidade nem as horas planejadas.
       </p>
     </div>
   );
+}
+
+const IMPORT_STATUS_LABEL: Record<WorkedHoursImportRow["status"], string> = {
+  running: "Em andamento",
+  completed: "Concluída",
+  completed_with_warnings: "Concluída com avisos",
+  failed: "Falhou",
+};
+
+function formatLastImport(row: WorkedHoursImportRow | undefined): string {
+  if (!row) return "Nenhuma importação registrada. Use o botão para importar o mês atual.";
+  const finished = row.finished_at
+    ? new Date(row.finished_at).toLocaleString("pt-BR")
+    : "sem término";
+  const period = `${row.period_start.split("-").reverse().join("/")} a ${row.period_end
+    .split("-")
+    .reverse()
+    .join("/")}`;
+  const warnings =
+    row.status === "completed_with_warnings"
+      ? ` · ${row.rows_without_mapping} lançamento(s) sem vínculo e ${row.rows_without_user} lançamento(s) sem usuário`
+      : "";
+  return `Última importação: ${IMPORT_STATUS_LABEL[row.status]} · ${period} · ${finished} · ${row.rows_upserted} dia(s) atualizado(s)${warnings}`;
 }

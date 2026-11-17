@@ -21,6 +21,7 @@ import { Route as AuthenticatedPlanejamentoRouteImport } from './routes/_authent
 import { Route as AuthenticatedQuemFazOQueRouteImport } from './routes/_authenticated/quem-faz-o-que'
 import { Route as AuthenticatedSelecionarProjetosRouteImport } from './routes/_authenticated/selecionar-projetos'
 import { Route as ApiPublicSyncOrchestratorRouteImport } from './routes/api/public/sync-orchestrator'
+import { Route as ApiPublicWorkedHoursOrchestratorRouteImport } from './routes/api/public/worked-hours-orchestrator'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -87,6 +88,12 @@ const ApiPublicSyncOrchestratorRoute =
     path: '/api/public/sync-orchestrator',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicWorkedHoursOrchestratorRoute =
+  ApiPublicWorkedHoursOrchestratorRouteImport.update({
+    id: '/api/public/worked-hours-orchestrator',
+    path: '/api/public/worked-hours-orchestrator',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
   '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
+  '/api/public/worked-hours-orchestrator': typeof ApiPublicWorkedHoursOrchestratorRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -113,6 +121,7 @@ export interface FileRoutesByTo {
   '/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
   '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
+  '/api/public/worked-hours-orchestrator': typeof ApiPublicWorkedHoursOrchestratorRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -128,6 +137,7 @@ export interface FileRoutesById {
   '/_authenticated/quem-faz-o-que': typeof AuthenticatedQuemFazOQueRoute
   '/_authenticated/selecionar-projetos': typeof AuthenticatedSelecionarProjetosRoute
   '/api/public/sync-orchestrator': typeof ApiPublicSyncOrchestratorRoute
+  '/api/public/worked-hours-orchestrator': typeof ApiPublicWorkedHoursOrchestratorRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/quem-faz-o-que'
     | '/selecionar-projetos'
     | '/api/public/sync-orchestrator'
+    | '/api/public/worked-hours-orchestrator'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/quem-faz-o-que'
     | '/selecionar-projetos'
     | '/api/public/sync-orchestrator'
+    | '/api/public/worked-hours-orchestrator'
   id:
     | '__root__'
     | '/'
@@ -170,6 +182,7 @@ export interface FileRouteTypes {
     | '/_authenticated/quem-faz-o-que'
     | '/_authenticated/selecionar-projetos'
     | '/api/public/sync-orchestrator'
+    | '/api/public/worked-hours-orchestrator'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -178,6 +191,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicSyncOrchestratorRoute: typeof ApiPublicSyncOrchestratorRoute
+  ApiPublicWorkedHoursOrchestratorRoute: typeof ApiPublicWorkedHoursOrchestratorRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -266,6 +280,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicSyncOrchestratorRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/worked-hours-orchestrator': {
+      id: '/api/public/worked-hours-orchestrator'
+      path: '/api/public/worked-hours-orchestrator'
+      fullPath: '/api/public/worked-hours-orchestrator'
+      preLoaderRoute: typeof ApiPublicWorkedHoursOrchestratorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -298,6 +319,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicSyncOrchestratorRoute: ApiPublicSyncOrchestratorRoute,
+  ApiPublicWorkedHoursOrchestratorRoute: ApiPublicWorkedHoursOrchestratorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

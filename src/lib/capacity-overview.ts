@@ -10,12 +10,14 @@ import {
   isMonthlyLaneTitle,
   monthlyLaneTitle,
   monthlyTitleToDateISO,
+  normalizeAssigneeName,
   type DashboardUser,
   type Lane,
   type ProjectCardRow,
 } from "@/lib/dashboard";
 import { buildDemandBoardCards } from "@/lib/dashboard-demands";
 import type { ManualDemand } from "@/lib/manual-demands";
+import type { WorkedHoursSummary } from "@/lib/worked-hours";
 
 export interface CapacityRow {
   /** Nome do colaborador (dashboard_users.name). */
@@ -28,6 +30,17 @@ export interface CapacityRow {
   projectHours: number;
   /** Horas vindas de demandas avulsas. */
   demandHours: number;
+  /**
+   * Horas efetivamente trabalhadas (importadas do Runrun.it).
+   * Informação independente das horas planejadas.
+   */
+  workedHours: number;
+  /** Parcela manual das horas trabalhadas. */
+  workedManualHours: number;
+  /** Parcela automática das horas trabalhadas. */
+  workedAutomaticHours: number;
+  /** Dias com lançamento de horas no período. */
+  workedDays: number;
   /** Ocupação em % (null quando não há capacidade cadastrada). */
   occupancy: number | null;
   /** Saldo = disponíveis - estimadas (null sem capacidade cadastrada). */
@@ -99,6 +112,8 @@ export interface BuildCapacityInput {
   cards: ProjectCardRow[];
   demands: ManualDemand[];
   capacities: UserCapacityRow[];
+  /** Horas efetivamente trabalhadas agregadas por responsável (opcional). */
+  workedHours?: Map<string, WorkedHoursSummary>;
   /** Meses considerados. Vazio = todos. */
   months: string[];
 }
@@ -109,7 +124,7 @@ function toNumber(v: unknown): number {
 }
 
 export function buildCapacityRows(input: BuildCapacityInput): CapacityRow[] {
-  const { lanes, cards, demands, capacities, users = [] } = input;
+  const { lanes, cards, demands, capacities, users = [], workedHours } = input;
   const monthFilter = input.months.length ? new Set(input.months) : null;
   const inPeriod = (title: string) => (monthFilter ? monthFilter.has(title) : true);
 
@@ -141,6 +156,10 @@ export function buildCapacityRows(input: BuildCapacityInput): CapacityRow[] {
       estimatedHours: 0,
       projectHours: 0,
       demandHours: 0,
+      workedHours: 0,
+      workedManualHours: 0,
+      workedAutomaticHours: 0,
+      workedDays: 0,
       occupancy: null,
       balance: null,
       status: "sem-capacidade",
@@ -184,6 +203,19 @@ export function buildCapacityRows(input: BuildCapacityInput): CapacityRow[] {
     const r = rows.get(responsibleName);
     if (r) {
       r.demandHours += toNumber(d.ownHours);
+    }
+  }
+
+  // Horas efetivamente trabalhadas (importadas do Runrun.it), independentes
+  // das horas planejadas. A conversão para horas ocorre só aqui, na leitura.
+  if (workedHours) {
+    for (const r of rows.values()) {
+      const summary = workedHours.get(normalizeAssigneeName(r.userName));
+      if (!summary) continue;
+      r.workedHours = summary.totalSeconds / 3600;
+      r.workedManualHours = summary.manualSeconds / 3600;
+      r.workedAutomaticHours = summary.automaticSeconds / 3600;
+      r.workedDays = summary.days;
     }
   }
 
