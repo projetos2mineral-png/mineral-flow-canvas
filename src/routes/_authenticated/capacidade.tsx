@@ -294,24 +294,20 @@ function CapacityPage() {
             ))}
           </div>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto shrink-0"
-          onClick={() => importMutation.mutate()}
-          disabled={importMutation.isPending}
-        >
-          <RefreshCw className={cn("mr-2 h-4 w-4", importMutation.isPending && "animate-spin")} />
-          {importMutation.isPending ? "Importando…" : "Importar horas agora"}
-        </Button>
+        <div className="ml-auto flex shrink-0 flex-col items-end gap-1">
+          <span className="text-[11px] tabular-nums text-muted-foreground">
+            {formatLastImport(workedImports.data?.[0])}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => importMutation.mutate()}
+            disabled={importMutation.isPending}
+          >
+            <RefreshCw className={cn("mr-2 h-4 w-4", importMutation.isPending && "animate-spin")} />
+            {importMutation.isPending ? "Importando…" : "Importar horas agora"}
+          </Button>
+        </div>
       </div>
-
-      <p
-        className="-mt-4 truncate text-xs text-muted-foreground"
-        title={formatLastImport(workedImports.data?.[0])}
-      >
-        {formatLastImport(workedImports.data?.[0])}
-      </p>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -389,15 +385,10 @@ function CapacityPage() {
 }
 
 function formatLastImport(row: WorkedHoursImportRow | undefined): string {
-  if (!row) return "Nenhuma importação realizada";
-  const ref = row.finished_at ?? row.started_at;
-  let when = "—";
-  if (ref) {
-    const d = new Date(ref);
-    when = `${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
-  }
-  const parts = [`Última atualização: ${when}`, `${row.rows_upserted} registros importados`];
-  if (row.rows_without_mapping > 0) parts.push(`${row.rows_without_mapping} sem vínculo`);
-  if (row.status === "completed_with_warnings") parts.push("com avisos");
-  return parts.join(" · ");
+  const ref = row ? row.finished_at ?? row.started_at : null;
+  if (!ref) return "Nenhuma importação";
+  const d = new Date(ref);
+  const date = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+  return `${date} às ${time}`;
 }
