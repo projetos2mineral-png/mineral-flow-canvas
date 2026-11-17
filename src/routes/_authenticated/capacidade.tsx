@@ -294,28 +294,24 @@ function CapacityPage() {
             ))}
           </div>
         )}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
-        <p className="text-sm font-medium text-foreground">Horas trabalhadas · Runrun.it</p>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
-          <p
-            className="min-w-0 truncate text-xs text-muted-foreground"
-            title={formatLastImport(workedImports.data?.[0])}
-          >
-            {formatLastImport(workedImports.data?.[0])}
-          </p>
-          <Button
+        <Button
           size="sm"
           variant="outline"
+          className="ml-auto shrink-0"
           onClick={() => importMutation.mutate()}
           disabled={importMutation.isPending}
         >
           <RefreshCw className={cn("mr-2 h-4 w-4", importMutation.isPending && "animate-spin")} />
           {importMutation.isPending ? "Importando…" : "Importar horas agora"}
-          </Button>
-        </div>
+        </Button>
       </div>
+
+      <p
+        className="-mt-4 truncate text-xs text-muted-foreground"
+        title={formatLastImport(workedImports.data?.[0])}
+      >
+        {formatLastImport(workedImports.data?.[0])}
+      </p>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
@@ -392,25 +388,16 @@ function CapacityPage() {
   );
 }
 
-const IMPORT_STATUS_LABEL: Record<WorkedHoursImportRow["status"], string> = {
-  running: "Em andamento",
-  completed: "Concluída",
-  completed_with_warnings: "Concluída com avisos",
-  failed: "Falhou",
-};
-
 function formatLastImport(row: WorkedHoursImportRow | undefined): string {
-  if (!row) return "Nenhuma importação registrada. Use o botão para importar o mês atual.";
-  const finished = row.finished_at
-    ? new Date(row.finished_at).toLocaleString("pt-BR")
-    : "sem término";
-  const period = `${row.period_start.split("-").reverse().join("/")} a ${row.period_end
-    .split("-")
-    .reverse()
-    .join("/")}`;
-  const warnings =
-    row.status === "completed_with_warnings"
-      ? ` · ${row.rows_without_mapping} lançamento(s) sem vínculo e ${row.rows_without_user} lançamento(s) sem usuário`
-      : "";
-  return `Última importação: ${IMPORT_STATUS_LABEL[row.status]} · ${period} · ${finished} · ${row.rows_upserted} dia(s) atualizado(s)${warnings}`;
+  if (!row) return "Nenhuma importação realizada";
+  const ref = row.finished_at ?? row.started_at;
+  let when = "—";
+  if (ref) {
+    const d = new Date(ref);
+    when = `${d.toLocaleDateString("pt-BR")} às ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  }
+  const parts = [`Última atualização: ${when}`, `${row.rows_upserted} registros importados`];
+  if (row.rows_without_mapping > 0) parts.push(`${row.rows_without_mapping} sem vínculo`);
+  if (row.status === "completed_with_warnings") parts.push("com avisos");
+  return parts.join(" · ");
 }
