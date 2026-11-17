@@ -297,13 +297,15 @@ function CapacityPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3">
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium text-foreground">Horas trabalhadas · Runrun.it</p>
-          <p className="text-xs text-muted-foreground">
+        <p className="text-sm font-medium text-foreground">Horas trabalhadas · Runrun.it</p>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-3">
+          <p
+            className="min-w-0 truncate text-xs text-muted-foreground"
+            title={formatLastImport(workedImports.data?.[0])}
+          >
             {formatLastImport(workedImports.data?.[0])}
           </p>
-        </div>
-        <Button
+          <Button
           size="sm"
           variant="outline"
           onClick={() => importMutation.mutate()}
@@ -311,7 +313,8 @@ function CapacityPage() {
         >
           <RefreshCw className={cn("mr-2 h-4 w-4", importMutation.isPending && "animate-spin")} />
           {importMutation.isPending ? "Importando…" : "Importar horas agora"}
-        </Button>
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -344,16 +347,7 @@ function CapacityPage() {
                     <td className="px-4 py-2 text-right">{formatHours(r.estimatedHours)}</td>
                     <td className="px-4 py-2 text-right">
                       {r.workedDays > 0 ? (
-                        <div>
-                          <div>{formatHours(r.workedHours)}</div>
-                          <div
-                            className="text-[11px] text-muted-foreground"
-                            title="Horas manuais e automáticas importadas do Runrun.it"
-                          >
-                            {formatHours(r.workedManualHours)} manual ·{" "}
-                            {formatHours(r.workedAutomaticHours)} auto
-                          </div>
-                        </div>
+                        formatHours(r.workedHours)
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
