@@ -83,6 +83,7 @@ export type Lane = {
   assignee_name: string;
   title: string;
   position: number;
+  reference_month?: string | null;
 };
 
 /**
@@ -258,7 +259,7 @@ export async function fetchDashboardProjects(): Promise<DashboardProject[]> {
 }
 
 // ---------- Monthly lane helpers ----------
-const MONTH_NAMES_PT = [
+export const MONTH_NAMES_PT = [
   "Janeiro",
   "Fevereiro",
   "Março",
@@ -278,20 +279,7 @@ const MONTH_NAMES_PT = [
  * Útil para salvar na coluna reference_month (tipo date).
  */
 export function monthlyTitleToDateISO(title: string): string | null {
-  const parts = title.split("/");
-  if (parts.length !== 2) return null;
-  const monthName = parts[0].trim();
-  const year = parseInt(parts[1].trim(), 10);
-  if (isNaN(year)) return null;
-
-  const monthIndex = MONTH_NAMES_PT.findIndex(
-    (m) => m.toLowerCase() === monthName.toLowerCase()
-  );
-  if (monthIndex === -1) return null;
-
-  // monthIndex is 0-based, ISO month should be 1-based and padded
-  const monthStr = String(monthIndex + 1).padStart(2, "0");
-  return `${year}-${monthStr}-01`;
+  return parseMonthlyLaneTitle(title)?.dateISO ?? null;
 }
 
 
@@ -309,6 +297,12 @@ export function monthlyLaneTitle(dateISO: string): string {
 export type MonthlyPeriod = {
   year: number;
   month: number;
+};
+
+export type ParsedMonthlyLaneTitle = {
+  period: MonthlyPeriod;
+  title: string;
+  dateISO: string;
 };
 
 export type LanePeriodInfo = {
@@ -383,6 +377,59 @@ function validMonth(value: number): boolean {
 
 export function monthPeriodKey(period: MonthlyPeriod): string {
   return `${period.year}-${String(period.month).padStart(2, "0")}`;
+}
+
+export function monthlyTitleFromPeriod(period: MonthlyPeriod): string {
+  return `${MONTH_NAMES_PT[period.month - 1]}/${period.year}`;
+}
+
+export function parseMonthlyLaneTitle(
+  title: string | null | undefined,
+): ParsedMonthlyLaneTitle | null {
+  const normalized = (title ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[/_.-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+  const match = /^([a-z]+) (\d{4})$/.exec(normalized);
+  if (!match) return null;
+
+  const month = MONTH_TOKEN_TO_NUMBER.get(match[1]);
+  const year = Number(match[2]);
+  if (!month || !validYear(year)) return null;
+
+  const period = { year, month };
+  return {
+    period,
+    title: monthlyTitleFromPeriod(period),
+    dateISO: `${year}-${String(month).padStart(2, "0")}-01`,
+  };
+}
+
+export function normalizeLaneTitle(title: string): string {
+  const value = title.replace(/\u00a0/g, " ").trim();
+  return parseMonthlyLaneTitle(value)?.title ?? value;
+}
+
+export function findMonthlyLaneConflict(
+  lanes: Lane[],
+  assigneeName: string,
+  title: string,
+  excludeLaneId?: string | null,
+): Lane | null {
+  const parsed = parseMonthlyLaneTitle(title);
+  if (!parsed) return null;
+  return (
+    lanes.find(
+      (lane) =>
+        lane.id !== excludeLaneId &&
+        laneBelongsToAssignee(lane, assigneeName) &&
+        parseMonthlyLaneTitle(lane.title)?.dateISO === parsed.dateISO,
+    ) ?? null
+  );
 }
 
 export function parseMonthlyPeriodFromDate(
@@ -658,22 +705,102 @@ export async function saveManualEstimate(
   return data.manual_estimated_hours == null ? null : Number(data.manual_estimated_hours);
 }
 
+export class MonthlyLaneConflictError extends Error {
+  readonly existingLane: Lane;
+
+  constructor(existingLane: Lane) {
+    super(
+      `A fila mensal "${existingLane.title}" já existe para ${existingLane.assignee_name}.`,
+    );
+    this.name = "MonthlyLaneConflictError";
+    this.existingLane = existingLane;
+  }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "23505";
+}
+
+async function resolveLaneConflict(
+  assigneeName: string,
+  title: string,
+  excludeLaneId?: string | null,
+): Promise<Lane | null> {
+  const lanes = await fetchLanes();
+  const monthly = findMonthlyLaneConflict(lanes, assigneeName, title, excludeLaneId);
+  if (monthly) return monthly;
+  const titleKey = title.trim().toLocaleLowerCase("pt-BR");
+  return (
+    lanes.find(
+      (lane) =>
+        lane.id !== excludeLaneId &&
+        laneBelongsToAssignee(lane, assigneeName) &&
+        lane.title.trim().toLocaleLowerCase("pt-BR") === titleKey,
+    ) ?? null
+  );
+}
+
 export async function createLane(assignee_name: string, title: string, position: number): Promise<Lane> {
+  const normalizedTitle = normalizeLaneTitle(title);
+  if (!normalizedTitle) throw new Error("Informe um nome para a fila.");
+
+  if (parseMonthlyLaneTitle(normalizedTitle)) {
+    const conflict = findMonthlyLaneConflict(await fetchLanes(), assignee_name, normalizedTitle);
+    if (conflict) throw new MonthlyLaneConflictError(conflict);
+  }
+
   const { data, error } = await (supabase as any)
     .from("dashboard_lanes")
-    .insert({ assignee_name, title, position })
+    .insert({ assignee_name, title: normalizedTitle, position })
     .select("id,assignee_name,title,position")
     .single();
-  if (error) throw error;
+  if (error) {
+    if (isUniqueViolation(error)) {
+      const conflict = await resolveLaneConflict(assignee_name, normalizedTitle);
+      if (conflict) throw new MonthlyLaneConflictError(conflict);
+    }
+    throw error;
+  }
   return data as Lane;
 }
 
 export async function updateLane(id: string, patch: Partial<Pick<Lane, "title" | "position">>) {
+  const normalizedPatch = { ...patch };
+  if (typeof normalizedPatch.title === "string") {
+    normalizedPatch.title = normalizeLaneTitle(normalizedPatch.title);
+    if (!normalizedPatch.title) throw new Error("Informe um nome para a fila.");
+    const lanes = await fetchLanes();
+    const lane = lanes.find((item) => item.id === id);
+    if (lane) {
+      const conflict = findMonthlyLaneConflict(
+        lanes,
+        lane.assignee_name,
+        normalizedPatch.title,
+        id,
+      );
+      if (conflict) throw new MonthlyLaneConflictError(conflict);
+    }
+  }
+
   const { error } = await (supabase as any)
     .from("dashboard_lanes")
-    .update(patch)
+    .update(normalizedPatch)
     .eq("id", id);
-  if (error) throw error;
+  if (error) {
+    if (isUniqueViolation(error) && typeof normalizedPatch.title === "string") {
+      const lanes = await fetchLanes();
+      const lane = lanes.find((item) => item.id === id);
+      if (lane) {
+        const conflict = await resolveLaneConflict(
+          lane.assignee_name,
+          normalizedPatch.title,
+          id,
+        );
+        if (conflict) throw new MonthlyLaneConflictError(conflict);
+      }
+    }
+    throw error;
+  }
 }
 
 export async function deleteLane(id: string) {
@@ -838,9 +965,6 @@ export async function updateUserActive(id: string, is_active: boolean) {
 }
 
 // ---------- Monthly lane bootstrap ----------
-/**
- * Meses a garantir por padrão no quadro de cada responsável (Jul → Dez 2026).
- */
 export const DEFAULT_MONTHLY_LANE_TITLES = [
   "Julho/2026",
   "Agosto/2026",
@@ -850,12 +974,23 @@ export const DEFAULT_MONTHLY_LANE_TITLES = [
   "Dezembro/2026",
 ] as const;
 
-// Regex para detectar títulos no formato "Mês/AAAA" (pt-BR)
-const MONTHLY_TITLE_REGEX =
-  /^(Janeiro|Fevereiro|Março|Marco|Abril|Maio|Junho|Julho|Agosto|Setembro|Outubro|Novembro|Dezembro)\/\d{4}$/i;
+const DEFAULT_MONTHLY_LANE_COUNT = 6;
+
+export function defaultMonthlyLaneTitles(today = new Date()): string[] {
+  const titles: string[] = [];
+  for (let index = 0; index < DEFAULT_MONTHLY_LANE_COUNT; index += 1) {
+    const date = new Date(today.getFullYear(), today.getMonth() + index, 1);
+    titles.push(
+      monthlyLaneTitle(
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`,
+      ),
+    );
+  }
+  return titles;
+}
 
 export function isMonthlyLaneTitle(title: string): boolean {
-  return MONTHLY_TITLE_REGEX.test(title.trim());
+  return parseMonthlyLaneTitle(title) !== null;
 }
 
 // Guard em memória (por sessão) para evitar múltiplas chamadas de bootstrap
@@ -880,7 +1015,7 @@ export async function ensureDefaultMonthlyLanes(
   // já tem filas, respeita exclusões feitas pelo usuário e não recria nada.
   const own = existingLanes.filter((l) => sameAssigneeName(l.assignee_name, assignee_name));
   if (own.length > 0) return false;
-  const missing = [...DEFAULT_MONTHLY_LANE_TITLES];
+  const missing = defaultMonthlyLaneTitles();
   const basePosition = existingLanes
     .filter((l) => sameAssigneeName(l.assignee_name, assignee_name))
     .reduce((max, l) => Math.max(max, l.position ?? 0), -1);
@@ -918,8 +1053,9 @@ export async function ensureDefaultMonthlyLanes(
 export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
   const byKey = new Map<string, Lane[]>();
   for (const l of lanes) {
-    if (!isMonthlyLaneTitle(l.title)) continue;
-    const k = `${normalizeAssigneeName(l.assignee_name)}::${l.title.trim().toLowerCase()}`;
+    const parsed = parseMonthlyLaneTitle(l.title);
+    if (!parsed) continue;
+    const k = `${canonicalAssigneeKey(l.assignee_name)}::${parsed.dateISO}`;
     const arr = byKey.get(k) ?? [];
     arr.push(l);
     byKey.set(k, arr);

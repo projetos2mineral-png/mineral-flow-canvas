@@ -79,6 +79,11 @@ import {
   buildLanePeriodIndex,
   findLaneForCard,
   canonicalAssigneeKey,
+  normalizeLaneTitle,
+  parseMonthlyLaneTitle,
+  findMonthlyLaneConflict,
+  MonthlyLaneConflictError,
+  MONTH_NAMES_PT,
   type DashboardProject,
   type Lane,
   type LaneMatchReason,
@@ -2000,9 +2005,9 @@ function DashboardPage() {
   const loading = projectsQ.isLoading || lanesQ.isLoading || cardsQ.isLoading;
   const error = projectsQ.error || lanesQ.error || cardsQ.error;
 
-  // Ao aparecer um responsável pela primeira vez no Dashboard, criar filas
-  // mensais padrão (Julho/2026 … Dezembro/2026) automaticamente. Não roda
-  // para usuários somente-leitura para evitar escrever no banco sem permissão.
+  // Ao aparecer um responsável pela primeira vez no Dashboard, criar as filas
+  // dos próximos seis meses automaticamente. Não roda para usuários
+  // somente-leitura para evitar escrever no banco sem permissão.
   useEffect(() => {
     if (readOnly) return;
     if (assignees.length === 0) return;
@@ -2365,6 +2370,8 @@ function AssigneeBoard({
 
   // ---- Planejamento semanal (aberto pelo ↗ no cabeçalho da fila mensal) ----
   const [weeklyLane, setWeeklyLane] = useState<Lane | null>(null);
+
+  const [isNewLaneDialogOpen, setIsNewLaneDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!assignee || assignee === UNASSIGNED) return;
@@ -3050,16 +3057,24 @@ function AssigneeBoard({
     }
   };
 
-  const handleAddLane = async () => {
-    const title = window.prompt("Nome da nova fila:", "Nova Fila");
-    if (!title) return;
-    try {
-      await createLane(assignee, title, lanesSorted.length);
-      await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
-      toast.success("Fila criada");
-    } catch (e) {
-      toast.error("Falha ao criar fila: " + (e as Error).message);
-    }
+  const handleAddLane = () => {
+    setIsNewLaneDialogOpen(true);
+  };
+
+  const handleCreateLane = async (title: string) => {
+    const lane = await createLane(assignee, title, lanesSorted.length);
+    await qc.invalidateQueries({ queryKey: ["dashboard", "lanes"] });
+    toast.success(`Fila "${lane.title}" criada`);
+    return lane;
+  };
+
+  const handleOpenExistingLane = (laneId: string) => {
+    setIsNewLaneDialogOpen(false);
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-lane-id="${laneId}"]`)
+        ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    });
   };
 
   const handleStatusChange = async (it: DashboardCard, status: CardStatus) => {
@@ -3459,6 +3474,15 @@ function AssigneeBoard({
         }}
       />
 
+      <NewLaneDialog
+        open={isNewLaneDialogOpen}
+        onOpenChange={setIsNewLaneDialogOpen}
+        assignee={assignee}
+        lanes={lanes}
+        onCreate={handleCreateLane}
+        onOpenExisting={handleOpenExistingLane}
+      />
+
       <Dialog open={isBoardSettingsOpen} onOpenChange={setIsBoardSettingsOpen}>
         <DialogContent className="sm:max-w-[420px]">
           <DialogHeader>
@@ -3531,6 +3555,251 @@ function AssigneeBoard({
         />
       )}
     </>
+  );
+}
+
+function NewLaneDialog({
+  open,
+  onOpenChange,
+  assignee,
+  lanes,
+  onCreate,
+  onOpenExisting,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  assignee: string;
+  lanes: Lane[];
+  onCreate: (title: string) => Promise<Lane>;
+  onOpenExisting: (laneId: string) => void;
+}) {
+  const [mode, setMode] = useState<"monthly" | "custom">("monthly");
+  const [month, setMonth] = useState("1");
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [customTitle, setCustomTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [serverConflict, setServerConflict] = useState<Lane | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const next = new Date();
+    next.setDate(1);
+    next.setMonth(next.getMonth() + 1);
+    setMode("monthly");
+    setMonth(String(next.getMonth() + 1));
+    setYear(String(next.getFullYear()));
+    setCustomTitle("");
+    setSaving(false);
+    setError(null);
+    setServerConflict(null);
+  }, [open]);
+
+  const yearOptions = useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: 12 }, (_, index) => current - 2 + index);
+  }, []);
+
+  const monthlyValue = useMemo(() => {
+    const monthNumber = Number(month);
+    const yearNumber = Number(year);
+    if (!Number.isInteger(monthNumber) || !Number.isInteger(yearNumber)) return "";
+    return monthlyLaneTitle(
+      `${yearNumber}-${String(monthNumber).padStart(2, "0")}-01`,
+    );
+  }, [month, year]);
+
+  const customValue = normalizeLaneTitle(customTitle);
+  const finalTitle = mode === "monthly" ? monthlyValue : customValue;
+  const customParsed = parseMonthlyLaneTitle(customValue);
+  const normalizedHint =
+    mode === "custom" && customParsed && customParsed.title !== customTitle.trim()
+      ? customParsed.title
+      : null;
+
+  useEffect(() => {
+    setServerConflict(null);
+  }, [finalTitle]);
+
+  const conflict = useMemo(
+    () =>
+      finalTitle
+        ? findMonthlyLaneConflict(lanes, assignee, finalTitle)
+        : null,
+    [assignee, finalTitle, lanes],
+  );
+  const conflictLane = serverConflict ?? conflict;
+  const canSubmit = Boolean(finalTitle) && !conflictLane && !saving;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onCreate(finalTitle);
+      onOpenChange(false);
+    } catch (e) {
+      if (e instanceof MonthlyLaneConflictError) {
+        setServerConflict(e.existingLane);
+        setError(e.message);
+      } else {
+        setError((e as Error).message);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>Adicionar fila</DialogTitle>
+          <DialogDescription>
+            Crie uma fila mensal padronizada ou uma fila personalizada para{" "}
+            <span className="font-medium text-foreground">{assignee}</span>.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setMode("monthly")}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                mode === "monthly"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <CalendarDays className="h-4 w-4" />
+              Fila mensal
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("custom")}
+              className={cn(
+                "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                mode === "custom"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Plus className="h-4 w-4" />
+              Fila personalizada
+            </button>
+          </div>
+
+          {mode === "monthly" ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-[1fr_120px] gap-3">
+                <div className="space-y-1.5">
+                  <span className="text-sm font-medium">Mês</span>
+                  <Select value={month} onValueChange={setMonth}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONTH_NAMES_PT.map((name, index) => (
+                        <SelectItem key={name} value={String(index + 1)}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <span className="text-sm font-medium">Ano</span>
+                  <Select value={year} onValueChange={setYear}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearOptions.map((option) => (
+                        <SelectItem key={option} value={String(option)}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                Prévia:{" "}
+                <span className="font-semibold text-foreground">{monthlyValue || "—"}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <span className="text-sm font-medium">Nome da fila</span>
+              <Input
+                value={customTitle}
+                onChange={(event) => setCustomTitle(event.target.value)}
+                placeholder="Ex.: Demandas especiais"
+                autoFocus
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void handleSubmit();
+                }}
+              />
+              {customTitle.trim() && (
+                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                  Prévia:{" "}
+                  <span className="font-semibold text-foreground">{customValue || "—"}</span>
+                </div>
+              )}
+              {normalizedHint && (
+                <p className="text-xs text-muted-foreground">
+                  Fila mensal reconhecida e padronizada automaticamente como{" "}
+                  <span className="font-medium text-foreground">{normalizedHint}</span>.
+                </p>
+              )}
+            </div>
+          )}
+
+          {conflictLane && (
+            <div
+              role="alert"
+              className="rounded-md border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100"
+            >
+              <div className="flex gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <div className="space-y-1">
+                  <p>
+                    A fila mensal <span className="font-medium">{conflictLane.title}</span> já
+                    existe para este responsável.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-sm"
+                    onClick={() => onOpenExisting(conflictLane.id)}
+                  >
+                    Abrir fila existente
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {error && !conflictLane && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            Cancelar
+          </Button>
+          <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
+            {saving ? "Criando..." : "Criar fila"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -3667,6 +3936,7 @@ function LaneColumn({
   return (
     <div
       ref={laneSetNodeRef}
+      data-lane-id={laneId}
       style={{ width: horizontal ? undefined : "var(--kb-col)", ...laneStyle }}
       className={cn(
         "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",

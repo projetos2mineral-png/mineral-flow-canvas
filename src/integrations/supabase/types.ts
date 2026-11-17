@@ -20,6 +20,7 @@ export type Database = {
           created_at: string | null
           id: string
           position: number | null
+          reference_month: string | null
           title: string
           updated_at: string | null
         }
@@ -28,6 +29,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           position?: number | null
+          reference_month?: string | null
           title: string
           updated_at?: string | null
         }
@@ -36,6 +38,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           position?: number | null
+          reference_month?: string | null
           title?: string
           updated_at?: string | null
         }
