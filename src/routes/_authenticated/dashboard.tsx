@@ -4073,11 +4073,11 @@ function LaneHeaderMetric({
   compact: boolean;
 }) {
   return (
-    <div className={cn("flex shrink-0 flex-col leading-none", compact ? "items-end" : "items-start")}>
+    <div className={cn("flex shrink-0 flex-col leading-none", compact ? "items-end" : "items-center text-center")}>
       <span
         className={cn(
           "font-semibold tabular-nums text-foreground/75",
-          compact ? "text-[10.5px]" : "text-[13px] text-foreground",
+          compact ? "text-[6.5px]" : "text-[8px] text-foreground",
           valueClassName,
         )}
       >
@@ -4348,11 +4348,6 @@ function LaneColumn({
                 </Tooltip>
               </TooltipProvider>
               )}
-              {isMonthly && (
-                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[9px] font-medium text-muted-foreground">
-                  Fila mensal
-                </span>
-              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4419,7 +4414,7 @@ function LaneColumn({
                       <div
                         className={cn(
                           "flex shrink-0 cursor-default select-none items-start tabular-nums",
-                          horizontal ? "gap-2.5" : "order-last basis-full grid grid-cols-3 gap-2 border-t border-border/40 pt-2 mt-1",
+                          horizontal ? "gap-2.5" : "order-last basis-full grid grid-cols-3 justify-items-center gap-2 border-t border-border/40 pt-2 mt-1",
                         )}
                       >
                         <LaneHeaderMetric
