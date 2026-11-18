@@ -3185,8 +3185,86 @@ function AssigneeBoard({
     await qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
   };
 
+  /**
+   * Envia TODOS os cards do projeto (todos os quadros) para a fila mensal da
+   * data de entrega, respeitando a antecedência de cada quadro. Cards
+   * suspensos voltam para "a iniciar"; concluídos não são alterados.
+   */
+  const moveProjectToDeliveryAllBoards = async (it: DashboardCard) => {
+    const desired = it.project.desired_delivery_date as string | null;
+    if (!desired) {
+      toast.warning("Este projeto não tem data de entrega.");
+      return;
+    }
+    const pid = it.runrunit_project_id;
+    try {
+      const { data: rows, error } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select("id,assignee_name,status,lane_id")
+        .eq("runrunit_project_id", pid);
+      if (error) throw new Error(error.message);
+      const cardsRows = (rows ?? []) as { id: string; assignee_name: string; status: string; lane_id: string | null }[];
+      if (cardsRows.length === 0) {
+        toast.warning("Nenhum card encontrado para este projeto.");
+        return;
+      }
+      let moved = 0;
+      const missing: string[] = [];
+      const failed: string[] = [];
+      for (const row of cardsRows) {
+        if (row.status === "concluido" || row.status === "concluído") continue;
+        let antecedence = 0;
+        try {
+          antecedence = await fetchBoardAntecedence(row.assignee_name);
+        } catch {
+          antecedence = 0;
+        }
+        const title = targetLaneTitleFor(desired, antecedence);
+        const { data: lanes, error: lErr } = await (supabase as any)
+          .from("dashboard_lanes")
+          .select("id,title")
+          .eq("assignee_name", row.assignee_name);
+        if (lErr) {
+          failed.push(row.assignee_name);
+          continue;
+        }
+        const lane = title
+          ? ((lanes ?? []) as { id: string; title: string }[]).find(
+              (l) => l.title.trim().toLowerCase() === title.toLowerCase(),
+            )
+          : undefined;
+        if (!lane) {
+          missing.push(`${row.assignee_name} (${title ?? "mês"})`);
+          continue;
+        }
+        const patch: Record<string, unknown> = {
+          lane_id: lane.id,
+          manually_positioned: false,
+          updated_by: currentUserName,
+          updated_at: new Date().toISOString(),
+        };
+        if (row.status === "suspenso") patch.status = "a iniciar";
+        const { error: uErr } = await (supabase as any)
+          .from("dashboard_project_cards")
+          .update(patch)
+          .eq("id", row.id);
+        if (uErr) failed.push(row.assignee_name);
+        else moved++;
+      }
+      if (moved > 0) toast.success(`${moved} card(s) enviados para a fila da data de entrega`);
+      if (missing.length) toast.warning(`Fila inexistente em: ${missing.join(", ")}`);
+      if (failed.length) toast.error(`Falha ao mover em: ${failed.join(", ")}`);
+      if (moved === 0 && !missing.length && !failed.length) toast.info("Nenhum card precisou ser movido.");
+    } catch (e) {
+      toast.error("Falha ao enviar para a data de entrega: " + (e as Error).message);
+    }
+    await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+    await qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
+  };
+
   const cardActions: CardActions = {
     lanes: lanesSorted.map((l) => ({ id: l.id, title: l.title })),
+    onMoveProjectToDeliveryAllBoards: moveProjectToDeliveryAllBoards,
     onSuspendProject: suspendProject,
     onMoveToLane: moveCardToLane,
     onMoveToDeliveryLane: moveCardToDeliveryLane,
@@ -4128,17 +4206,53 @@ function LaneColumn({
       data-lane-id={laneId}
       style={{ width: horizontal ? undefined : "var(--kb-col)", ...laneStyle }}
       className={cn(
-        "relative shrink-0 flex flex-col rounded-[10px] bg-muted/30 border border-border/60 max-h-full",
-        horizontal && "w-full",
+        "relative shrink-0 flex flex-col max-h-full",
+        horizontal && "w-full rounded-[10px] bg-muted/30 border border-border/60",
+        horizontal && isCurrentMonth && "border-red-600/50",
         isLaneDragging && "opacity-50",
-        isCurrentMonth && "border-red-600/50",
       )}
     >
+      {/* Vertical: lingueta estilo aba de pasta com o nome da fila */}
+      {!horizontal && !editing && (
+        <div
+          className={cn(
+            "relative z-10 -mb-px self-start max-w-[85%] flex items-center gap-1.5 rounded-t-[8px] border border-b-0 border-border/60 bg-card px-2.5 py-1.5 cursor-pointer transition-colors hover:bg-muted/40",
+            isCurrentMonth && "border-red-600/50",
+          )}
+          onClick={() => {
+            setCapacityDraft(capacity?.toString() ?? "0");
+            setIsCapacityDialogOpen(true);
+          }}
+          title={`Cartões: ${cards.length}`}
+        >
+          {dragHandleProps && (
+            <button
+              type="button"
+              className="shrink-0 text-muted-foreground/15 hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
+              {...dragHandleProps}
+            >
+              <GripHorizontal className="h-3 w-3" />
+            </button>
+          )}
+          <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
+            {isMonthly ? title.toUpperCase() : title}
+          </h3>
+        </div>
+      )}
+      <div
+        className={cn(
+          "contents",
+          !horizontal &&
+            "relative flex min-h-0 flex-col rounded-[10px] rounded-tl-none bg-muted/30 border border-border/60",
+          !horizontal && isCurrentMonth && "border-red-600/50",
+        )}
+      >
       <div
         style={{ paddingTop: "var(--kb-head-py)", paddingBottom: "var(--kb-head-py)" }}
         className={cn(
           "group px-2.5 flex shrink-0 flex-col justify-center bg-card min-h-[44px] gap-0.5 py-1",
           isCollapsed ? "rounded-[9px]" : "border-b border-border/50 rounded-t-lg",
+          !horizontal && "rounded-tl-none",
         )}
       >
         {editing && onRename ? (
@@ -4181,6 +4295,8 @@ function LaneColumn({
         ) : (
           <>
             <div className={cn("flex w-full flex-row items-center justify-between gap-2", !horizontal && "flex-wrap gap-y-1")}>
+              {!horizontal && <div className="flex-1" />}
+              {horizontal && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4216,6 +4332,7 @@ function LaneColumn({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              )}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4451,6 +4568,7 @@ function LaneColumn({
           horizontal={horizontal}
         />
       </SortableContext>
+      </div>
     </div>
   );
 }

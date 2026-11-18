@@ -28,6 +28,7 @@ export interface CardActions {
   onSuspendProject: (c: DashboardCard) => void;
   onMoveToLane: (c: DashboardCard, laneId: string | null) => void;
   onMoveToDeliveryLane: (c: DashboardCard) => void;
+  onMoveProjectToDeliveryAllBoards: (c: DashboardCard) => void;
 }
 
 export const CardActionsContext = createContext<CardActions | null>(null);
@@ -61,6 +62,10 @@ function Items({ card, a, P }: { card: DashboardCard; a: CardActions; P: Parts }
       </P.Sub>
       <P.Item onSelect={() => a.onMoveToDeliveryLane(card)}>
         <CalendarCheck className="mr-2 h-4 w-4" /> Enviar para fila da data de entrega
+      </P.Item>
+      <P.Item onSelect={() => a.onMoveProjectToDeliveryAllBoards(card)}>
+        <CalendarCheck className="mr-2 h-4 w-4" />
+        {card.status === "suspenso" ? "Reativar e enviar todos para data de entrega" : "Enviar todos para data de entrega (todos os quadros)"}
       </P.Item>
       <P.Sep />
       <P.Item className="text-destructive focus:text-destructive" onSelect={() => a.onSuspendProject(card)}>
