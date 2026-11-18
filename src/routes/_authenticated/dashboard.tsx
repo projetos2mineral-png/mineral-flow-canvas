@@ -4077,7 +4077,7 @@ function LaneHeaderMetric({
       <span
         className={cn(
           "font-semibold tabular-nums text-foreground/75",
-          compact ? "text-[6.5px]" : "text-[8px] text-foreground",
+          compact ? "text-[10px]" : "text-xs font-bold text-foreground",
           valueClassName,
         )}
       >
@@ -4086,7 +4086,7 @@ function LaneHeaderMetric({
       <span
         className={cn(
           "mt-0.5 uppercase tracking-wide text-muted-foreground/50",
-          compact ? "text-[8px]" : "text-[8.5px] mt-1 text-muted-foreground/70",
+          compact ? "text-[8px]" : "text-[8.5px] mt-1 font-medium tracking-wider text-muted-foreground/60",
         )}
       >
         {label}
