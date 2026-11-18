@@ -147,7 +147,8 @@ import {
   calculatePositioningDate,
 } from "@/lib/board-antecedence";
 import { fetchHiddenAssignees } from "@/lib/board-visibility";
-import { reallocateBoardCardsForAntecedence } from "@/lib/projects";
+import { reallocateBoardCardsForAntecedence, targetLaneTitleFor } from "@/lib/projects";
+import { CardActionsContext, CardActionsMenu, type CardActions } from "@/components/dashboard/CardActionsMenu";
 import { aggregateWorkedHours, fetchDailyWorkedHours, secondsToHours } from "@/lib/worked-hours";
 import { monthTitleToRange } from "@/lib/worked-hours/period";
 
@@ -3064,6 +3065,122 @@ function AssigneeBoard({
     }
   };
 
+  // ---- Ações rápidas do card (botão direito / ⋮) ----
+  const moveCardToLane = async (it: DashboardCard, laneId: string | null) => {
+    const destKey = laneId ?? UNASSIGNED_LANE;
+    const position = (grouped.get(destKey) ?? []).filter((c) => c.key !== it.key).length;
+    const prevItems = items;
+    setItems((prev) =>
+      prev.map((i) =>
+        i.key === it.key
+          ? {
+              ...i,
+              lane_id: laneId,
+              position,
+              card: (i.card
+                ? { ...i.card, lane_id: laneId, position, manually_positioned: true }
+                : { lane_id: laneId, position, manually_positioned: true }) as ProjectCardRow,
+            }
+          : i,
+      ),
+    );
+    const r = await bulkUpdateCardPositions([
+      {
+        id: it.card?.id ?? null,
+        runrunit_project_id: it.runrunit_project_id,
+        assignee_name: assignee,
+        lane_id: laneId,
+        position,
+        updated_by: currentUserName,
+        manually_positioned: true,
+      },
+    ]);
+    if (r.failed > 0) {
+      setItems(prevItems);
+      toast.error("O card não foi movido: " + (r.errors[0]?.message ?? "erro desconhecido"));
+    } else {
+      const title = laneId ? lanesSorted.find((l) => l.id === laneId)?.title : "Sem fila";
+      toast.success(`Card enviado para "${title ?? "fila"}"`);
+    }
+    await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+  };
+
+  const moveCardToDeliveryLane = async (it: DashboardCard) => {
+    const desired = it.project.desired_delivery_date as string | null;
+    if (!desired) {
+      toast.warning("Este projeto não tem data de entrega.");
+      return;
+    }
+    let antecedence = 0;
+    try {
+      antecedence = await fetchBoardAntecedence(assignee);
+    } catch {
+      antecedence = 0;
+    }
+    const title = targetLaneTitleFor(desired, antecedence);
+    const lane = title
+      ? lanesSorted.find((l) => l.title.trim().toLowerCase() === title.toLowerCase())
+      : undefined;
+    if (!lane) {
+      toast.warning(`Não existe a fila "${title ?? "do mês"}" neste quadro.`);
+      return;
+    }
+    if (it.lane_id === lane.id) {
+      toast.info(`O card já está em "${lane.title}".`);
+      return;
+    }
+    await moveCardToLane(it, lane.id);
+  };
+
+  const suspendProject = async (it: DashboardCard) => {
+    if (
+      !window.confirm(
+        `Suspender "${it.project.project_name}" em todos os quadros? Os cards irão para "Sem fila".`,
+      )
+    )
+      return;
+    try {
+      const { error } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .update({
+          status: "suspenso",
+          lane_id: null,
+          manually_positioned: true,
+          updated_by: currentUserName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("runrunit_project_id", it.runrunit_project_id);
+      if (error) throw new Error(error.message);
+      if (!it.card?.id) {
+        await upsertCard({
+          runrunit_project_id: it.runrunit_project_id,
+          assignee_name: assignee,
+          status: "suspenso",
+          lane_id: null,
+          updated_by: currentUserName,
+        });
+      }
+      setItems((prev) =>
+        prev.map((i) =>
+          i.runrunit_project_id === it.runrunit_project_id
+            ? { ...i, status: "suspenso" as CardStatus, lane_id: null }
+            : i,
+        ),
+      );
+      toast.success("Projeto suspenso em todos os quadros");
+    } catch (e) {
+      toast.error("Falha ao suspender projeto: " + (e as Error).message);
+    }
+    await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+  };
+
+  const cardActions: CardActions = {
+    lanes: lanesSorted.map((l) => ({ id: l.id, title: l.title })),
+    onSuspendProject: suspendProject,
+    onMoveToLane: moveCardToLane,
+    onMoveToDeliveryLane: moveCardToDeliveryLane,
+  };
+
   const handleAddLane = () => {
     setIsNewLaneDialogOpen(true);
   };
@@ -3325,6 +3442,7 @@ function AssigneeBoard({
             </pre>
           </details>
         )}
+        <CardActionsContext.Provider value={readOnly ? null : cardActions}>
         <DndContext
           sensors={sensors}
           collisionDetection={kanbanCollisionDetection}
@@ -3445,6 +3563,7 @@ function AssigneeBoard({
             ) : null}
           </DragOverlay>
         </DndContext>
+        </CardActionsContext.Provider>
       </div>
 
       {/* Card details modal */}
@@ -4492,12 +4611,14 @@ function SortableCard({
   };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <ProjectCardView
-        card={card}
-        onStatusChange={onStatusChange}
-        onOpenCard={onOpenCard}
-        isAdmin={isAdmin}
-      />
+      <CardActionsMenu card={card}>
+        <ProjectCardView
+          card={card}
+          onStatusChange={onStatusChange}
+          onOpenCard={onOpenCard}
+          isAdmin={isAdmin}
+        />
+      </CardActionsMenu>
     </div>
   );
 }
