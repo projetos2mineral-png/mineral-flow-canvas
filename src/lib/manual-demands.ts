@@ -24,6 +24,10 @@ export interface DemandAssignee {
   /** Nome do responsável do Kanban (mesmo nome usado nas filas do Painel Geral). */
   assignee_name: string | null;
   estimated_hours: number;
+  /** Fila escolhida manualmente no quadro deste responsável (independente dos demais). */
+  lane_id?: string | null;
+  /** true quando o responsável moveu o card; false = fila derivada da data desejada. */
+  manually_positioned?: boolean;
 }
 
 /** Nome do responsável: prioriza o responsável do Kanban; cai no usuário legado. */
@@ -71,6 +75,8 @@ const UNDEFINED_COLUMN = "42703";
  * única vez e degradamos a funcionalidade em vez de quebrar a tela inteira.
  */
 let clientNameSupported: boolean | null = null;
+/** Ambientes sem a migration de posição individual continuam funcionando. */
+let assigneeLaneSupported: boolean | null = null;
 
 export function isClientNameSupported(): boolean {
   return clientNameSupported !== false;
@@ -97,19 +103,33 @@ export function formatHoursHHMM(hours: number): string {
 }
 
 export async function fetchManualDemands(): Promise<ManualDemand[]> {
-  const run = async (withClient: boolean) =>
+  const run = async (withClient: boolean, withLane: boolean) =>
     await (supabase as any)
       .from(TABLE)
-      .select(`${demandColumns(withClient)},${ASSIGNEES_TABLE}(id,user_id,assignee_name,estimated_hours)`)
+      .select(
+        `${demandColumns(withClient)},${ASSIGNEES_TABLE}(id,user_id,assignee_name,estimated_hours${
+          withLane ? ",lane_id,manually_positioned" : ""
+        })`,
+      )
       .order("desired_date", { ascending: true });
 
-  let { data, error } = await run(clientNameSupported !== false);
+  let withClient = clientNameSupported !== false;
+  let withLane = assigneeLaneSupported !== false;
+  let { data, error } = await run(withClient, withLane);
 
-  if (error && error.code === UNDEFINED_COLUMN) {
-    clientNameSupported = false;
-    ({ data, error } = await run(false));
-  } else if (!error) {
-    if (clientNameSupported === null) clientNameSupported = true;
+  if (error && error.code === UNDEFINED_COLUMN && withLane) {
+    withLane = false;
+    ({ data, error } = await run(withClient, withLane));
+    if (!error) assigneeLaneSupported = false;
+  }
+  if (error && error.code === UNDEFINED_COLUMN && withClient) {
+    withClient = false;
+    ({ data, error } = await run(withClient, withLane));
+    if (!error) clientNameSupported = false;
+  }
+  if (!error) {
+    if (clientNameSupported === null) clientNameSupported = withClient;
+    if (assigneeLaneSupported === null) assigneeLaneSupported = withLane;
   }
 
   if (error) throw error;
@@ -130,8 +150,29 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
       user_id: a.user_id ?? null,
       assignee_name: a.assignee_name ?? null,
       estimated_hours: Number(a.estimated_hours) || 0,
+      lane_id: a.lane_id ?? null,
+      manually_positioned: a.manually_positioned === true,
     })),
   }));
+}
+
+/**
+ * Move o card de UM responsável para uma fila do seu próprio quadro.
+ * laneId null = "Sem fila". Não afeta os quadros dos outros responsáveis.
+ */
+export async function moveDemandAssigneeCard(assigneeRowId: string, laneId: string | null) {
+  if (assigneeLaneSupported === false) {
+    throw new Error(
+      "Mover demandas avulsas exige a atualização do banco (migration de posição individual).",
+    );
+  }
+  const { data, error } = await (supabase as any)
+    .from(ASSIGNEES_TABLE)
+    .update({ lane_id: laneId, manually_positioned: true, updated_at: new Date().toISOString() })
+    .eq("id", assigneeRowId)
+    .select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error("Responsável da demanda não encontrado.");
 }
 
 /** Validação compartilhada entre criação e edição. */
@@ -180,6 +221,10 @@ async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
       user_id: null,
       assignee_name: a.assignee_name?.trim() ?? null,
       estimated_hours: a.estimated_hours,
+      // Preserva a posição individual ao editar a demanda.
+      ...(assigneeLaneSupported === true
+        ? { lane_id: a.lane_id ?? null, manually_positioned: a.manually_positioned === true }
+        : {}),
     }))
   );
   if (error) throw error;

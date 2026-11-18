@@ -15,7 +15,9 @@ export interface DemandCardViewProps {
  * do Runrun.it, cuja aparência permanece inalterada.
  */
 export function DemandCardView({ card, className }: DemandCardViewProps) {
-  const { demand, people, totalHours, ownHours } = card;
+  const { demand, people, ownHours, assigneeName } = card;
+  // Colegas aparecem só pelo nome: a estimativa do card é SEMPRE individual.
+  const others = people.filter((p) => p.name !== assigneeName).map((p) => p.name);
 
   return (
     <div
@@ -64,20 +66,15 @@ export function DemandCardView({ card, className }: DemandCardViewProps) {
               <CalendarDays className="h-3 w-3 shrink-0" />
               <span>{formatDesiredDate(demand.desired_date)}</span>
             </div>
-            <div className="flex items-start gap-1.5">
-              <Users className="h-3 w-3 shrink-0 mt-0.5" />
-              <span className="truncate">
-                {people
-                  .map((p) => `${p.name} (${formatHoursHHMM(p.hours)})`)
-                  .join(" · ")}
-              </span>
-            </div>
+            {others.length > 0 && (
+              <div className="flex items-start gap-1.5" title={`Também com: ${others.join(", ")}`}>
+                <Users className="h-3 w-3 shrink-0 mt-0.5" />
+                <span className="truncate">Também com: {others.join(", ")}</span>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <Clock className="h-3 w-3 shrink-0" />
-              <span>
-                Total {formatHoursHHMM(totalHours)}
-                {people.length > 1 ? ` · nesta fila ${formatHoursHHMM(ownHours)}` : ""}
-              </span>
+              <span>{formatHoursHHMM(ownHours)}</span>
             </div>
           </div>
         </div>

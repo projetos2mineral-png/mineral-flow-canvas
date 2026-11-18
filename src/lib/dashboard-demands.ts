@@ -30,6 +30,11 @@ export interface DemandBoardCard {
   totalHours: number;
   /** Responsáveis com suas horas individuais, para exibição no card. */
   people: { name: string; hours: number }[];
+  /** Linha em dashboard_manual_demand_assignees (para mover só este card). */
+  assigneeRowId: string | null;
+  /** Fila escolhida manualmente neste quadro (null + manual = "Sem fila"). */
+  manualLaneId: string | null;
+  manuallyPositioned: boolean;
   /** Título da fila mensal derivado de desired_date (ex.: "Setembro/2026"). */
   laneTitle: string;
 }
@@ -72,6 +77,9 @@ export function buildDemandBoardCards(
         assigneeName,
         ownHours: Number(a.estimated_hours) || 0,
         totalHours,
+        assigneeRowId: a.id ?? null,
+        manualLaneId: a.lane_id ?? null,
+        manuallyPositioned: a.manually_positioned === true,
         people,
         laneTitle,
       });

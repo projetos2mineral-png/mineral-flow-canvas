@@ -155,7 +155,7 @@ import { monthTitleToRange } from "@/lib/worked-hours/period";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { supabase } from "@/integrations/supabase/client";
-import { fetchManualDemands } from "@/lib/manual-demands";
+import { fetchManualDemands, moveDemandAssigneeCard } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
@@ -2446,6 +2446,12 @@ function AssigneeBoard({
           .toLowerCase();
         if (!haystack.includes(normalizedSearch)) continue;
       }
+      // Posição escolhida pelo responsável neste quadro tem prioridade sobre a data.
+      if (d.manuallyPositioned) {
+        const manual = d.manualLaneId && m.has(d.manualLaneId) ? d.manualLaneId : UNASSIGNED_LANE;
+        m.get(manual)!.push(d);
+        continue;
+      }
       // Aplica antecedência do quadro também para demandas — seguro contra null/inválido
       let laneId: string | undefined;
       const desired = d.demand.desired_date as string | null | undefined;
@@ -2883,6 +2889,44 @@ function AssigneeBoard({
       }
       return null;
     };
+    // Demanda avulsa: move só o card deste responsável (independente dos demais).
+    if (activeKey.startsWith("dem:")) {
+      const rowId = activeKey.slice(4);
+      let toLane: string | null = null;
+      if (overKey.startsWith("lane:")) toLane = overKey.slice(5);
+      else if (overKey.startsWith("laneItem:")) toLane = overKey.slice(9);
+      else if (overKey.startsWith("rev:")) toLane = laneOfReview(overKey);
+      else if (overKey.startsWith("dem:")) {
+        for (const [lid, list] of demandsByLane) {
+          if (list.some((x) => `dem:${x.assigneeRowId}` === overKey)) toLane = lid;
+        }
+      } else toLane = laneOfCard(overKey);
+      if (!toLane || overKey === activeKey) return;
+      const fromLane = [...demandsByLane].find(([, list]) =>
+        list.some((x) => x.assigneeRowId === rowId),
+      )?.[0];
+      if (fromLane === toLane) return;
+      const laneValue = toLane === UNASSIGNED_LANE ? null : toLane;
+      const prev = qc.getQueryData(["manual-demands"]);
+      await qc.cancelQueries({ queryKey: ["manual-demands"] });
+      qc.setQueryData<Awaited<ReturnType<typeof fetchManualDemands>>>(["manual-demands"], (old) =>
+        old?.map((dm) => ({
+          ...dm,
+          assignees: dm.assignees.map((a) =>
+            a.id === rowId ? { ...a, lane_id: laneValue, manually_positioned: true } : a,
+          ),
+        })),
+      );
+      try {
+        await moveDemandAssigneeCard(rowId, laneValue);
+        toast.success("Demanda movida.");
+      } catch (err) {
+        if (prev) qc.setQueryData(["manual-demands"], prev);
+        toast.error("A demanda não foi movida: " + (err as Error).message);
+      }
+      qc.invalidateQueries({ queryKey: ["manual-demands"] });
+      return;
+    }
     if (activeKey.startsWith("rev:")) {
       const reviewId = activeKey.slice(4);
       let toLane: string | null = null;
@@ -4550,7 +4594,11 @@ function LaneColumn({
 
       <SortableContext
         id={`lane:${laneId}`}
-        items={[...reviews.map((r) => `rev:${r.id}`), ...cards.map((c) => c.key)]}
+        items={[
+          ...reviews.map((r) => `rev:${r.id}`),
+          ...cards.map((c) => c.key),
+          ...(demands ?? []).filter((d) => d.assigneeRowId).map((d) => `dem:${d.assigneeRowId}`),
+        ]}
         strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
       >
         <DroppableLaneBody
@@ -4707,7 +4755,7 @@ function DroppableLaneBody({
           ))}
           {demands.map((d) => (
             <div key={d.key} className={itemShell}>
-              <DemandCardView card={d} />
+              <SortableDemand card={d} />
             </div>
           ))}
           {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
@@ -5072,6 +5120,24 @@ function ReadRow({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 border-b border-border/50 pb-1.5">
       <span className="text-muted-foreground text-xs">{label}</span>
       <span className="text-right text-foreground/90 truncate">{value}</span>
+    </div>
+  );
+}
+
+function SortableDemand({ card }: { card: DemandBoardCard }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `dem:${card.assigneeRowId ?? card.key}`,
+    disabled: !card.assigneeRowId,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn("cursor-grab active:cursor-grabbing touch-none", isDragging && "opacity-40")}
+      {...attributes}
+      {...listeners}
+    >
+      <DemandCardView card={card} />
     </div>
   );
 }

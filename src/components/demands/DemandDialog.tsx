@@ -127,12 +127,20 @@ export function DemandDialog({
 
   const parsed: DemandAssignee[] = useMemo(
     () =>
-      assignees.map((a) => ({
-        assignee_name: a.name || null,
-        // Estimativa individual: nunca dividimos o total entre responsáveis.
-        estimated_hours: Number(String(a.hours).replace(",", ".")),
-      })),
-    [assignees]
+      assignees.map((a) => {
+        // Mantém a fila individual já escolhida no Kanban por este responsável.
+        const prev = demand?.assignees.find(
+          (x) => (resolveAssigneeName(x, nameById) ?? "") === a.name,
+        );
+        return {
+          assignee_name: a.name || null,
+          // Estimativa individual: nunca dividimos o total entre responsáveis.
+          estimated_hours: Number(String(a.hours).replace(",", ".")),
+          lane_id: prev?.lane_id ?? null,
+          manually_positioned: prev?.manually_positioned === true,
+        };
+      }),
+    [assignees, demand, nameById]
   );
 
   const total = totalEstimatedHours(parsed);
