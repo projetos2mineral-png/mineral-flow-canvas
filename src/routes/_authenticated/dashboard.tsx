@@ -3145,6 +3145,8 @@ function AssigneeBoard({
         .update({
           status: "suspenso",
           lane_id: null,
+          // Topo da "Sem fila": evita que o card suspenso fique escondido no meio da lista.
+          position: -1,
           manually_positioned: true,
           updated_by: currentUserName,
           updated_at: new Date().toISOString(),
@@ -3163,7 +3165,15 @@ function AssigneeBoard({
       setItems((prev) =>
         prev.map((i) =>
           i.runrunit_project_id === it.runrunit_project_id
-            ? { ...i, status: "suspenso" as CardStatus, lane_id: null }
+            ? {
+                ...i,
+                status: "suspenso" as CardStatus,
+                lane_id: null,
+                position: -1,
+                card: i.card
+                  ? { ...i.card, status: "suspenso" as CardStatus, lane_id: null, position: -1, manually_positioned: true }
+                  : i.card,
+              }
             : i,
         ),
       );
@@ -3172,6 +3182,7 @@ function AssigneeBoard({
       toast.error("Falha ao suspender projeto: " + (e as Error).message);
     }
     await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
+    await qc.invalidateQueries({ queryKey: ["dashboard", "projects"] });
   };
 
   const cardActions: CardActions = {
