@@ -31,4 +31,8 @@ describe("exportação da fila", () => {
   it("nomeia o arquivo pelo título", () => {
     expect(laneExportFileName("Outubro/2026")).toBe("Outubro-2026.xlsx");
   });
+  it("inclui REV na classificação", () => {
+    const rows = buildLaneExportRows([{ project, is_tec: true, is_geo: false, is_rev: true }]);
+    expect(rows[1][3]).toBe("TEC, REV");
+  });
 });
