@@ -3822,7 +3822,7 @@ function LaneHeaderMetric({
   compact: boolean;
 }) {
   return (
-    <div className="flex shrink-0 flex-col items-end leading-none">
+    <div className={cn("flex shrink-0 flex-col leading-none", compact ? "items-end" : "items-start")}>
       <span
         className={cn(
           "font-semibold tabular-nums text-foreground/75",
@@ -4152,7 +4152,7 @@ function LaneColumn({
                       <div
                         className={cn(
                           "flex shrink-0 cursor-default select-none items-start tabular-nums",
-                          horizontal ? "gap-2.5" : "order-last basis-full justify-end gap-3",
+                          horizontal ? "gap-2.5" : "order-last basis-full justify-start gap-5",
                         )}
                       >
                         <LaneHeaderMetric
