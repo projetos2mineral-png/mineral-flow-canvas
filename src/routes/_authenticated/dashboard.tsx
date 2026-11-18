@@ -42,7 +42,6 @@ import {
   Send,
   ShieldCheck,
   AlertTriangle,
-  GripHorizontal,
   CalendarDays,
   Search,
   ChevronLeft,
@@ -4078,7 +4077,7 @@ function LaneHeaderMetric({
       <span
         className={cn(
           "font-semibold tabular-nums text-foreground/75",
-          compact ? "text-[10.5px]" : "text-[9px]",
+          compact ? "text-[10.5px]" : "text-[13px] text-foreground",
           valueClassName,
         )}
       >
@@ -4087,7 +4086,7 @@ function LaneHeaderMetric({
       <span
         className={cn(
           "mt-0.5 uppercase tracking-wide text-muted-foreground/50",
-          compact ? "text-[8px]" : "text-[7px]",
+          compact ? "text-[8px]" : "text-[8.5px] mt-1 text-muted-foreground/70",
         )}
       >
         {label}
@@ -4256,38 +4255,11 @@ function LaneColumn({
         isLaneDragging && "opacity-50",
       )}
     >
-      {/* Vertical: lingueta estilo aba de pasta com o nome da fila */}
-      {!horizontal && !editing && (
-        <div
-          className={cn(
-            "relative z-10 -mb-px self-start max-w-[85%] flex items-center gap-1.5 rounded-t-[8px] border border-b-0 border-border/60 bg-card px-2.5 py-1.5 cursor-pointer transition-colors hover:bg-muted/40",
-            isCurrentMonth && "border-red-600/50",
-          )}
-          onClick={() => {
-            setCapacityDraft(capacity?.toString() ?? "0");
-            setIsCapacityDialogOpen(true);
-          }}
-          title={`Cartões: ${cards.length}`}
-        >
-          {dragHandleProps && (
-            <button
-              type="button"
-              className="shrink-0 text-muted-foreground/15 hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
-              {...dragHandleProps}
-            >
-              <GripHorizontal className="h-3 w-3" />
-            </button>
-          )}
-          <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
-            {isMonthly ? title.toUpperCase() : title}
-          </h3>
-        </div>
-      )}
       <div
         className={cn(
           "contents",
           !horizontal &&
-            "relative flex min-h-0 flex-col rounded-[10px] rounded-tl-none bg-muted/30 border border-border/60",
+            "relative flex min-h-0 flex-col rounded-[10px] bg-muted/30 border border-border/60 overflow-hidden",
           !horizontal && isCurrentMonth && "border-red-600/50",
         )}
       >
@@ -4296,7 +4268,6 @@ function LaneColumn({
         className={cn(
           "group px-2.5 flex shrink-0 flex-col justify-center bg-card min-h-[44px] gap-0.5 py-1",
           isCollapsed ? "rounded-[9px]" : "border-b border-border/50 rounded-t-lg",
-          !horizontal && "rounded-tl-none",
         )}
       >
         {editing && onRename ? (
@@ -4339,8 +4310,8 @@ function LaneColumn({
         ) : (
           <>
             <div className={cn("flex w-full flex-row items-center justify-between gap-2", !horizontal && "flex-wrap gap-y-1")}>
-              {!horizontal && <div className="flex-1" />}
-              {horizontal && (
+              {(
+
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4357,7 +4328,7 @@ function LaneColumn({
                           className="shrink-0 text-muted-foreground/15 hover:text-muted-foreground/35 transition-colors p-0 h-auto bg-transparent border-none cursor-grab active:cursor-grabbing"
                           {...dragHandleProps}
                         >
-                          <GripHorizontal className="h-3 w-3" />
+                          <GripVertical className="h-3 w-3" />
                         </button>
                       )}
                       <h3 className="text-[12px] font-medium tracking-widest leading-none truncate uppercase text-foreground/75">
@@ -4376,6 +4347,11 @@ function LaneColumn({
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              )}
+              {isMonthly && (
+                <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[9px] font-medium text-muted-foreground">
+                  Fila mensal
+                </span>
               )}
               <TooltipProvider>
                 <Tooltip>
@@ -4443,7 +4419,7 @@ function LaneColumn({
                       <div
                         className={cn(
                           "flex shrink-0 cursor-default select-none items-start tabular-nums",
-                          horizontal ? "gap-2.5" : "order-last basis-full justify-start gap-5",
+                          horizontal ? "gap-2.5" : "order-last basis-full grid grid-cols-3 gap-2 border-t border-border/40 pt-2 mt-1",
                         )}
                       >
                         <LaneHeaderMetric
