@@ -156,6 +156,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { supabase } from "@/integrations/supabase/client";
 import { fetchManualDemands, moveDemandAssigneeCard } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
+import {
+  fetchRunrunitTasksByProject,
+  runrunitTaskStatusLabel,
+  runrunitTaskStatusTone,
+  type RunrunitTaskStatusTone,
+} from "@/lib/runrunit-tasks";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
@@ -4799,6 +4805,12 @@ function Row({ icon, children }: { icon: React.ReactNode; children: React.ReactN
   );
 }
 
+const RUNRUNIT_TASK_TONE_CLASS: Record<RunrunitTaskStatusTone, string> = {
+  done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  active: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+  neutral: "bg-muted text-muted-foreground",
+};
+
 function CardDetailsDialog({
   card,
   onClose,
@@ -4841,9 +4853,17 @@ function CardDetailsDialog({
     setIsCampo(card?.card?.is_campo ?? false);
   }, [card]);
 
+  const tasksQ = useQuery({
+    queryKey: ["runrunit-tasks", card?.runrunit_project_id ?? null],
+    queryFn: () => fetchRunrunitTasksByProject(card?.runrunit_project_id ?? 0),
+    enabled: !!card,
+    staleTime: 30_000,
+  });
+
   if (!card) return null;
   const p = card.project;
   const isAwaitingReview = card.review_status === "aguardando revisão";
+  const tasks = tasksQ.data ?? [];
 
   const formattedDelivery = p.desired_delivery_date
     ? new Date(
@@ -5087,6 +5107,65 @@ function CardDetailsDialog({
                   Salvar observação
                 </Button>
               </div>
+            </div>
+
+            {/* Tarefas vinculadas do Runrun.it — leitura, fonte compacta */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-muted-foreground" />
+                  <h4 className="text-sm font-semibold">Tarefas vinculadas</h4>
+                </div>
+                {!tasksQ.isLoading && !tasksQ.isError && tasks.length > 0 && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    {tasks.length}
+                  </span>
+                )}
+              </div>
+              {tasksQ.isLoading ? (
+                <p className="text-xs text-muted-foreground">Carregando tarefas…</p>
+              ) : tasksQ.isError ? (
+                <p className="text-xs text-destructive">Não foi possível carregar as tarefas.</p>
+              ) : tasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma tarefa vinculada.</p>
+              ) : (
+                <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-muted/10 p-2 [scrollbar-width:thin]">
+                  <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
+                    {tasks.map((task) => {
+                      const tone = runrunitTaskStatusTone(task);
+                      const label = runrunitTaskStatusLabel(task);
+                      const statusTitle = [
+                        `Status: ${task.status ?? "—"}`,
+                        task.board_stage_name ? `Etapa: ${task.board_stage_name}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
+                      return (
+                        <li
+                          key={task.id}
+                          className="flex min-w-0 items-start justify-between gap-2 text-[11px] leading-snug"
+                        >
+                          <span
+                            className="min-w-0 flex-1 break-words text-foreground/80"
+                            title={task.title}
+                          >
+                            {task.title}
+                          </span>
+                          <span
+                            className={cn(
+                              "shrink-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[10px] font-medium",
+                              RUNRUNIT_TASK_TONE_CLASS[tone],
+                            )}
+                            title={statusTitle}
+                          >
+                            {label}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
 
             {/* Sincronização / alteração — discreto */}
