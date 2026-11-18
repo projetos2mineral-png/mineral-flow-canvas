@@ -51,6 +51,7 @@ export type Database = {
           created_at: string | null
           current_owner: string | null
           id: string
+          is_campo: boolean
           is_geo: boolean
           is_tec: boolean
           internal_note: string | null
@@ -73,6 +74,7 @@ export type Database = {
           created_at?: string | null
           current_owner?: string | null
           id?: string
+          is_campo?: boolean
           is_geo?: boolean
           is_tec?: boolean
           internal_note?: string | null
@@ -95,6 +97,7 @@ export type Database = {
           created_at?: string | null
           current_owner?: string | null
           id?: string
+          is_campo?: boolean
           is_geo?: boolean
           is_tec?: boolean
           internal_note?: string | null

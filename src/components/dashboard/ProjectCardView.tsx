@@ -95,8 +95,8 @@ export function ProjectCardView({
               </div>
             )}
           </div>
-          {/* Linha de estimativa + etiquetas TEC/GEO/REV fixas à direita */}
-          {(isAdmin || rawHours != null || card.card?.is_tec === true || card.card?.is_geo === true || card.card?.is_rev === true) && (
+          {/* Linha de estimativa + etiquetas TEC/GEO/REV/CAM fixas à direita */}
+          {(isAdmin || rawHours != null || card.card?.is_tec === true || card.card?.is_geo === true || card.card?.is_rev === true || card.card?.is_campo === true) && (
             <div className="flex items-center gap-3.5 text-[11px] leading-4 text-muted-foreground/60">
               {isAdmin && (
                 <span className="inline-flex items-center gap-1">
@@ -112,7 +112,7 @@ export function ProjectCardView({
                   </span>
                 </span>
               )}
-              {(card.card?.is_tec === true || card.card?.is_geo === true || card.card?.is_rev === true) && (
+              {(card.card?.is_tec === true || card.card?.is_geo === true || card.card?.is_rev === true || card.card?.is_campo === true) && (
                 <span
                   aria-label="Classificações do projeto"
                   className="ml-auto inline-flex shrink-0 items-center gap-1 text-[9px] leading-3"
@@ -130,6 +130,11 @@ export function ProjectCardView({
                   {card.card.is_rev === true && (
                     <span className="rounded-[3px] bg-purple-100 px-1 py-px font-semibold tracking-wide text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
                       REV
+                    </span>
+                  )}
+                  {card.card.is_campo === true && (
+                    <span className="rounded-[3px] bg-orange-100 px-1 py-px font-semibold tracking-wide text-orange-700 dark:bg-orange-950/60 dark:text-orange-300">
+                      CAM
                     </span>
                   )}
                 </span>

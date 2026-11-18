@@ -90,6 +90,7 @@ describe("fetchCards", () => {
       internal_note: "preservada",
       is_tec: false,
       is_geo: false,
+      is_campo: false,
       manual_estimated_hours: null,
       total_estimated_hours: 0.95,
     });

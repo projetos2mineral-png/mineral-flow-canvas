@@ -145,6 +145,8 @@ export type ProjectCardRow = {
   is_geo: boolean;
   /** Classificação Revisão (REV). */
   is_rev?: boolean;
+  /** Classificação Campo (CAM). */
+  is_campo?: boolean;
   /** Estimativa calculada automaticamente (sincronização), preservada como referência. */
   auto_estimated_hours?: number | null;
   /** Ajuste manual; quando preenchido, substitui a estimativa automática. */
@@ -639,14 +641,26 @@ export async function fetchCards(
   const ID_CHUNK = 150;
   const flagsById = new Map<
     string,
-    { is_tec: boolean; is_geo: boolean; is_rev: boolean; manual_estimated_hours: number | null }
+    {
+      is_tec: boolean;
+      is_geo: boolean;
+      is_rev: boolean;
+      is_campo: boolean;
+      manual_estimated_hours: number | null;
+    }
   >();
   let withManual = true;
   let withRev = true;
+  let withCampo = true;
   for (let from = 0; from < all.length; from += ID_CHUNK) {
     const ids = all.slice(from, from + ID_CHUNK).map((card) => card.id);
     const cols = () =>
-      ["id,is_tec,is_geo", withRev ? "is_rev" : null, withManual ? "manual_estimated_hours" : null]
+      [
+        "id,is_tec,is_geo",
+        withRev ? "is_rev" : null,
+        withCampo ? "is_campo" : null,
+        withManual ? "manual_estimated_hours" : null,
+      ]
         .filter(Boolean)
         .join(",");
     let { data, error } = await (supabase as any)
@@ -656,6 +670,14 @@ export async function fetchCards(
     // Coluna REV ainda não criada no banco: segue sem ela.
     if (error && withRev && isMissingColumn(error, "is_rev")) {
       withRev = false;
+      ({ data, error } = await (supabase as any)
+        .from("dashboard_project_cards")
+        .select(cols())
+        .in("id", ids));
+    }
+    // Coluna CAMPO ainda não criada no banco: segue sem ela.
+    if (error && withCampo && isMissingColumn(error, "is_campo")) {
+      withCampo = false;
       ({ data, error } = await (supabase as any)
         .from("dashboard_project_cards")
         .select(cols())
@@ -686,6 +708,7 @@ export async function fetchCards(
         is_tec: row.is_tec,
         is_geo: row.is_geo,
         is_rev: row.is_rev === true,
+        is_campo: row.is_campo === true,
         manual_estimated_hours:
           row.manual_estimated_hours == null ? null : Number(row.manual_estimated_hours),
       });
@@ -698,6 +721,7 @@ export async function fetchCards(
       is_tec: flags?.is_tec ?? false,
       is_geo: flags?.is_geo ?? false,
       is_rev: flags?.is_rev ?? false,
+      is_campo: flags?.is_campo ?? false,
       auto_estimated_hours: card.total_estimated_hours ?? null,
       manual_estimated_hours: manual,
       total_estimated_hours: effectiveEstimatedHours(card.total_estimated_hours, manual),
@@ -871,6 +895,7 @@ export async function upsertCard(input: {
   is_tec?: boolean;
   is_geo?: boolean;
   is_rev?: boolean;
+  is_campo?: boolean;
   updated_by?: string | null;
   updated_at?: string | null;
 }): Promise<ProjectCardRow> {
@@ -898,6 +923,7 @@ export async function upsertCard(input: {
     if (input.is_tec !== undefined) patch.is_tec = input.is_tec;
     if (input.is_geo !== undefined) patch.is_geo = input.is_geo;
     if (input.is_rev !== undefined) patch.is_rev = input.is_rev;
+    if (input.is_campo !== undefined) patch.is_campo = input.is_campo;
     if (input.updated_by !== undefined) patch.updated_by = input.updated_by;
     if (input.manually_positioned !== undefined) {
       patch.manually_positioned = input.manually_positioned;
@@ -919,6 +945,7 @@ export async function upsertCard(input: {
       is_tec: (data as any).is_tec ?? false,
       is_geo: (data as any).is_geo ?? false,
       is_rev: input.is_rev ?? (data as any).is_rev ?? false,
+      is_campo: input.is_campo ?? (data as any).is_campo ?? false,
     };
   }
 
@@ -941,6 +968,7 @@ export async function upsertCard(input: {
   if (input.is_tec !== undefined) insertPayload.is_tec = input.is_tec;
   if (input.is_geo !== undefined) insertPayload.is_geo = input.is_geo;
   if (input.is_rev !== undefined) insertPayload.is_rev = input.is_rev;
+  if (input.is_campo !== undefined) insertPayload.is_campo = input.is_campo;
   const { data, error } = await (supabase as any)
     .from("dashboard_project_cards")
     .insert(insertPayload)
@@ -954,6 +982,7 @@ export async function upsertCard(input: {
     is_tec: (data as any).is_tec ?? false,
     is_geo: (data as any).is_geo ?? false,
     is_rev: input.is_rev ?? (data as any).is_rev ?? false,
+    is_campo: input.is_campo ?? (data as any).is_campo ?? false,
   };
 }
 
@@ -1129,7 +1158,7 @@ export async function dedupeMonthlyLanes(lanes: Lane[]): Promise<boolean> {
 
 export async function updateCard(
   id: string,
-  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at" | "is_tec" | "is_geo" | "is_rev">>
+  patch: Partial<Pick<ProjectCardRow, "lane_id" | "status" | "position" | "updated_by" | "updated_at" | "is_tec" | "is_geo" | "is_rev" | "is_campo">>
 ) {
   const fullPatch = { ...patch, updated_at: patch.updated_at || new Date().toISOString() };
   const { data, error } = await (supabase as any)

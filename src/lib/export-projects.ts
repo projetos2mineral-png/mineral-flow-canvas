@@ -69,16 +69,25 @@ export interface LaneExportCard {
   is_tec?: boolean | null;
   is_geo?: boolean | null;
   is_rev?: boolean | null;
+  is_campo?: boolean | null;
   /** Cards do Kanban guardam as etiquetas no registro aninhado. */
-  card?: { is_tec?: boolean | null; is_geo?: boolean | null; is_rev?: boolean | null } | null;
+  card?: {
+    is_tec?: boolean | null;
+    is_geo?: boolean | null;
+    is_rev?: boolean | null;
+    is_campo?: boolean | null;
+  } | null;
 }
 
-/** Siglas ativas (TEC, GEO, REV) separadas por vírgula, ou vazio. */
+/** Siglas ativas (TEC, GEO, REV, CAM) separadas por vírgula, ou vazio. */
 export function laneCardClassification(c: LaneExportCard): string {
   const isTec = Boolean(c.is_tec ?? c.card?.is_tec);
   const isGeo = Boolean(c.is_geo ?? c.card?.is_geo);
   const isRev = Boolean(c.is_rev ?? c.card?.is_rev);
-  return [isTec ? "TEC" : null, isGeo ? "GEO" : null, isRev ? "REV" : null].filter(Boolean).join(", ");
+  const isCampo = Boolean(c.is_campo ?? c.card?.is_campo);
+  return [isTec ? "TEC" : null, isGeo ? "GEO" : null, isRev ? "REV" : null, isCampo ? "CAM" : null]
+    .filter(Boolean)
+    .join(", ");
 }
 
 /** Linhas da planilha da fila (exportado para teste). */

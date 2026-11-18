@@ -3398,7 +3398,7 @@ function AssigneeBoard({
 
   const handleSaveClassifications = async (
     it: DashboardCard,
-    classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean },
+    classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean; is_campo: boolean },
   ) => {
     try {
       let savedCard: ProjectCardRow;
@@ -4814,7 +4814,7 @@ function CardDetailsDialog({
   onSaveNote: (c: DashboardCard, note: string) => Promise<void>;
   onSaveClassifications: (
     c: DashboardCard,
-    classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean },
+    classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean; is_campo: boolean },
   ) => Promise<void>;
   onSaveManualEstimate: (c: DashboardCard, hours: number | null) => Promise<void>;
   readOnly: boolean;
@@ -4825,6 +4825,7 @@ function CardDetailsDialog({
   const [isTec, setIsTec] = useState(false);
   const [isGeo, setIsGeo] = useState(false);
   const [isRev, setIsRev] = useState(false);
+  const [isCampo, setIsCampo] = useState(false);
   const [savingClassifications, setSavingClassifications] = useState(false);
   const [manualHours, setManualHours] = useState("");
   const [savingEstimate, setSavingEstimate] = useState(false);
@@ -4837,6 +4838,7 @@ function CardDetailsDialog({
     setIsTec(card?.card?.is_tec ?? false);
     setIsGeo(card?.card?.is_geo ?? false);
     setIsRev(card?.card?.is_rev ?? false);
+    setIsCampo(card?.card?.is_campo ?? false);
   }, [card]);
 
   if (!card) return null;
@@ -4955,6 +4957,14 @@ function CardDetailsDialog({
                   />
                   Revisão (REV)
                 </label>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={isCampo}
+                    disabled={readOnly || savingClassifications}
+                    onCheckedChange={(checked) => setIsCampo(checked === true)}
+                  />
+                  Campo (CAM)
+                </label>
               </div>
               {!readOnly && (
                 <div className="flex justify-end">
@@ -4965,7 +4975,12 @@ function CardDetailsDialog({
                     onClick={async () => {
                       setSavingClassifications(true);
                       try {
-                        await onSaveClassifications(card, { is_tec: isTec, is_geo: isGeo, is_rev: isRev });
+                        await onSaveClassifications(card, {
+                          is_tec: isTec,
+                          is_geo: isGeo,
+                          is_rev: isRev,
+                          is_campo: isCampo,
+                        });
                       } catch {
                         // O manipulador exibe o erro e mantém os valores para nova tentativa.
                       } finally {

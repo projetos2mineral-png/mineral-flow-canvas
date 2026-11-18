@@ -35,4 +35,8 @@ describe("exportação da fila", () => {
     const rows = buildLaneExportRows([{ project, is_tec: true, is_geo: false, is_rev: true }]);
     expect(rows[1][3]).toBe("TEC, REV");
   });
+  it("inclui CAM na classificação", () => {
+    const rows = buildLaneExportRows([{ project, is_tec: true, is_geo: false, is_campo: true }]);
+    expect(rows[1][3]).toBe("TEC, CAM");
+  });
 });
