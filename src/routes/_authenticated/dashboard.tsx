@@ -4050,7 +4050,7 @@ function LaneColumn({
           </div>
         ) : (
           <>
-            <div className="flex w-full flex-row items-center justify-between gap-2">
+            <div className={cn("flex w-full flex-row items-center justify-between gap-2", !horizontal && "flex-wrap gap-y-1")}>
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -4152,7 +4152,7 @@ function LaneColumn({
                       <div
                         className={cn(
                           "flex shrink-0 cursor-default select-none items-start tabular-nums",
-                          horizontal ? "gap-2.5" : "gap-1.5",
+                          horizontal ? "gap-2.5" : "order-last basis-full justify-end gap-3",
                         )}
                       >
                         <LaneHeaderMetric
