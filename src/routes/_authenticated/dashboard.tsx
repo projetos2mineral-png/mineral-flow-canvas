@@ -3362,48 +3362,34 @@ function AssigneeBoard({
     }
   };
 
-  const handleSaveNote = async (
-    it: DashboardCard,
-    note: string,
-    applyAllBoards = false,
-  ) => {
+  const handleSaveNote = async (it: DashboardCard, note: string) => {
+    const projectName = it.project.project_name;
+    if (
+      !window.confirm(
+        `Salvar esta observação em todos os quadros do projeto "${projectName}"? As observações atuais serão substituídas.`,
+      )
+    )
+      return;
     try {
-      if (applyAllBoards) {
-        const projectName = it.project.project_name;
-        if (
-          !window.confirm(
-            `Aplicar esta observação a todos os quadros do projeto "${projectName}"? As observações existentes nos demais quadros serão substituídas.`,
-          )
-        )
-          return;
-        const { data: updated, error } = await supabase
-          .from("dashboard_project_cards")
-          .update({
-            internal_note: note,
-            updated_by: currentUserName,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("runrunit_project_id", it.runrunit_project_id)
-          .select("id");
-        if (error) throw new Error(error.message);
-        if ((updated ?? []).length === 0) {
-          await upsertCard({
-            runrunit_project_id: it.runrunit_project_id,
-            assignee_name: assignee,
-            internal_note: note,
-            updated_by: currentUserName,
-          });
-        }
-        toast.success("Observação aplicada a todos os quadros");
-      } else {
+      const { data: updated, error } = await supabase
+        .from("dashboard_project_cards")
+        .update({
+          internal_note: note,
+          updated_by: currentUserName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("runrunit_project_id", it.runrunit_project_id)
+        .select("id");
+      if (error) throw new Error(error.message);
+      if ((updated ?? []).length === 0) {
         await upsertCard({
           runrunit_project_id: it.runrunit_project_id,
           assignee_name: assignee,
           internal_note: note,
           updated_by: currentUserName,
         });
-        toast.success("Observação salva");
       }
+      toast.success("Observação salva em todos os quadros");
       await qc.invalidateQueries({ queryKey: ["dashboard", "cards"] });
     } catch (e) {
       toast.error("Falha ao salvar observação: " + (e as Error).message);
@@ -4825,7 +4811,7 @@ function CardDetailsDialog({
 }: {
   card: DashboardCard | null;
   onClose: () => void;
-  onSaveNote: (c: DashboardCard, note: string, applyAllBoards: boolean) => Promise<void>;
+  onSaveNote: (c: DashboardCard, note: string) => Promise<void>;
   onSaveClassifications: (
     c: DashboardCard,
     classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean },
@@ -4836,7 +4822,6 @@ function CardDetailsDialog({
   onStatusChange?: (c: DashboardCard, s: CardStatus) => Promise<void> | void;
 }) {
   const [note, setNote] = useState("");
-  const [applyNoteAllBoards, setApplyNoteAllBoards] = useState(false);
   const [isTec, setIsTec] = useState(false);
   const [isGeo, setIsGeo] = useState(false);
   const [isRev, setIsRev] = useState(false);
@@ -4849,7 +4834,6 @@ function CardDetailsDialog({
     const manual = card?.card?.manual_estimated_hours;
     setManualHours(manual == null ? "" : hoursToClockInput(Number(manual)));
     setNote(card?.internal_note ?? "");
-    setApplyNoteAllBoards(false);
     setIsTec(card?.card?.is_tec ?? false);
     setIsGeo(card?.card?.is_geo ?? false);
     setIsRev(card?.card?.is_rev ?? false);
@@ -5083,21 +5067,8 @@ function CardDetailsDialog({
                 className="resize-none"
                 disabled={readOnly}
               />
-              <label className="inline-flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={applyNoteAllBoards}
-                  disabled={readOnly}
-                  onCheckedChange={(checked) => setApplyNoteAllBoards(checked === true)}
-                />
-                Aplicar a todos os quadros
-              </label>
               <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={readOnly}
-                  onClick={() => onSaveNote(card, note, applyNoteAllBoards)}
-                >
+                <Button size="sm" variant="outline" disabled={readOnly} onClick={() => onSaveNote(card, note)}>
                   Salvar observação
                 </Button>
               </div>
