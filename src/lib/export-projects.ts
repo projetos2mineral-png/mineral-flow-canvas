@@ -62,21 +62,77 @@ export function exportProjectsToExcel(
   XLSX.writeFile(book, `projetos_kanban_${fileStamp()}.xlsx`);
 }
 
-export const LANE_EXPORT_HEADERS = ["Nome do projeto", "Cliente", "Data de entrega desejada", "Classificação"] as const;
+export const LANE_EXPORT_HEADERS = [
+  "Nome do projeto",
+  "Cliente",
+  "Data de entrega desejada",
+  "Classificação",
+  "Observação",
+] as const;
 
 export interface LaneExportCard {
+  /** Identidade estável do projeto, usada apenas para evitar duplicidades. */
+  runrunit_project_id?: number | null;
+  key?: string | null;
   project: { project_name: string | null; client_name: string | null; desired_delivery_date: string | null };
   is_tec?: boolean | null;
   is_geo?: boolean | null;
   is_rev?: boolean | null;
   is_campo?: boolean | null;
+  internal_note?: string | null;
   /** Cards do Kanban guardam as etiquetas no registro aninhado. */
   card?: {
     is_tec?: boolean | null;
     is_geo?: boolean | null;
     is_rev?: boolean | null;
     is_campo?: boolean | null;
+    internal_note?: string | null;
   } | null;
+}
+
+/** Card de Demanda Avulsa já resolvido para o responsável/fila exportados. */
+export interface LaneExportDemand {
+  /** Chave estável do card (demanda + responsável), usada contra duplicidades. */
+  key?: string | null;
+  assigneeName?: string | null;
+  demand: {
+    id?: string | null;
+    name: string | null;
+    client_name?: string | null;
+    desired_date: string | null;
+    description?: string | null;
+  };
+}
+
+/** Preserva o texto original; observações vazias viram célula vazia. */
+function noteValue(value: string | null | undefined): string {
+  if (typeof value !== "string" || !value.trim()) return "";
+  return value;
+}
+
+function projectCardKey(c: LaneExportCard): string | null {
+  if (c.runrunit_project_id != null) return `project:${c.runrunit_project_id}`;
+  if (c.key) return `key:${c.key}`;
+  return null;
+}
+
+function demandCardKey(d: LaneExportDemand): string {
+  if (d.key) return `demand:${d.key}`;
+  return `demand:${d.demand.id ?? d.demand.name ?? ""}:${d.assigneeName ?? ""}`;
+}
+
+function uniqueBy<T>(items: readonly T[], keyFn: (item: T) => string | null): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const key = keyFn(item);
+    if (key != null) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+    }
+    out.push(item);
+  }
+  return out;
 }
 
 /** Siglas ativas (TEC, GEO, REV, CAM) separadas por vírgula, ou vazio. */
@@ -91,16 +147,34 @@ export function laneCardClassification(c: LaneExportCard): string {
 }
 
 /** Linhas da planilha da fila (exportado para teste). */
-export function buildLaneExportRows(cards: readonly LaneExportCard[]): string[][] {
-  return [
-    [...LANE_EXPORT_HEADERS],
-    ...cards.map((c) => [
-      c.project.project_name ?? "",
-      c.project.client_name ?? "",
-      formatDate(c.project.desired_delivery_date),
-      laneCardClassification(c),
-    ]),
-  ];
+export function buildLaneExportRows(
+  cards: readonly LaneExportCard[],
+  demands: readonly LaneExportDemand[] = [],
+): string[][] {
+  const projectRows = uniqueBy(cards, projectCardKey).map((c) => [
+    c.project.project_name ?? "",
+    c.project.client_name ?? "",
+    formatDate(c.project.desired_delivery_date),
+    laneCardClassification(c),
+    noteValue(c.internal_note ?? c.card?.internal_note),
+  ]);
+
+  const demandRows = uniqueBy(demands, demandCardKey).map((d) => [
+    d.demand.name ?? "",
+    d.demand.client_name ?? "",
+    formatDate(d.demand.desired_date),
+    "Demanda avulsa",
+    noteValue(d.demand.description),
+  ]);
+
+  const rows: string[][] = [[...LANE_EXPORT_HEADERS], ...projectRows];
+  if (demandRows.length > 0) {
+    // Seção separada: demandas avulsas nunca se misturam à sequência mensal.
+    rows.push([]);
+    rows.push(["Demandas avulsas"]);
+    rows.push(...demandRows);
+  }
+  return rows;
 }
 
 /** Nome do arquivo a partir do título da fila: "Outubro/2026" -> "Outubro-2026.xlsx". */
@@ -110,9 +184,13 @@ export function laneExportFileName(title: string): string {
 }
 
 /** Baixa um .xlsx com os cards da fila; somente leitura, não altera dados. */
-export function exportLaneCardsToExcel(title: string, cards: readonly LaneExportCard[]): void {
-  const sheet = XLSX.utils.aoa_to_sheet(buildLaneExportRows(cards));
-  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }, { wch: 16 }];
+export function exportLaneCardsToExcel(
+  title: string,
+  cards: readonly LaneExportCard[],
+  demands: readonly LaneExportDemand[] = [],
+): void {
+  const sheet = XLSX.utils.aoa_to_sheet(buildLaneExportRows(cards, demands));
+  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 60 }];
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, sheet, "Fila");
   XLSX.writeFile(book, laneExportFileName(title));

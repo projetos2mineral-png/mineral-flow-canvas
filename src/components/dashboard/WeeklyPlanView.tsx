@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronLeft, Clock } from "lucide-react";
+import { ChevronLeft, Clock, Download } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/weekly-plan";
 import { computeMonthWeeks } from "@/lib/weekly-weeks";
 import { planWeeklyMove } from "@/lib/weekly-move";
+import { exportWeeklyPlanToExcel, type WeeklyExportBucket } from "@/lib/export-weekly";
 import { monthlyTitleToDateISO, normalizeAssigneeName, type CardStatus } from "@/lib/dashboard";
 import { fetchDailyWorkedHours, secondsToHours } from "@/lib/worked-hours";
 import { monthTitleToRange } from "@/lib/worked-hours/period";
@@ -409,6 +410,28 @@ export function WeeklyPlanView({
     return out;
   }, [demands, weeks, demandOverrides]);
 
+  /** Mesma sequência visual da tela: Backlog e depois Semana 1..5. */
+  const weeklyExportBuckets = useMemo<WeeklyExportBucket[]>(() => {
+    const out: WeeklyExportBucket[] = [
+      {
+        label: "Backlog",
+        cards: buckets[BUCKET_BACKLOG],
+        demands: demandBuckets[BUCKET_BACKLOG],
+      },
+    ];
+    for (let i = 0; i < weeks.length; i++) {
+      const week = weeks[i];
+      out.push({
+        label: week.rangeLabel
+          ? `Semana ${week.index} (${week.rangeLabel})`
+          : `Semana ${week.index}`,
+        cards: buckets[i + 1] ?? [],
+        demands: demandBuckets[i + 1] ?? [],
+      });
+    }
+    return out;
+  }, [buckets, demandBuckets, weeks]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const activeCard = activeKey ? (cards.find((c) => c.key === activeKey) ?? null) : null;
@@ -529,6 +552,28 @@ export function WeeklyPlanView({
                 <span className="mx-1.5 text-muted-foreground/50">—</span>
                 <span className="text-foreground/80">{monthTitle}</span>
               </DialogTitle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="ml-auto h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label="Baixar relatório do planejamento semanal em Excel"
+                title="Baixar relatório semanal em Excel (.xlsx)"
+                onClick={() => {
+                  try {
+                    const count = exportWeeklyPlanToExcel(
+                      assigneeName,
+                      monthTitle,
+                      weeklyExportBuckets,
+                    );
+                    toast.success(`${count} card(s) exportado(s)`);
+                  } catch (e) {
+                    toast.error("Falha ao exportar Excel: " + (e as Error).message);
+                  }
+                }}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
             </div>
           </DialogHeader>
 

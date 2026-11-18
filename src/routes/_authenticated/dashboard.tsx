@@ -4504,8 +4504,8 @@ function LaneColumn({
                       title="Baixar cards da fila em Excel (.xlsx)"
                       onClick={() => {
                         try {
-                          exportLaneCardsToExcel(title, cards);
-                          toast.success(`${cards.length} card(s) exportado(s)`);
+                          exportLaneCardsToExcel(title, cards, demands);
+                          toast.success(`${cards.length + demands.length} card(s) exportado(s)`);
                         } catch (e) {
                           toast.error("Falha ao exportar Excel: " + (e as Error).message);
                         }
