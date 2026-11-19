@@ -18,10 +18,7 @@ const fileStamp = (): string => {
  * Gera e baixa um .xlsx com os projetos já carregados na tela.
  * Não realiza nenhuma nova consulta a APIs externas.
  */
-export function exportProjectsToExcel(
-  projects: RunrunitProject[],
-  people: ProjectPerson[]
-): void {
+export function exportProjectsToExcel(projects: RunrunitProject[], people: ProjectPerson[]): void {
   const peopleByProject = new Map<number, string[]>();
   for (const person of people) {
     const name = person.assignee_name?.trim();
@@ -74,7 +71,11 @@ export interface LaneExportCard {
   /** Identidade estável do projeto, usada apenas para evitar duplicidades. */
   runrunit_project_id?: number | null;
   key?: string | null;
-  project: { project_name: string | null; client_name: string | null; desired_delivery_date: string | null };
+  project: {
+    project_name: string | null;
+    client_name: string | null;
+    desired_delivery_date: string | null;
+  };
   is_tec?: boolean | null;
   is_geo?: boolean | null;
   is_rev?: boolean | null;
@@ -135,15 +136,34 @@ function uniqueBy<T>(items: readonly T[], keyFn: (item: T) => string | null): T[
   return out;
 }
 
+/** Campos de classificação compartilhados entre os relatórios. */
+export type ClassificationFlags = {
+  is_tec?: boolean | null;
+  is_geo?: boolean | null;
+  is_rev?: boolean | null;
+  is_campo?: boolean | null;
+};
+
 /** Siglas ativas (TEC, GEO, REV, CAM) separadas por vírgula, ou vazio. */
-export function laneCardClassification(c: LaneExportCard): string {
-  const isTec = Boolean(c.is_tec ?? c.card?.is_tec);
-  const isGeo = Boolean(c.is_geo ?? c.card?.is_geo);
-  const isRev = Boolean(c.is_rev ?? c.card?.is_rev);
-  const isCampo = Boolean(c.is_campo ?? c.card?.is_campo);
-  return [isTec ? "TEC" : null, isGeo ? "GEO" : null, isRev ? "REV" : null, isCampo ? "CAM" : null]
+export function classificationLabel(flags: ClassificationFlags): string {
+  return [
+    flags.is_tec ? "TEC" : null,
+    flags.is_geo ? "GEO" : null,
+    flags.is_rev ? "REV" : null,
+    flags.is_campo ? "CAM" : null,
+  ]
     .filter(Boolean)
     .join(", ");
+}
+
+/** Siglas ativas (TEC, GEO, REV, CAM) separadas por vírgula, ou vazio. */
+export function laneCardClassification(c: LaneExportCard): string {
+  return classificationLabel({
+    is_tec: c.is_tec ?? c.card?.is_tec,
+    is_geo: c.is_geo ?? c.card?.is_geo,
+    is_rev: c.is_rev ?? c.card?.is_rev,
+    is_campo: c.is_campo ?? c.card?.is_campo,
+  });
 }
 
 /** Linhas da planilha da fila (exportado para teste). */
@@ -179,7 +199,11 @@ export function buildLaneExportRows(
 
 /** Nome do arquivo a partir do título da fila: "Outubro/2026" -> "Outubro-2026.xlsx". */
 export function laneExportFileName(title: string): string {
-  const safe = title.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ") || "Fila";
+  const safe =
+    title
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ") || "Fila";
   return `${safe}.xlsx`;
 }
 

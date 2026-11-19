@@ -30,6 +30,7 @@ describe("exportação do planejamento semanal", () => {
       "Data de entrega desejada",
       "Nome do projeto",
       "Cliente",
+      "Classificação",
       "Observação",
     ]);
   });
@@ -62,9 +63,56 @@ describe("exportação do planejamento semanal", () => {
       },
     ];
     const rows = buildWeeklyExportRows(buckets);
-    expect(rows[1][4]).toBe("Linha 1\nLinha 2");
-    expect(rows[2][4]).toBe("");
-    expect(rows[3][4]).toBe("");
+    expect(rows[1][5]).toBe("Linha 1\nLinha 2");
+    expect(rows[2][5]).toBe("");
+    expect(rows[3][5]).toBe("");
+  });
+
+  it("inclui a classificação atual do card do projeto", () => {
+    const buckets: WeeklyExportBucket[] = [
+      {
+        label: "Semana 1",
+        cards: [
+          { ...project("TEC e GEO"), card: { is_tec: true, is_geo: true } },
+          { ...project("REV"), is_rev: true },
+          { ...project("Sem classificação"), card: { is_tec: false, is_geo: false } },
+        ],
+      },
+    ];
+    const rows = buildWeeklyExportRows(buckets);
+    expect(rows.slice(1).map((r) => r[4])).toEqual(["TEC, GEO", "REV", ""]);
+  });
+
+  it("inclui a classificação das demandas avulsas quando disponível", () => {
+    const buckets: WeeklyExportBucket[] = [
+      {
+        label: "Semana 1",
+        cards: [],
+        demands: [
+          {
+            key: "demand:com-classificacao",
+            classification: "TEC, CAM",
+            demand: { id: "1", name: "Com classificação", desired_date: "2026-11-12" },
+          },
+          {
+            key: "demand:com-siglas",
+            demand: {
+              id: "2",
+              name: "Com siglas",
+              desired_date: "2026-11-12",
+              is_geo: true,
+              is_rev: true,
+            },
+          },
+          {
+            key: "demand:sem-classificacao",
+            demand: { id: "3", name: "Sem classificação", desired_date: "2026-11-12" },
+          },
+        ],
+      },
+    ];
+    const rows = buildWeeklyExportRows(buckets);
+    expect(rows.slice(1).map((r) => r[4])).toEqual(["TEC, CAM", "GEO, REV", ""]);
   });
 
   it("acrescenta demandas avulsas depois dos projetos da mesma semana", () => {
@@ -76,7 +124,7 @@ describe("exportação do planejamento semanal", () => {
       ["Semana 1", "Projeto"],
       ["Semana 1", "Avulsa"],
     ]);
-    expect(rows[2][4]).toBe("Avulsa\nlinha 2");
+    expect(rows[2][5]).toBe("Avulsa\nlinha 2");
   });
 
   it("não duplica registros repetidos entre semanas", () => {
