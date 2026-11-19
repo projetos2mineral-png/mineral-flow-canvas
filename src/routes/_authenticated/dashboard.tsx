@@ -157,7 +157,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchManualDemands, moveDemandAssigneeCard } from "@/lib/manual-demands";
 import { buildDemandBoardCards, type DemandBoardCard } from "@/lib/dashboard-demands";
 import {
+  collectRunrunitTaskAssignees,
+  fetchRunrunitProjectAssigneeId,
   fetchRunrunitTasksByProject,
+  filterRunrunitTasksByAssignee,
+  resolveRunrunitAssigneeId,
   runrunitTaskStatusLabel,
   runrunitTaskStatusTone,
   type RunrunitTaskStatusTone,
@@ -4842,6 +4846,7 @@ function CardDetailsDialog({
   const [manualHours, setManualHours] = useState("");
   const [savingEstimate, setSavingEstimate] = useState(false);
   const [localStatus, setLocalStatus] = useState<CardStatus>("a fazer" as CardStatus);
+  const [taskAssigneeFilter, setTaskAssigneeFilter] = useState("all");
   useEffect(() => {
     if (card) setLocalStatus(card.status);
     const manual = card?.card?.manual_estimated_hours;
@@ -4853,6 +4858,10 @@ function CardDetailsDialog({
     setIsCampo(card?.card?.is_campo ?? false);
   }, [card]);
 
+  useEffect(() => {
+    setTaskAssigneeFilter("all");
+  }, [card?.key]);
+
   const tasksQ = useQuery({
     queryKey: ["runrunit-tasks", card?.runrunit_project_id ?? null],
     queryFn: () => fetchRunrunitTasksByProject(card?.runrunit_project_id ?? 0),
@@ -4860,10 +4869,41 @@ function CardDetailsDialog({
     staleTime: 30_000,
   });
 
+  const cardAssigneeIdQ = useQuery({
+    queryKey: [
+      "runrunit-project-assignee-id",
+      card?.runrunit_project_id ?? null,
+      card?.assignee_name ?? null,
+    ],
+    queryFn: () =>
+      fetchRunrunitProjectAssigneeId(
+        card?.runrunit_project_id ?? 0,
+        card?.assignee_name ?? null,
+      ),
+    enabled: !!card?.runrunit_project_id && !!card?.assignee_name,
+    staleTime: 30_000,
+  });
+
+  const tasks = useMemo(() => tasksQ.data ?? [], [tasksQ.data]);
+  const taskAssignees = useMemo(() => collectRunrunitTaskAssignees(tasks), [tasks]);
+  const cardAssigneeId = useMemo(
+    () => cardAssigneeIdQ.data ?? resolveRunrunitAssigneeId(tasks, card?.assignee_name),
+    [cardAssigneeIdQ.data, tasks, card?.assignee_name],
+  );
+  const taskFilterAssigneeId =
+    taskAssigneeFilter === "all"
+      ? null
+      : taskAssigneeFilter === "card"
+        ? (cardAssigneeId ?? "")
+        : taskAssigneeFilter;
+  const filteredTasks = useMemo(
+    () => filterRunrunitTasksByAssignee(tasks, taskFilterAssigneeId),
+    [tasks, taskFilterAssigneeId],
+  );
+
   if (!card) return null;
   const p = card.project;
   const isAwaitingReview = card.review_status === "aguardando revisão";
-  const tasks = tasksQ.data ?? [];
 
   const formattedDelivery = p.desired_delivery_date
     ? new Date(
@@ -5111,16 +5151,35 @@ function CardDetailsDialog({
 
             {/* Tarefas vinculadas do Runrun.it — leitura, fonte compacta */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <ListChecks className="h-4 w-4 text-muted-foreground" />
                   <h4 className="text-sm font-semibold">Tarefas vinculadas</h4>
                 </div>
-                {!tasksQ.isLoading && !tasksQ.isError && tasks.length > 0 && (
-                  <span className="text-[11px] tabular-nums text-muted-foreground">
-                    {tasks.length}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  <Select value={taskAssigneeFilter} onValueChange={setTaskAssigneeFilter}>
+                    <SelectTrigger
+                      className="h-7 w-[180px] text-xs"
+                      aria-label="Filtrar tarefas por responsável"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os responsáveis</SelectItem>
+                      <SelectItem value="card">Responsável do card</SelectItem>
+                      {taskAssignees.map((assignee) => (
+                        <SelectItem key={assignee.id} value={assignee.id}>
+                          {assignee.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!tasksQ.isLoading && !tasksQ.isError && tasks.length > 0 && (
+                    <span className="text-[11px] tabular-nums text-muted-foreground">
+                      {filteredTasks.length}
+                    </span>
+                  )}
+                </div>
               </div>
               {tasksQ.isLoading ? (
                 <p className="text-xs text-muted-foreground">Carregando tarefas…</p>
@@ -5128,10 +5187,14 @@ function CardDetailsDialog({
                 <p className="text-xs text-destructive">Não foi possível carregar as tarefas.</p>
               ) : tasks.length === 0 ? (
                 <p className="text-xs text-muted-foreground">Nenhuma tarefa vinculada.</p>
+              ) : filteredTasks.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Nenhuma tarefa para este responsável.
+                </p>
               ) : (
                 <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60 bg-muted/10 p-2 [scrollbar-width:thin]">
                   <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
-                    {tasks.map((task) => {
+                    {filteredTasks.map((task) => {
                       const tone = runrunitTaskStatusTone(task);
                       const label = runrunitTaskStatusLabel(task);
                       const statusTitle = [
