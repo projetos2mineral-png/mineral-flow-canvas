@@ -219,3 +219,49 @@ export function exportLaneCardsToExcel(
   XLSX.utils.book_append_sheet(book, sheet, "Fila");
   XLSX.writeFile(book, laneExportFileName(title));
 }
+
+export const CALENDAR_EXPORT_HEADERS = [
+  "Nome do projeto/card",
+  "Cliente",
+  "Grupo",
+  "Data desejada",
+  "Data manual",
+] as const;
+
+export interface CalendarExportCard {
+  project_name: string | null;
+  client_name: string | null;
+  project_group_name: string | null;
+  desired_delivery_date?: string | null;
+  planning_date: string | null;
+}
+
+/** "YYYY-MM-DD..." -> "dd/mm/aaaa" sem conversão de fuso; vazio quando ausente. */
+export function isoToBrDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+}
+
+/** Linhas da planilha do Calendário, preservando a ordem recebida. */
+export function buildCalendarExportRows(cards: readonly CalendarExportCard[]): string[][] {
+  return [
+    [...CALENDAR_EXPORT_HEADERS],
+    ...cards.map((c) => [
+      c.project_name ?? "",
+      c.client_name ?? "",
+      c.project_group_name ?? "",
+      isoToBrDate(c.desired_delivery_date),
+      isoToBrDate(c.planning_date),
+    ]),
+  ];
+}
+
+/** Baixa um .xlsx com os cards visíveis do Calendário; somente leitura. */
+export function exportCalendarCardsToExcel(fileLabel: string, cards: readonly CalendarExportCard[]): void {
+  const sheet = XLSX.utils.aoa_to_sheet(buildCalendarExportRows(cards));
+  sheet["!cols"] = [{ wch: 50 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 16 }];
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Calendário");
+  XLSX.writeFile(book, laneExportFileName(`Calendario ${fileLabel}`));
+}

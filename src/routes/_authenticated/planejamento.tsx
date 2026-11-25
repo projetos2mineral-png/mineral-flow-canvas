@@ -26,7 +26,9 @@ import {
   Search,
   CalendarDays,
   FileText,
+  Download,
 } from "lucide-react";
+import { exportCalendarCardsToExcel } from "@/lib/export-projects";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -248,6 +250,40 @@ function PlanningPage() {
     [filtered]
   );
 
+  // Cards exibidos no período atual, na mesma ordem do calendário (dia a dia, por posição).
+  const handleExportExcel = () => {
+    let start: Date;
+    let end: Date;
+    let label: string;
+    if (view === "semana") {
+      start = startOfWeek(cursor);
+      end = addDays(start, 6);
+      label = `semana ${toISODate(start)}`;
+    } else if (view === "mes") {
+      start = startOfMonth(cursor);
+      end = endOfMonth(cursor);
+      label = `${MONTH_NAMES[cursor.getMonth()]} ${cursor.getFullYear()}`;
+    } else {
+      start = new Date(cursor.getFullYear(), 0, 1);
+      end = new Date(cursor.getFullYear(), 11, 31);
+      label = String(cursor.getFullYear());
+    }
+    const cards: PlanningProject[] = [];
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+      cards.push(...(byDate.get(toISODate(d)) ?? []));
+    }
+    if (cards.length === 0) {
+      toast.info("Nenhum card no período exibido");
+      return;
+    }
+    try {
+      exportCalendarCardsToExcel(label, cards);
+      toast.success(`${cards.length} card(s) exportado(s)`);
+    } catch (e) {
+      toast.error("Falha ao exportar Excel: " + (e as Error).message);
+    }
+  };
+
   const [openProject, setOpenProject] = useState<PlanningProject | null>(null);
   const [dayListDate, setDayListDate] = useState<string | null>(null);
 
@@ -298,6 +334,10 @@ function PlanningPage() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" size="sm" className="h-9" onClick={handleExportExcel}>
+            <Download className="h-4 w-4 mr-1.5" />
+            Exportar Excel
+          </Button>
         </div>
       </div>
 
