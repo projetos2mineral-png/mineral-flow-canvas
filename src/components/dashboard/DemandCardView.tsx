@@ -5,7 +5,6 @@ import {
   Building2,
   CalendarDays,
   Clock,
-  Users,
 } from "lucide-react";
 import {
   Select,
@@ -18,7 +17,6 @@ import { cn } from "@/lib/utils";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
 import {
   formatHoursHHMM,
-  isDemandAssigneeKanbanStatusSupported,
   updateDemandAssigneeKanbanStatus,
 } from "@/lib/manual-demands";
 import {
@@ -109,7 +107,6 @@ export function DemandCardView({
   const assignee = demand.assignees.find(
     (person) => person.id && person.id === card.assigneeRowId,
   );
-  const others = people.filter((person) => person.name !== assigneeName).map((person) => person.name);
   const [status, setStatus] = useState<CardStatus>(assignee?.kanban_status ?? "a iniciar");
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
@@ -118,7 +115,7 @@ export function DemandCardView({
   }, [assignee?.kanban_status, card.key]);
 
   const handleStatusChange = async (nextStatus: CardStatus) => {
-    if (!card.assigneeRowId || !isDemandAssigneeKanbanStatusSupported()) return;
+    if (!card.assigneeRowId) return;
     const previous = status;
     setStatus(nextStatus);
     try {
@@ -207,15 +204,7 @@ export function DemandCardView({
               <CalendarDays className="h-3 w-3 shrink-0" />
               <span>{formatDesiredDate(demand.desired_date)}</span>
             </div>
-            {others.length > 0 && (
-              <div
-                className="flex items-center gap-1.5"
-                title={`Também com: ${others.join(", ")}`}
-              >
-                <Users className="h-3 w-3 shrink-0" />
-                <span>{others.length} {others.length === 1 ? "colega" : "colegas"}</span>
-              </div>
-            )}
+
             <div className="flex items-center gap-1.5">
               <Clock className="h-3 w-3 shrink-0" />
               <span>{formatHoursHHMM(ownHours)}</span>
@@ -224,23 +213,12 @@ export function DemandCardView({
         </div>
       </div>
       {showStatus ? (
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
-          <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70">
-            Demanda avulsa
-          </span>
+        <div className="mt-2 flex justify-end border-t border-border/40 pt-1.5">
           <DemandStatusSelect
             status={status}
             onChange={(nextStatus) => void handleStatusChange(nextStatus)}
-            disabled={
-              disabled ||
-              !card.assigneeRowId ||
-              !isDemandAssigneeKanbanStatusSupported()
-            }
-            title={
-              isDemandAssigneeKanbanStatusSupported()
-                ? "Alterar status do card"
-                : "Status individual depende de uma coluna adicional no banco"
-            }
+            disabled={disabled || !card.assigneeRowId}
+            title="Alterar status do card"
           />
         </div>
       ) : null}

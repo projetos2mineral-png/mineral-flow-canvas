@@ -21,7 +21,6 @@ import { DemandStatusSelect } from "@/components/dashboard/DemandCardView";
 import {
   fetchManualDemands,
   formatHoursHHMM,
-  isDemandAssigneeKanbanStatusSupported,
   normalizeChecklistItems,
   parseFlexibleHours,
   updateDemandAssigneeChecklistItems,
@@ -157,7 +156,7 @@ export function DemandCardDialog({
   };
 
   const handleStatusChange = async (status: CardStatus) => {
-    if (!assigneeRowId || !isDemandAssigneeKanbanStatusSupported()) return;
+    if (!assigneeRowId) return;
     const previous = localStatus;
     setLocalStatus(status);
     setSavingStatus(true);
@@ -284,7 +283,7 @@ export function DemandCardDialog({
               <span>{formatDesiredDate(demand.desired_date)}</span>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+              <div className="group flex min-w-0 items-center gap-1.5 text-muted-foreground">
                 <Clock className="h-3 w-3 shrink-0" />
                 {editingHours ? (
                   <>
@@ -345,12 +344,12 @@ export function DemandCardDialog({
                       type="button"
                       size="icon"
                       variant="ghost"
-                      className="h-6 w-6 shrink-0"
+                      className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
                       onClick={() => setEditingHours(true)}
                       disabled={!assigneeRowId}
                       title="Editar estimativa"
                     >
-                      <Pencil className="h-3 w-3" />
+                      <Pencil className="h-1.5 w-1.5" />
                     </Button>
                   </>
                 )}
@@ -358,19 +357,10 @@ export function DemandCardDialog({
               <DemandStatusSelect
                 status={localStatus}
                 onChange={(status) => void handleStatusChange(status)}
-                disabled={!assigneeRowId || !isDemandAssigneeKanbanStatusSupported()}
-                title={
-                  isDemandAssigneeKanbanStatusSupported()
-                    ? "Alterar status do card"
-                    : "Status individual depende de uma coluna adicional no banco"
-                }
+                disabled={!assigneeRowId}
+                title="Alterar status do card"
               />
             </div>
-            {assigneeRowId && !isDemandAssigneeKanbanStatusSupported() ? (
-              <p className="text-[10px] text-muted-foreground">
-                A edição do status individual aguarda uma coluna própria no banco.
-              </p>
-            ) : null}
             {demand.description ? (
               <p className="pt-1 text-muted-foreground/90 whitespace-pre-wrap break-words">
                 {demand.description}

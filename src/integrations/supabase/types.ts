@@ -74,6 +74,7 @@ export type Database = {
           demand_id: number
           estimated_hours: number
           id: number
+          kanban_status: string
           lane_id: string | null
           manually_positioned: boolean
           updated_at: string
@@ -87,6 +88,7 @@ export type Database = {
           demand_id: number
           estimated_hours: number
           id?: number
+          kanban_status?: string
           lane_id?: string | null
           manually_positioned?: boolean
           updated_at?: string
@@ -100,6 +102,7 @@ export type Database = {
           demand_id?: number
           estimated_hours?: number
           id?: number
+          kanban_status?: string
           lane_id?: string | null
           manually_positioned?: boolean
           updated_at?: string
