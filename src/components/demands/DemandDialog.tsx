@@ -138,7 +138,7 @@ export function DemandDialog({
           estimated_hours: Number(String(a.hours).replace(",", ".")),
           lane_id: prev?.lane_id ?? null,
           manually_positioned: prev?.manually_positioned === true,
-          client_selections: prev?.client_selections ?? [],
+          checklist_selections: prev?.checklist_selections ?? [],
         };
       }),
     [assignees, demand, nameById]

@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Banco falso em memória para validar a regra central do checklist:
- * a lista de clientes é compartilhada pela demanda, mas cada responsável
- * persiste as suas próprias marcações na sua linha.
+ * Banco falso em memória para validar o checklist genérico:
+ * os itens são compartilhados pela demanda, mas cada responsável persiste
+ * as suas próprias marcações na sua linha.
  */
 type DemandRow = {
   id: string;
   name: string;
   description: string | null;
   client_name: string | null;
-  client_names: string[];
+  checklist_items: string[];
   desired_date: string;
   is_visible_on_dashboard: boolean;
   status: string;
@@ -26,7 +26,7 @@ type AssigneeRow = {
   estimated_hours: number;
   lane_id: string | null;
   manually_positioned: boolean;
-  client_selections: string[];
+  checklist_selections: string[];
 };
 
 const DEMANDS = "dashboard_manual_demands";
@@ -57,11 +57,9 @@ function query(table: string): any {
     }
     if (operation === "delete") {
       const rows = matching();
-      const target = table === DEMANDS ? db.demands : db.assignees;
       const ids = new Set(rows.map((r) => r.id));
       if (table === DEMANDS) db.demands = db.demands.filter((d) => !ids.has(d.id));
       else db.assignees = db.assignees.filter((a) => !ids.has(a.id));
-      void target;
       return { data: [], error: null };
     }
     if (operation === "insert") {
@@ -80,15 +78,15 @@ function query(table: string): any {
         error: null,
       };
     }
-    if (columns === "id,client_names") {
+    if (columns === "id,checklist_items") {
       return {
-        data: rows.map((r) => ({ id: r.id, client_names: r.client_names })),
+        data: rows.map((r) => ({ id: r.id, checklist_items: r.checklist_items })),
         error: null,
       };
     }
-    if (columns === "id,client_selections") {
+    if (columns === "id,checklist_selections") {
       return {
-        data: rows.map((r) => ({ id: r.id, client_selections: r.client_selections })),
+        data: rows.map((r) => ({ id: r.id, checklist_selections: r.checklist_selections })),
         error: null,
       };
     }
@@ -137,8 +135,10 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import {
   fetchManualDemands,
-  updateDemandAssigneeClientSelections,
-  updateManualDemandClients,
+  removeChecklistSelectionsForDemand,
+  renameChecklistSelectionsForDemand,
+  updateDemandAssigneeChecklistSelections,
+  updateDemandChecklist,
 } from "./manual-demands";
 
 beforeEach(() => {
@@ -148,7 +148,7 @@ beforeEach(() => {
       name: "Demanda compartilhada",
       description: null,
       client_name: null,
-      client_names: ["Cliente A", "Cliente B"],
+      checklist_items: ["Item A", "Item B"],
       desired_date: "2026-11-26",
       is_visible_on_dashboard: true,
       status: "Ativa",
@@ -165,7 +165,7 @@ beforeEach(() => {
       estimated_hours: 4,
       lane_id: null,
       manually_positioned: false,
-      client_selections: ["Cliente A"],
+      checklist_selections: ["Item A"],
     },
     {
       id: "a-laura",
@@ -174,48 +174,66 @@ beforeEach(() => {
       estimated_hours: 4,
       lane_id: null,
       manually_positioned: false,
-      client_selections: ["Cliente B"],
+      checklist_selections: ["Item B"],
     },
   ];
 });
 
-describe("checklist de clientes em demandas avulsas", () => {
-  it("abre a demanda com as marcações de cada responsável", async () => {
-    const demands = await fetchManualDemands();
-    const demand = demands.find((d) => d.id === "d1");
-    expect(demand?.client_names).toEqual(["Cliente A", "Cliente B"]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.client_selections).toEqual([
-      "Cliente A",
-    ]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.client_selections).toEqual([
-      "Cliente B",
-    ]);
+describe("checklist genérico de demandas avulsas", () => {
+  it("carrega os itens compartilhados e as marcações de cada responsável", async () => {
+    const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
+    expect(demand?.checklist_items).toEqual(["Item A", "Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      ["Item A"],
+    );
+    expect(
+      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
+    ).toEqual(["Item B"]);
   });
 
-  it("marca um cliente para Caio sem alterar as marcações de Laura", async () => {
-    await fetchManualDemands(); // carrega o checklist como ao abrir o card
-    await updateDemandAssigneeClientSelections("a-caio", ["Cliente A", "Cliente B"]);
+  it("cria um item novo e o marca somente para Caio", async () => {
+    await fetchManualDemands();
+    await updateDemandChecklist("d1", ["Item A", "Item B", "Item C"]);
+    await updateDemandAssigneeChecklistSelections("a-caio", ["Item A", "Item C"]);
 
     // Nova leitura = fechar e reabrir o modal.
     const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.client_selections).toEqual([
-      "Cliente A",
-      "Cliente B",
-    ]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.client_selections).toEqual([
-      "Cliente B",
-    ]);
+    expect(demand?.checklist_items).toEqual(["Item A", "Item B", "Item C"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      ["Item A", "Item C"],
+    );
+    expect(
+      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
+    ).toEqual(["Item B"]);
   });
 
-  it("a lista editada é compartilhada e não apaga marcações individuais", async () => {
+  it("edita um item preservando a marcação individual de cada responsável", async () => {
     await fetchManualDemands();
-    await updateManualDemandClients("d1", ["Cliente A", "Cliente B", "Cliente C"]);
+    await updateDemandChecklist("d1", ["Item A renomeado", "Item B"]);
+    await renameChecklistSelectionsForDemand("d1", "Item A", "Item A renomeado");
 
     const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.client_names).toEqual(["Cliente A", "Cliente B", "Cliente C"]);
-    expect(demand?.assignees.map((a) => a.client_selections)).toEqual([
-      ["Cliente A"],
-      ["Cliente B"],
-    ]);
+    expect(demand?.checklist_items).toEqual(["Item A renomeado", "Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      ["Item A renomeado"],
+    );
+    expect(
+      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
+    ).toEqual(["Item B"]);
+  });
+
+  it("exclui um item e remove a marcação sem afetar os demais responsáveis", async () => {
+    await fetchManualDemands();
+    await updateDemandChecklist("d1", ["Item B"]);
+    await removeChecklistSelectionsForDemand("d1", "Item A");
+
+    const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
+    expect(demand?.checklist_items).toEqual(["Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      [],
+    );
+    expect(
+      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
+    ).toEqual(["Item B"]);
   });
 });

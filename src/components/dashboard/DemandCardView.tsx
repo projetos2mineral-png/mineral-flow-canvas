@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 export interface DemandCardViewProps {
   card: DemandBoardCard;
   className?: string;
-  /** Abre o modal do card (lista/checklist de clientes). */
+  /** Abre o modal do card (checklist e marcações individuais). */
   onOpenCard?: (card: DemandBoardCard) => void;
 }
 
