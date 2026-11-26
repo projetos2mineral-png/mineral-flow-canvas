@@ -116,7 +116,15 @@ function WeeklySortableCard({
   );
 }
 
-function WeeklySortableDemand({ demand, disabled }: { demand: DemandBoardCard; disabled?: boolean }) {
+function WeeklySortableDemand({
+  demand,
+  disabled,
+  onOpenDemand,
+}: {
+  demand: DemandBoardCard;
+  disabled?: boolean;
+  onOpenDemand?: (d: DemandBoardCard) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: demand.key,
     disabled,
@@ -129,7 +137,7 @@ function WeeklySortableDemand({ demand, disabled }: { demand: DemandBoardCard; d
       {...listeners}
       className="shrink-0 w-[var(--kb-col,260px)]"
     >
-      <DemandCardView card={demand} />
+      <DemandCardView card={demand} onOpenCard={onOpenDemand} />
     </div>
   );
 }
@@ -142,6 +150,7 @@ function WeeklyRow({
   cards,
   demands = [],
   onOpenCard,
+  onOpenDemand,
   onStatusChange,
   disabled = false,
   isAdmin = false,
@@ -156,6 +165,7 @@ function WeeklyRow({
   cards: DashboardCard[];
   demands?: DemandBoardCard[];
   onOpenCard?: (c: DashboardCard) => void;
+  onOpenDemand?: (d: DemandBoardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   disabled?: boolean;
   isAdmin?: boolean;
@@ -234,7 +244,12 @@ function WeeklyRow({
                   />
                 ))}
                 {demands.map((d) => (
-                  <WeeklySortableDemand key={d.key} demand={d} disabled={disabled} />
+                  <WeeklySortableDemand
+                    key={d.key}
+                    demand={d}
+                    disabled={disabled}
+                    onOpenDemand={onOpenDemand}
+                  />
                 ))}
               </>
             ) : (
@@ -255,6 +270,7 @@ export function WeeklyPlanView({
   cards,
   demands = [],
   onOpenCard,
+  onOpenDemand,
   onStatusChange,
   readOnly = false,
   isAdmin = false,
@@ -266,6 +282,7 @@ export function WeeklyPlanView({
   cards: DashboardCard[];
   demands?: DemandBoardCard[];
   onOpenCard?: (c: DashboardCard) => void;
+  onOpenDemand?: (d: DemandBoardCard) => void;
   onStatusChange?: (c: DashboardCard, s: CardStatus) => void;
   readOnly?: boolean;
   isAdmin?: boolean;
@@ -585,6 +602,7 @@ export function WeeklyPlanView({
               cards={buckets[BUCKET_BACKLOG]}
               demands={demandBuckets[BUCKET_BACKLOG]}
               onOpenCard={onOpenCard}
+              onOpenDemand={onOpenDemand}
               onStatusChange={onStatusChange}
               disabled={readOnly}
               isAdmin={isAdmin}
@@ -603,6 +621,7 @@ export function WeeklyPlanView({
                   cards={buckets[i + 1]}
                   demands={demandBuckets[i + 1]}
                   onOpenCard={onOpenCard}
+                  onOpenDemand={onOpenDemand}
                   onStatusChange={onStatusChange}
                   disabled={readOnly}
                   isAdmin={isAdmin}

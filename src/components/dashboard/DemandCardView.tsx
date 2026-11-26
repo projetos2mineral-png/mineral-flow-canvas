@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { Building2, CalendarDays, Clock, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
@@ -7,6 +8,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 export interface DemandCardViewProps {
   card: DemandBoardCard;
   className?: string;
+  /** Abre o modal do card (lista/checklist de clientes). */
+  onOpenCard?: (card: DemandBoardCard) => void;
 }
 
 /**
@@ -14,18 +17,51 @@ export interface DemandCardViewProps {
  * Identidade visual própria (azul-turquesa) para diferenciar dos projetos
  * do Runrun.it, cuja aparência permanece inalterada.
  */
-export function DemandCardView({ card, className }: DemandCardViewProps) {
+export function DemandCardView({ card, className, onOpenCard }: DemandCardViewProps) {
   const { demand, people, ownHours, assigneeName } = card;
   // Colegas aparecem só pelo nome: a estimativa do card é SEMPRE individual.
   const others = people.filter((p) => p.name !== assigneeName).map((p) => p.name);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
   return (
     <div
       style={{ padding: "var(--kb-card-pad)" }}
+      role={onOpenCard ? "button" : undefined}
+      tabIndex={onOpenCard ? 0 : undefined}
+      onPointerDown={
+        onOpenCard
+          ? (e) => {
+              pointerStart.current = { x: e.clientX, y: e.clientY };
+            }
+          : undefined
+      }
+      onClick={
+        onOpenCard
+          ? (e) => {
+              const start = pointerStart.current;
+              pointerStart.current = null;
+              // Um arraste não deve abrir o modal ao soltar o card.
+              if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 4) return;
+              onOpenCard(card);
+            }
+          : undefined
+      }
+      onKeyDown={
+        onOpenCard
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenCard(card);
+              }
+            }
+          : undefined
+      }
       className={cn(
         "rounded-[8px] border shadow-sm transition-shadow",
         "border-teal-300 bg-teal-50 text-teal-950",
         "dark:border-teal-800/70 dark:bg-[#0C3A3A] dark:text-teal-50",
+        onOpenCard &&
+          "cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
     >

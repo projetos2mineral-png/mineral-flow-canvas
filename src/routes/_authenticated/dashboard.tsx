@@ -167,6 +167,7 @@ import {
   type RunrunitTaskStatusTone,
 } from "@/lib/runrunit-tasks";
 import { DemandCardView } from "@/components/dashboard/DemandCardView";
+import { DemandCardDialog } from "@/components/dashboard/DemandCardDialog";
 import { WeeklyPlanView } from "@/components/dashboard/WeeklyPlanView";
 import { ProjectCardView } from "@/components/dashboard/ProjectCardView";
 import { WeeklyWorkedHoursButton } from "@/components/dashboard/WeeklyWorkedHours";
@@ -2841,6 +2842,7 @@ function AssigneeBoard({
 
   // Modal states
   const [openCard, setOpenCard] = useState<DashboardCard | null>(null);
+  const [openDemand, setOpenDemand] = useState<DemandBoardCard | null>(null);
   const [reviewCard, setReviewCard] = useState<DashboardCard | null>(null);
   const [correctionReview, setCorrectionReview] = useState<ReviewRow | null>(null);
 
@@ -3644,6 +3646,7 @@ function AssigneeBoard({
                   onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                   onStatusChange={handleStatusChange}
                   onOpenCard={setOpenCard}
+                  onOpenDemand={setOpenDemand}
                   isUnassigned
                   assigneeName={assignee}
                   isAdmin={isAdmin}
@@ -3671,6 +3674,7 @@ function AssigneeBoard({
                       onRequestCorrectionReview={(r) => setCorrectionReview(r)}
                       onStatusChange={handleStatusChange}
                       onOpenCard={setOpenCard}
+                      onOpenDemand={setOpenDemand}
                       isAdmin={isAdmin}
                       onRename={async (newTitle) => {
                         try {
@@ -3836,11 +3840,15 @@ function AssigneeBoard({
           cards={grouped.get(weeklyLane.id) ?? []}
           demands={demandsByLane.get(weeklyLane.id) ?? []}
           onOpenCard={setOpenCard}
+          onOpenDemand={setOpenDemand}
           onStatusChange={handleStatusChange}
           readOnly={readOnly}
           isAdmin={isAdmin}
         />
       )}
+
+      {/* Renderizado por último para ficar acima do planejamento semanal. */}
+      <DemandCardDialog card={openDemand} onClose={() => setOpenDemand(null)} />
     </>
   );
 }
@@ -4138,6 +4146,7 @@ function LaneColumn({
   onDelete,
   onStatusChange,
   onOpenCard,
+  onOpenDemand,
   isUnassigned,
   dragHandleProps,
   laneSetNodeRef,
@@ -4162,6 +4171,7 @@ function LaneColumn({
   onDelete?: () => void | Promise<void>;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  onOpenDemand: (d: DemandBoardCard) => void;
   isUnassigned?: boolean;
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement> & {
     ref?: (el: HTMLElement | null) => void;
@@ -4612,6 +4622,7 @@ function LaneColumn({
           onRequestCorrectionReview={onRequestCorrectionReview}
           onStatusChange={onStatusChange}
           onOpenCard={onOpenCard}
+          onOpenDemand={onOpenDemand}
           isAdmin={isAdmin}
           horizontal={horizontal}
         />
@@ -4631,6 +4642,7 @@ function SortableLaneColumn(props: {
   onRequestCorrectionReview: (r: ReviewRow) => void;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  onOpenDemand: (d: DemandBoardCard) => void;
   onRename: (next: string) => void | Promise<void>;
   onDelete: () => void | Promise<void>;
   isAdmin?: boolean;
@@ -4664,6 +4676,7 @@ function SortableLaneColumn(props: {
       onRequestCorrectionReview={props.onRequestCorrectionReview}
       onStatusChange={props.onStatusChange}
       onOpenCard={props.onOpenCard}
+      onOpenDemand={props.onOpenDemand}
       onRename={props.onRename}
       onDelete={props.onDelete}
       laneSetNodeRef={setNodeRef}
@@ -4693,6 +4706,7 @@ function DroppableLaneBody({
   onRequestCorrectionReview,
   onStatusChange,
   onOpenCard,
+  onOpenDemand,
   isAdmin = false,
   horizontal = false,
 }: {
@@ -4706,6 +4720,7 @@ function DroppableLaneBody({
   onRequestCorrectionReview: (r: ReviewRow) => void;
   onStatusChange: (c: DashboardCard, s: CardStatus) => void;
   onOpenCard: (c: DashboardCard) => void;
+  onOpenDemand: (d: DemandBoardCard) => void;
   isAdmin?: boolean;
   horizontal?: boolean;
 }) {
@@ -4755,7 +4770,7 @@ function DroppableLaneBody({
           ))}
           {demands.map((d) => (
             <div key={d.key} className={itemShell}>
-              <SortableDemand card={d} />
+              <SortableDemand card={d} onOpenDemand={onOpenDemand} />
             </div>
           ))}
           {cards.length === 0 && reviews.length === 0 && demands.length === 0 && (
@@ -5272,7 +5287,13 @@ function ReadRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SortableDemand({ card }: { card: DemandBoardCard }) {
+function SortableDemand({
+  card,
+  onOpenDemand,
+}: {
+  card: DemandBoardCard;
+  onOpenDemand: (d: DemandBoardCard) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `dem:${card.assigneeRowId ?? card.key}`,
     disabled: !card.assigneeRowId,
@@ -5285,7 +5306,7 @@ function SortableDemand({ card }: { card: DemandBoardCard }) {
       {...attributes}
       {...listeners}
     >
-      <DemandCardView card={card} />
+      <DemandCardView card={card} onOpenCard={onOpenDemand} />
     </div>
   );
 }
