@@ -31,6 +31,11 @@ export interface DemandAssignee {
   lane_id?: string | null;
   /** true quando o responsável moveu o card; false = fila derivada da data desejada. */
   manually_positioned?: boolean;
+  /** Classificações exclusivas deste card/responsável. */
+  is_tec?: boolean;
+  is_geo?: boolean;
+  is_rev?: boolean;
+  is_campo?: boolean;
   /** Itens do checklist exclusivos deste card/responsável. */
   checklist_items?: string[];
   /** Marcações exclusivas deste responsável. */
@@ -95,6 +100,8 @@ let assigneeChecklistItemsSupported: boolean | null = null;
 let assigneeChecklistSelectionSupported: boolean | null = null;
 /** Status individual no Kanban — depende da coluna kanban_status. */
 let assigneeKanbanStatusSupported: boolean | null = null;
+/** Classificações exclusivas por responsável. */
+let assigneeClassificationsSupported: boolean | null = null;
 
 export function isDemandAssigneeKanbanStatusSupported(): boolean {
   return assigneeKanbanStatusSupported !== false;
@@ -294,6 +301,39 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
     }
   }
 
+  const classificationsByAssigneeId = new Map<
+    string,
+    { is_tec: boolean; is_geo: boolean; is_rev: boolean; is_campo: boolean }
+  >();
+  if (assigneeClassificationsSupported !== false) {
+    const { data: classificationRows, error: classificationError } = await (supabase as any)
+      .from(ASSIGNEES_TABLE)
+      .select("id,is_tec,is_geo,is_rev,is_campo");
+    if (classificationError) {
+      if (classificationError.code === UNDEFINED_COLUMN || classificationError.code === "PGRST204") {
+        assigneeClassificationsSupported = false;
+      } else {
+        console.warn("[manual-demands] classificações indisponíveis:", classificationError.message);
+      }
+    } else {
+      assigneeClassificationsSupported = true;
+      for (const row of (classificationRows ?? []) as {
+        id: string;
+        is_tec: boolean;
+        is_geo: boolean;
+        is_rev: boolean;
+        is_campo: boolean;
+      }[]) {
+        classificationsByAssigneeId.set(row.id, {
+          is_tec: row.is_tec === true,
+          is_geo: row.is_geo === true,
+          is_rev: row.is_rev === true,
+          is_campo: row.is_campo === true,
+        });
+      }
+    }
+  }
+
   return ((data ?? []) as any[]).map((row) => ({
     id: row.id,
     name: row.name,
@@ -316,6 +356,10 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
       manually_positioned: a.manually_positioned === true,
       checklist_items: itemsByAssigneeId.get(a.id) ?? [],
       checklist_selections: selectionsByAssigneeId.get(a.id) ?? [],
+      is_tec: classificationsByAssigneeId.get(a.id)?.is_tec ?? false,
+      is_geo: classificationsByAssigneeId.get(a.id)?.is_geo ?? false,
+      is_rev: classificationsByAssigneeId.get(a.id)?.is_rev ?? false,
+      is_campo: classificationsByAssigneeId.get(a.id)?.is_campo ?? false,
     })),
   }));
 }
@@ -428,6 +472,29 @@ export async function updateDemandAssigneeKanbanStatus(
   assigneeKanbanStatusSupported = true;
 }
 
+/** Atualiza as classificações somente para este responsável. */
+export async function updateDemandAssigneeClassifications(
+  assigneeRowId: string,
+  classifications: { is_tec: boolean; is_geo: boolean; is_rev: boolean; is_campo: boolean },
+): Promise<void> {
+  const { data, error } = await (supabase as any)
+    .from(ASSIGNEES_TABLE)
+    .update({ ...classifications, updated_at: new Date().toISOString() })
+    .eq("id", assigneeRowId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") {
+      assigneeClassificationsSupported = false;
+      throw new Error("As classificações individuais ainda não estão disponíveis.");
+    }
+    throw error;
+  }
+  if (!data) throw new Error("Responsável da demanda não encontrado.");
+  assigneeClassificationsSupported = true;
+}
+
 
 
 /**
@@ -523,6 +590,43 @@ async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
     }
   }
 
+  const previousClassifications = new Map<
+    string,
+    { is_tec: boolean; is_geo: boolean; is_rev: boolean; is_campo: boolean }
+  >();
+  if (assigneeClassificationsSupported !== false) {
+    const { data: previousRows, error } = await (supabase as any)
+      .from(ASSIGNEES_TABLE)
+      .select("assignee_name,is_tec,is_geo,is_rev,is_campo")
+      .eq("demand_id", demandId);
+    if (error) {
+      if (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") {
+        assigneeClassificationsSupported = false;
+      } else {
+        throw error;
+      }
+    } else {
+      assigneeClassificationsSupported = true;
+      for (const row of (previousRows ?? []) as {
+        assignee_name: string | null;
+        is_tec: boolean;
+        is_geo: boolean;
+        is_rev: boolean;
+        is_campo: boolean;
+      }[]) {
+        const key = (row.assignee_name ?? "").trim().toLocaleLowerCase("pt-BR");
+        if (key) {
+          previousClassifications.set(key, {
+            is_tec: row.is_tec === true,
+            is_geo: row.is_geo === true,
+            is_rev: row.is_rev === true,
+            is_campo: row.is_campo === true,
+          });
+        }
+      }
+    }
+  }
+
   const { error: delError } = await (supabase as any)
     .from(ASSIGNEES_TABLE)
     .delete()
@@ -555,6 +659,16 @@ async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
           : {}),
         ...(assigneeChecklistSelectionSupported === true
           ? { checklist_selections: selections }
+          : {}),
+        ...(assigneeClassificationsSupported === true
+          ? {
+              ...(previousClassifications.get(key) ?? {
+                is_tec: false,
+                is_geo: false,
+                is_rev: false,
+                is_campo: false,
+              }),
+            }
           : {}),
       };
     }),

@@ -35,6 +35,10 @@ export interface DemandBoardCard {
   /** Fila escolhida manualmente neste quadro (null + manual = "Sem fila"). */
   manualLaneId: string | null;
   manuallyPositioned: boolean;
+  is_tec: boolean;
+  is_geo: boolean;
+  is_rev: boolean;
+  is_campo: boolean;
   /** Título da fila mensal derivado de desired_date (ex.: "Setembro/2026"). */
   laneTitle: string;
 }
@@ -80,6 +84,10 @@ export function buildDemandBoardCards(
         assigneeRowId: a.id ?? null,
         manualLaneId: a.lane_id ?? null,
         manuallyPositioned: a.manually_positioned === true,
+        is_tec: a.is_tec === true,
+        is_geo: a.is_geo === true,
+        is_rev: a.is_rev === true,
+        is_campo: a.is_campo === true,
         people,
         laneTitle,
       });

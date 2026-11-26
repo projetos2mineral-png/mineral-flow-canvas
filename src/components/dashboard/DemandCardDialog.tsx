@@ -27,6 +27,7 @@ import {
   updateDemandAssigneeChecklistSelections,
   updateDemandAssigneeEstimate,
   updateDemandAssigneeKanbanStatus,
+  updateDemandAssigneeClassifications,
 } from "@/lib/manual-demands";
 
 const itemKey = (value: string) => value.trim().toLocaleLowerCase("pt-BR");
@@ -87,6 +88,13 @@ export function DemandCardDialog({
   const [savingHours, setSavingHours] = useState(false);
   const [localStatus, setLocalStatus] = useState<CardStatus>("a iniciar");
   const [savingStatus, setSavingStatus] = useState(false);
+  const [classifications, setClassifications] = useState({
+    is_tec: false,
+    is_geo: false,
+    is_rev: false,
+    is_campo: false,
+  });
+  const [savingClassifications, setSavingClassifications] = useState(false);
 
   const sourceKey = JSON.stringify({
     key: card?.key ?? null,
@@ -109,7 +117,22 @@ export function DemandCardDialog({
     setHoursDraft(formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours)));
     setEditingHours(false);
     setLocalStatus(assignee?.kanban_status ?? "a iniciar");
-  }, [card?.key, card?.ownHours, assignee?.estimated_hours, assignee?.kanban_status]);
+    setClassifications({
+      is_tec: assignee?.is_tec === true,
+      is_geo: assignee?.is_geo === true,
+      is_rev: assignee?.is_rev === true,
+      is_campo: assignee?.is_campo === true,
+    });
+  }, [
+    card?.key,
+    card?.ownHours,
+    assignee?.estimated_hours,
+    assignee?.kanban_status,
+    assignee?.is_tec,
+    assignee?.is_geo,
+    assignee?.is_rev,
+    assignee?.is_campo,
+  ]);
 
   const pendingRef = useRef(0);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -171,6 +194,23 @@ export function DemandCardDialog({
       toast.error(`Não foi possível atualizar o status: ${(e as Error).message}`);
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  const saveClassifications = async () => {
+    if (!assigneeRowId) return;
+    setSavingClassifications(true);
+    try {
+      await updateDemandAssigneeClassifications(assigneeRowId, classifications);
+      await Promise.all([
+        invalidate(),
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+      ]);
+      toast.success("Classificações salvas.");
+    } catch (e) {
+      toast.error(`Não foi possível salvar as classificações: ${(e as Error).message}`);
+    } finally {
+      setSavingClassifications(false);
     }
   };
 
@@ -357,7 +397,7 @@ export function DemandCardDialog({
               <DemandStatusSelect
                 status={localStatus}
                 onChange={(status) => void handleStatusChange(status)}
-                disabled={!assigneeRowId}
+                disabled={!assigneeRowId || savingStatus}
                 title="Alterar status do card"
               />
             </div>
@@ -366,6 +406,43 @@ export function DemandCardDialog({
                 {demand.description}
               </p>
             ) : null}
+          </div>
+
+          <div className="space-y-3 rounded-md border border-border/60 p-2.5">
+            <h3 className="text-sm font-semibold">Classificações</h3>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {[
+                ["is_tec", "Técnico (TEC)"],
+                ["is_geo", "Geoprocessamento (GEO)"],
+                ["is_rev", "Revisão (REV)"],
+                ["is_campo", "Campo (CAM)"],
+              ].map(([key, label]) => (
+                <label key={key} className="inline-flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={classifications[key as keyof typeof classifications]}
+                    disabled={!assigneeRowId || savingClassifications}
+                    onCheckedChange={(checked) =>
+                      setClassifications((current) => ({
+                        ...current,
+                        [key]: checked === true,
+                      }))
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void saveClassifications()}
+                disabled={!assigneeRowId || savingClassifications}
+              >
+                {savingClassifications ? "Salvando…" : "Salvar classificações"}
+              </Button>
+            </div>
           </div>
 
           <div className="space-y-2 rounded-md border border-border/60 p-2.5">

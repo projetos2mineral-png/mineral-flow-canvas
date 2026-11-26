@@ -74,6 +74,10 @@ export type Database = {
           demand_id: number
           estimated_hours: number
           id: number
+          is_campo: boolean
+          is_geo: boolean
+          is_rev: boolean
+          is_tec: boolean
           kanban_status: string
           lane_id: string | null
           manually_positioned: boolean
@@ -88,6 +92,10 @@ export type Database = {
           demand_id: number
           estimated_hours: number
           id?: number
+          is_campo?: boolean
+          is_geo?: boolean
+          is_rev?: boolean
+          is_tec?: boolean
           kanban_status?: string
           lane_id?: string | null
           manually_positioned?: boolean
@@ -102,6 +110,10 @@ export type Database = {
           demand_id?: number
           estimated_hours?: number
           id?: number
+          is_campo?: boolean
+          is_geo?: boolean
+          is_rev?: boolean
+          is_tec?: boolean
           kanban_status?: string
           lane_id?: string | null
           manually_positioned?: boolean
