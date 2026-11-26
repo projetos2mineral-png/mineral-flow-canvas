@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Banco falso em memória para validar o checklist genérico:
- * os itens são compartilhados pela demanda, mas cada responsável persiste
- * as suas próprias marcações na sua linha.
+ * Banco falso em memória para validar listas e marcações independentes
+ * na linha de cada responsável.
  */
 type DemandRow = {
   id: string;
@@ -26,6 +25,7 @@ type AssigneeRow = {
   estimated_hours: number;
   lane_id: string | null;
   manually_positioned: boolean;
+  checklist_items: string[];
   checklist_selections: string[];
 };
 
@@ -75,6 +75,12 @@ function query(table: string): any {
           ...r,
           [ASSIGNEES]: db.assignees.filter((a) => a.demand_id === r.id).map((a) => ({ ...a })),
         })),
+        error: null,
+      };
+    }
+    if (columns === "id,checklist_items") {
+      return {
+        data: rows.map((r) => ({ id: r.id, checklist_items: r.checklist_items })),
         error: null,
       };
     }
@@ -135,10 +141,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import {
   fetchManualDemands,
-  removeChecklistSelectionsForDemand,
-  renameChecklistSelectionsForDemand,
+  updateDemandAssigneeChecklistItems,
   updateDemandAssigneeChecklistSelections,
-  updateDemandChecklist,
 } from "./manual-demands";
 
 beforeEach(() => {
@@ -148,7 +152,7 @@ beforeEach(() => {
       name: "Demanda compartilhada",
       description: null,
       client_name: null,
-      checklist_items: ["Item A", "Item B"],
+      checklist_items: ["Lista antiga compartilhada"],
       desired_date: "2026-11-26",
       is_visible_on_dashboard: true,
       status: "Ativa",
@@ -159,13 +163,24 @@ beforeEach(() => {
   ];
   db.assignees = [
     {
+      id: "a-alessandra",
+      demand_id: "d1",
+      assignee_name: "Alessandra",
+      estimated_hours: 4,
+      lane_id: null,
+      manually_positioned: false,
+      checklist_items: ["Item Alessandra"],
+      checklist_selections: ["Item Alessandra"],
+    },
+    {
       id: "a-caio",
       demand_id: "d1",
       assignee_name: "Caio",
       estimated_hours: 4,
       lane_id: null,
       manually_positioned: false,
-      checklist_selections: ["Item A"],
+      checklist_items: ["Item Caio"],
+      checklist_selections: ["Item Caio"],
     },
     {
       id: "a-laura",
@@ -174,66 +189,66 @@ beforeEach(() => {
       estimated_hours: 4,
       lane_id: null,
       manually_positioned: false,
-      checklist_selections: ["Item B"],
+      checklist_items: ["Item Laura"],
+      checklist_selections: ["Item Laura"],
     },
   ];
 });
 
-describe("checklist genérico de demandas avulsas", () => {
-  it("carrega os itens compartilhados e as marcações de cada responsável", async () => {
+describe("checklists individuais das demandas avulsas", () => {
+  it("carrega listas e marcações diferentes para cada responsável", async () => {
     const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.checklist_items).toEqual(["Item A", "Item B"]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
-      ["Item A"],
+    expect(demand?.checklist_items).toEqual(["Lista antiga compartilhada"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Alessandra")?.checklist_items).toEqual(
+      ["Item Alessandra"],
     );
-    expect(
-      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
-    ).toEqual(["Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_items).toEqual(
+      ["Item Caio"],
+    );
+    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_items).toEqual(
+      ["Item Laura"],
+    );
   });
 
-  it("cria um item novo e o marca somente para Caio", async () => {
+  it("salva e recarrega a lista e as marcações de Caio sem alterar os demais", async () => {
     await fetchManualDemands();
-    await updateDemandChecklist("d1", ["Item A", "Item B", "Item C"]);
-    await updateDemandAssigneeChecklistSelections("a-caio", ["Item A", "Item C"]);
+    await updateDemandAssigneeChecklistItems("a-caio", ["Tarefa Caio 1", "Tarefa Caio 2"]);
+    await updateDemandAssigneeChecklistSelections("a-caio", ["Tarefa Caio 2"]);
 
-    // Nova leitura = fechar e reabrir o modal.
+    // Nova leitura = fechar e reabrir o modal de cada responsável.
     const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.checklist_items).toEqual(["Item A", "Item B", "Item C"]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
-      ["Item A", "Item C"],
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_items).toEqual(
+      ["Tarefa Caio 1", "Tarefa Caio 2"],
     );
-    expect(
-      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
-    ).toEqual(["Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      ["Tarefa Caio 2"],
+    );
+    expect(demand?.assignees.find((a) => a.assignee_name === "Alessandra")?.checklist_items).toEqual(
+      ["Item Alessandra"],
+    );
+    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_items).toEqual(
+      ["Item Laura"],
+    );
+    expect(demand?.checklist_items).toEqual(["Lista antiga compartilhada"]);
   });
 
-  it("edita um item preservando a marcação individual de cada responsável", async () => {
+  it("edita ou remove itens e suas marcações somente no card escolhido", async () => {
     await fetchManualDemands();
-    await updateDemandChecklist("d1", ["Item A renomeado", "Item B"]);
-    await renameChecklistSelectionsForDemand("d1", "Item A", "Item A renomeado");
+    await updateDemandAssigneeChecklistItems("a-laura", ["Item Laura renomeado"]);
+    await updateDemandAssigneeChecklistSelections("a-laura", ["Item Laura renomeado"]);
 
     const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.checklist_items).toEqual(["Item A renomeado", "Item B"]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
-      ["Item A renomeado"],
+    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_items).toEqual(
+      ["Item Laura renomeado"],
     );
-    expect(
-      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
-    ).toEqual(["Item B"]);
-  });
-
-  it("exclui um item e remove a marcação sem afetar os demais responsáveis", async () => {
-    await fetchManualDemands();
-    await updateDemandChecklist("d1", ["Item B"]);
-    await removeChecklistSelectionsForDemand("d1", "Item A");
-
-    const demand = (await fetchManualDemands()).find((d) => d.id === "d1");
-    expect(demand?.checklist_items).toEqual(["Item B"]);
-    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
-      [],
+    expect(demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections).toEqual(
+      ["Item Laura renomeado"],
     );
-    expect(
-      demand?.assignees.find((a) => a.assignee_name === "Laura")?.checklist_selections,
-    ).toEqual(["Item B"]);
+    expect(demand?.assignees.find((a) => a.assignee_name === "Alessandra")?.checklist_selections).toEqual(
+      ["Item Alessandra"],
+    );
+    expect(demand?.assignees.find((a) => a.assignee_name === "Caio")?.checklist_selections).toEqual(
+      ["Item Caio"],
+    );
   });
 });

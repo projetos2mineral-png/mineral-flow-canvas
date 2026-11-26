@@ -20,10 +20,8 @@ import {
   fetchManualDemands,
   formatHoursHHMM,
   normalizeChecklistItems,
-  removeChecklistSelectionsForDemand,
-  renameChecklistSelectionsForDemand,
+  updateDemandAssigneeChecklistItems,
   updateDemandAssigneeChecklistSelections,
-  updateDemandChecklist,
 } from "@/lib/manual-demands";
 
 const itemKey = (value: string) => value.trim().toLocaleLowerCase("pt-BR");
@@ -31,9 +29,7 @@ const itemKey = (value: string) => value.trim().toLocaleLowerCase("pt-BR");
 /**
  * Modal de um card de Demanda Avulsa.
  *
- * O checklist é uma lista genérica de textos: os itens pertencem à DEMANDA
- * e as marcações pertencem ao RESPONSÁVEL deste card. Abrir o card carrega
- * apenas as marcações dele; salvar altera somente a linha correspondente.
+ * Os itens e as marcações pertencem à linha exclusiva do responsável deste card.
  */
 export function DemandCardDialog({
   card,
@@ -85,13 +81,13 @@ export function DemandCardDialog({
 
   const sourceKey = JSON.stringify({
     key: card?.key ?? null,
-    items: demand?.checklist_items ?? [],
+    items: assignee?.checklist_items ?? [],
     checked: assignee?.checklist_selections ?? [],
   });
 
   useEffect(() => {
     if (!card) return;
-    setItems(normalizeChecklistItems(demand?.checklist_items ?? []));
+    setItems(normalizeChecklistItems(assignee?.checklist_items ?? []));
     setChecked(normalizeChecklistItems(assignee?.checklist_selections ?? []));
     setNewItem("");
     setEditingItem(null);
@@ -121,9 +117,9 @@ export function DemandCardDialog({
   const invalidate = () => qc.invalidateQueries({ queryKey: ["manual-demands"] });
 
   const persistItems = (nextItems: string[]) => {
-    if (!demandId) return;
+    if (!assigneeRowId) return;
     enqueue(async () => {
-      await updateDemandChecklist(demandId, nextItems);
+      await updateDemandAssigneeChecklistItems(assigneeRowId, nextItems);
       await invalidate();
     });
   };
@@ -157,10 +153,9 @@ export function DemandCardDialog({
     setChecked(nextChecked);
     if (editingItem && itemKey(editingItem) === key) setEditingItem(null);
     enqueue(async () => {
-      if (demandId) {
-        await updateDemandChecklist(demandId, nextItems);
-        // Remove a marcação deste item das linhas de todos os responsáveis.
-        await removeChecklistSelectionsForDemand(demandId, name);
+      if (assigneeRowId) {
+        await updateDemandAssigneeChecklistItems(assigneeRowId, nextItems);
+        await updateDemandAssigneeChecklistSelections(assigneeRowId, nextChecked);
       }
       await invalidate();
     });
@@ -191,10 +186,9 @@ export function DemandCardDialog({
     setChecked(nextChecked);
     setEditingItem(null);
     enqueue(async () => {
-      if (demandId) {
-        await updateDemandChecklist(demandId, nextItems);
-        // Renomeia a marcação preservando o estado individual de cada responsável.
-        await renameChecklistSelectionsForDemand(demandId, original, value);
+      if (assigneeRowId) {
+        await updateDemandAssigneeChecklistItems(assigneeRowId, nextItems);
+        await updateDemandAssigneeChecklistSelections(assigneeRowId, nextChecked);
       }
       await invalidate();
     });
@@ -248,7 +242,7 @@ export function DemandCardDialog({
 
           <div className="space-y-2 rounded-md border border-border/60 p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Checklist</Label>
+              <Label className="text-xs">Checklist de {cardAssignee}</Label>
               <span className="text-[10px] text-muted-foreground tabular-nums">
                 {items.length} {items.length === 1 ? "item" : "itens"}
               </span>

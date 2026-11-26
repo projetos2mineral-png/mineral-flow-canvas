@@ -28,7 +28,9 @@ export interface DemandAssignee {
   lane_id?: string | null;
   /** true quando o responsável moveu o card; false = fila derivada da data desejada. */
   manually_positioned?: boolean;
-  /** Itens marcados POR ESTE responsável (lista compartilhada em `checklist_items`). */
+  /** Itens do checklist exclusivos deste card/responsável. */
+  checklist_items?: string[];
+  /** Marcações exclusivas deste responsável. */
   checklist_selections?: string[];
 }
 
@@ -47,7 +49,7 @@ export interface ManualDemand {
   name: string;
   description: string | null;
   client_name: string | null;
-  /** Itens do checklist da demanda, compartilhados por todos os responsáveis. */
+  /** Lista antiga compartilhada, mantida apenas para preservar dados existentes. */
   checklist_items: string[];
   desired_date: string; // YYYY-MM-DD
   is_visible_on_dashboard: boolean;
@@ -62,8 +64,7 @@ export interface ManualDemandInput {
   name: string;
   description: string | null;
   client_name: string | null;
-  /** Opcional: preserva o checklist ao editar os dados da demanda. */
-  checklist_items?: string[];
+
   desired_date: string;
   is_visible_on_dashboard: boolean;
   status: DemandStatus;
@@ -85,7 +86,9 @@ let clientNameSupported: boolean | null = null;
 let assigneeLaneSupported: boolean | null = null;
 /** Checklist genérico (depende da migration local de checklist). */
 let demandChecklistSupported: boolean | null = null;
-/** Seleções individuais por responsável (mesma migration). */
+/** Itens individuais por card/responsável — requer coluna própria nessa tabela. */
+let assigneeChecklistItemsSupported: boolean | null = null;
+/** Seleções individuais por responsável. */
 let assigneeChecklistSelectionSupported: boolean | null = null;
 
 export function isClientNameSupported(): boolean {
@@ -190,6 +193,26 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
     }
   }
 
+  const itemsByAssigneeId = new Map<string, string[]>();
+
+  if (assigneeChecklistItemsSupported !== false) {
+    const { data: assigneeItemRows, error: assigneeItemError } = await (supabase as any)
+      .from(ASSIGNEES_TABLE)
+      .select("id,checklist_items");
+    if (assigneeItemError) {
+      if (assigneeItemError.code === UNDEFINED_COLUMN || assigneeItemError.code === "PGRST204") {
+        assigneeChecklistItemsSupported = false;
+      } else {
+        console.warn("[manual-demands] itens individuais indisponíveis:", assigneeItemError.message);
+      }
+    } else {
+      assigneeChecklistItemsSupported = true;
+      for (const row of (assigneeItemRows ?? []) as { id: string; checklist_items: unknown }[]) {
+        itemsByAssigneeId.set(row.id, normalizeChecklistItems(row.checklist_items));
+      }
+    }
+  }
+
   if (assigneeChecklistSelectionSupported !== false) {
     const { data: selectionRows, error: selectionError } = await (supabase as any)
       .from(ASSIGNEES_TABLE)
@@ -228,33 +251,38 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
       estimated_hours: Number(a.estimated_hours) || 0,
       lane_id: a.lane_id ?? null,
       manually_positioned: a.manually_positioned === true,
+      checklist_items: itemsByAssigneeId.get(a.id) ?? [],
       checklist_selections: selectionsByAssigneeId.get(a.id) ?? [],
     })),
   }));
 }
 
-const CHECKLIST_STORAGE_ERROR = "O checklist exige a migration local de itens e marcações.";
+const CHECKLIST_STORAGE_ERROR =
+  "O checklist individual exige uma coluna própria em dashboard_manual_demand_assignees. Os itens antigos compartilhados foram mantidos intactos.";
 
-/** Atualiza os itens compartilhados da demanda (não toca nas marcações). */
-export async function updateDemandChecklist(demandId: string, items: string[]): Promise<void> {
-  if (demandChecklistSupported === false) throw new Error(CHECKLIST_STORAGE_ERROR);
+ /** Atualiza apenas a lista de itens deste card/responsável. */
+export async function updateDemandAssigneeChecklistItems(
+  assigneeRowId: string,
+  items: string[],
+): Promise<void> {
+  if (assigneeChecklistItemsSupported === false) throw new Error(CHECKLIST_STORAGE_ERROR);
   const { data, error } = await (supabase as any)
-    .from(TABLE)
+    .from(ASSIGNEES_TABLE)
     .update({
       checklist_items: normalizeChecklistItems(items),
       updated_at: new Date().toISOString(),
     })
-    .eq("id", demandId)
+    .eq("id", assigneeRowId)
     .select("id");
   if (error) {
-    if (error.code === UNDEFINED_COLUMN) {
-      demandChecklistSupported = false;
+    if (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") {
+      assigneeChecklistItemsSupported = false;
       throw new Error(CHECKLIST_STORAGE_ERROR);
     }
     throw error;
   }
-  demandChecklistSupported = true;
-  if (!data || data.length === 0) throw new Error("Demanda não encontrada.");
+  assigneeChecklistItemsSupported = true;
+  if (!data || data.length === 0) throw new Error("Responsável da demanda não encontrado.");
 }
 
 /**
@@ -285,56 +313,7 @@ export async function updateDemandAssigneeChecklistSelections(
   if (!data || data.length === 0) throw new Error("Responsável da demanda não encontrado.");
 }
 
-/**
- * Renomeia um item nas marcações de todos os responsáveis da demanda.
- * Cada linha é lida e gravada individualmente, preservando as demais marcações.
- */
-export async function renameChecklistSelectionsForDemand(
-  demandId: string,
-  from: string,
-  to: string,
-): Promise<void> {
-  const fromKey = from.trim().toLocaleLowerCase("pt-BR");
-  const toKey = to.trim().toLocaleLowerCase("pt-BR");
-  if (!fromKey || fromKey === toKey) return;
-  await mapSelectionsForDemand(demandId, (item) =>
-    item.trim().toLocaleLowerCase("pt-BR") === fromKey ? to : item,
-  );
-}
 
-/** Remove um item das marcações de todos os responsáveis da demanda. */
-export async function removeChecklistSelectionsForDemand(
-  demandId: string,
-  item: string,
-): Promise<void> {
-  const key = item.trim().toLocaleLowerCase("pt-BR");
-  if (!key) return;
-  await mapSelectionsForDemand(demandId, (current) =>
-    current.trim().toLocaleLowerCase("pt-BR") === key ? null : current,
-  );
-}
-
-async function mapSelectionsForDemand(
-  demandId: string,
-  mapItem: (item: string) => string | null,
-): Promise<void> {
-  if (assigneeChecklistSelectionSupported === false) throw new Error(CHECKLIST_STORAGE_ERROR);
-  const { data, error } = await (supabase as any)
-    .from(ASSIGNEES_TABLE)
-    .select("id,checklist_selections")
-    .eq("demand_id", demandId);
-  if (error) {
-    if (error.code === UNDEFINED_COLUMN) assigneeChecklistSelectionSupported = false;
-    throw error;
-  }
-  for (const row of (data ?? []) as { id: string; checklist_selections: unknown }[]) {
-    const before = normalizeChecklistItems(row.checklist_selections);
-    const after = normalizeChecklistItems(before.map(mapItem).filter((v) => v !== null));
-    if (JSON.stringify(before) !== JSON.stringify(after)) {
-      await updateDemandAssigneeChecklistSelections(row.id, after);
-    }
-  }
-}
 
 /**
  * Move o card de UM responsável para uma fila do seu próprio quadro.
@@ -383,17 +362,37 @@ function demandPayload(input: ManualDemandInput) {
     updated_at: new Date().toISOString(),
   };
   if (isClientNameSupported()) payload.client_name = input.client_name?.trim() || null;
-  // Só envia o checklist quando informado; edições normais da demanda não
-  // podem apagar itens ou marcações feitos no modal dos cards.
-  if (demandChecklistSupported === true && input.checklist_items !== undefined) {
-    payload.checklist_items = normalizeChecklistItems(input.checklist_items);
-  }
+  // checklist_items é legado e não deve mais ser alterado pelo editor da demanda.
   return payload;
 }
 
 async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
-  // A edição dos dados da demanda recria as linhas de responsáveis. Guardamos
-  // as marcações atuais por nome para não perdê-las nesse processo.
+  // As linhas são recriadas ao editar a demanda. Mantém listas e marcações
+  // individualizadas associando os valores ao nome de cada responsável.
+  const previousItems = new Map<string, string[]>();
+  if (assigneeChecklistItemsSupported !== false) {
+    const { data, error } = await (supabase as any)
+      .from(ASSIGNEES_TABLE)
+      .select("assignee_name,checklist_items")
+      .eq("demand_id", demandId);
+    if (error) {
+      if (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") {
+        assigneeChecklistItemsSupported = false;
+      } else {
+        throw error;
+      }
+    } else {
+      assigneeChecklistItemsSupported = true;
+      for (const row of (data ?? []) as {
+        assignee_name: string | null;
+        checklist_items: unknown;
+      }[]) {
+        const key = (row.assignee_name ?? "").trim().toLocaleLowerCase("pt-BR");
+        if (key) previousItems.set(key, normalizeChecklistItems(row.checklist_items));
+      }
+    }
+  }
+
   const previousSelections = new Map<string, string[]>();
   if (assigneeChecklistSelectionSupported === true) {
     const { data: previousRows } = await (supabase as any)
@@ -430,6 +429,11 @@ async function replaceAssignees(demandId: string, assignees: DemandAssignee[]) {
         user_id: null,
         assignee_name: name,
         estimated_hours: a.estimated_hours,
+        ...(assigneeChecklistItemsSupported === true
+          ? { checklist_items: a.checklist_items !== undefined
+              ? normalizeChecklistItems(a.checklist_items)
+              : (previousItems.get(key) ?? []) }
+          : {}),
         // Preserva a posição individual ao editar a demanda.
         ...(assigneeLaneSupported === true
           ? { lane_id: a.lane_id ?? null, manually_positioned: a.manually_positioned === true }
