@@ -1,8 +1,32 @@
-import { useRef } from "react";
-import { Building2, CalendarDays, Clock, Users } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import {
+  Building2,
+  CalendarDays,
+  Clock,
+  Users,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
-import { formatHoursHHMM } from "@/lib/manual-demands";
+import {
+  formatHoursHHMM,
+  isDemandAssigneeKanbanStatusSupported,
+  updateDemandAssigneeKanbanStatus,
+} from "@/lib/manual-demands";
+import {
+  STATUS_DOT_CLASS,
+  STATUS_LABEL,
+  STATUSES,
+  type CardStatus,
+} from "@/lib/dashboard";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface DemandCardViewProps {
@@ -10,6 +34,62 @@ export interface DemandCardViewProps {
   className?: string;
   /** Abre o modal do card (checklist e marcações individuais). */
   onOpenCard?: (card: DemandBoardCard) => void;
+  /** Oculta o seletor em prévias de arraste. */
+  showStatus?: boolean;
+  disabled?: boolean;
+}
+
+/** Seletor padronizado de status para cards de Demandas Avulsas. */
+export function DemandStatusSelect({
+  status,
+  onChange,
+  disabled = false,
+  title,
+  className,
+}: {
+  status: CardStatus;
+  onChange: (status: CardStatus) => void;
+  disabled?: boolean;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn("min-w-0", className)}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+    >
+      <Select
+        value={status}
+        onValueChange={(value) => onChange(value as CardStatus)}
+        disabled={disabled}
+      >
+        <SelectTrigger
+          aria-label="Status da demanda avulsa"
+          title={title}
+          className="h-6 min-w-[118px] text-[10px] leading-none px-2 py-0 bg-muted/20 border-border/40 text-muted-foreground hover:bg-muted/30 hover:text-foreground/80 data-[state=open]:bg-muted/30 focus:ring-0 focus:ring-offset-0 shadow-none"
+        >
+          <SelectValue>
+            <span className="inline-flex items-center gap-1.5">
+              <span className={cn("h-1.5 w-1.5 rounded-full opacity-70", STATUS_DOT_CLASS[status])} />
+              {STATUS_LABEL[status]}
+            </span>
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          {STATUSES.map((option) => (
+            <SelectItem key={option} value={option} className="text-[11px]">
+              <span className="inline-flex items-center gap-1.5">
+                <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT_CLASS[option])} />
+                {STATUS_LABEL[option]}
+              </span>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 /**
@@ -17,11 +97,41 @@ export interface DemandCardViewProps {
  * Identidade visual própria (azul-turquesa) para diferenciar dos projetos
  * do Runrun.it, cuja aparência permanece inalterada.
  */
-export function DemandCardView({ card, className, onOpenCard }: DemandCardViewProps) {
+export function DemandCardView({
+  card,
+  className,
+  onOpenCard,
+  showStatus = true,
+  disabled = false,
+}: DemandCardViewProps) {
+  const qc = useQueryClient();
   const { demand, people, ownHours, assigneeName } = card;
-  // Colegas aparecem só pelo nome: a estimativa do card é SEMPRE individual.
-  const others = people.filter((p) => p.name !== assigneeName).map((p) => p.name);
+  const assignee = demand.assignees.find(
+    (person) => person.id && person.id === card.assigneeRowId,
+  );
+  const others = people.filter((person) => person.name !== assigneeName).map((person) => person.name);
+  const [status, setStatus] = useState<CardStatus>(assignee?.kanban_status ?? "a iniciar");
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    setStatus(assignee?.kanban_status ?? "a iniciar");
+  }, [assignee?.kanban_status, card.key]);
+
+  const handleStatusChange = async (nextStatus: CardStatus) => {
+    if (!card.assigneeRowId || !isDemandAssigneeKanbanStatusSupported()) return;
+    const previous = status;
+    setStatus(nextStatus);
+    try {
+      await updateDemandAssigneeKanbanStatus(card.assigneeRowId, nextStatus);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["manual-demands"] }),
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+      ]);
+    } catch (error) {
+      setStatus(previous);
+      toast.error(`Não foi possível atualizar o status: ${(error as Error).message}`);
+    }
+  };
 
   return (
     <div
@@ -57,7 +167,7 @@ export function DemandCardView({ card, className, onOpenCard }: DemandCardViewPr
           : undefined
       }
       className={cn(
-        "rounded-[8px] border shadow-sm transition-shadow",
+        "flex flex-col rounded-[8px] border shadow-sm transition-shadow",
         "border-teal-300 bg-teal-50 text-teal-950",
         "dark:border-teal-800/70 dark:bg-[#0C3A3A] dark:text-teal-50",
         onOpenCard &&
@@ -71,11 +181,6 @@ export function DemandCardView({ card, className, onOpenCard }: DemandCardViewPr
           className="mt-1 h-2 w-2 shrink-0 rounded-full bg-teal-500"
         />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-teal-700 dark:text-teal-200">
-              Demanda avulsa
-            </span>
-          </div>
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
@@ -103,9 +208,12 @@ export function DemandCardView({ card, className, onOpenCard }: DemandCardViewPr
               <span>{formatDesiredDate(demand.desired_date)}</span>
             </div>
             {others.length > 0 && (
-              <div className="flex items-start gap-1.5" title={`Também com: ${others.join(", ")}`}>
-                <Users className="h-3 w-3 shrink-0 mt-0.5" />
-                <span className="truncate">Também com: {others.join(", ")}</span>
+              <div
+                className="flex items-center gap-1.5"
+                title={`Também com: ${others.join(", ")}`}
+              >
+                <Users className="h-3 w-3 shrink-0" />
+                <span>{others.length} {others.length === 1 ? "colega" : "colegas"}</span>
               </div>
             )}
             <div className="flex items-center gap-1.5">
@@ -115,6 +223,27 @@ export function DemandCardView({ card, className, onOpenCard }: DemandCardViewPr
           </div>
         </div>
       </div>
+      {showStatus ? (
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-border/40 pt-1.5">
+          <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70">
+            Demanda avulsa
+          </span>
+          <DemandStatusSelect
+            status={status}
+            onChange={(nextStatus) => void handleStatusChange(nextStatus)}
+            disabled={
+              disabled ||
+              !card.assigneeRowId ||
+              !isDemandAssigneeKanbanStatusSupported()
+            }
+            title={
+              isDemandAssigneeKanbanStatusSupported()
+                ? "Alterar status do card"
+                : "Status individual depende de uma coluna adicional no banco"
+            }
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

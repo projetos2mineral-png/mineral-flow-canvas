@@ -645,7 +645,7 @@ export function WeeklyPlanView({
               </div>
             ) : activeDemand ? (
               <div className="pointer-events-none w-[var(--kb-col,260px)]">
-                <DemandCardView card={activeDemand} />
+                <DemandCardView card={activeDemand} showStatus={false} />
               </div>
             ) : null}
           </DragOverlay>

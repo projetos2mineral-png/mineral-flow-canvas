@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeStatus, type CardStatus } from "@/lib/dashboard";
 
 /**
  * Demandas Avulsas
@@ -24,6 +25,8 @@ export interface DemandAssignee {
   /** Nome do responsável do Kanban (mesmo nome usado nas filas do Painel Geral). */
   assignee_name: string | null;
   estimated_hours: number;
+  /** Status do Kanban exclusivo deste responsável; requer a coluna kanban_status. */
+  kanban_status?: CardStatus;
   /** Fila escolhida manualmente no quadro deste responsável (independente dos demais). */
   lane_id?: string | null;
   /** true quando o responsável moveu o card; false = fila derivada da data desejada. */
@@ -90,6 +93,12 @@ let demandChecklistSupported: boolean | null = null;
 let assigneeChecklistItemsSupported: boolean | null = null;
 /** Seleções individuais por responsável. */
 let assigneeChecklistSelectionSupported: boolean | null = null;
+/** Status individual no Kanban — depende da coluna kanban_status. */
+let assigneeKanbanStatusSupported: boolean | null = null;
+
+export function isDemandAssigneeKanbanStatusSupported(): boolean {
+  return assigneeKanbanStatusSupported !== false;
+}
 
 export function isClientNameSupported(): boolean {
   return clientNameSupported !== false;
@@ -141,34 +150,87 @@ export function formatHoursHHMM(hours: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
+/**
+ * Converte formatos comuns de duração em horas decimais.
+ * Aceita 02:00, 1:30, 1h30, 45min, 2,5 e 2.
+ * Retorna undefined para texto vazio ou inválido.
+ */
+export function parseFlexibleHours(raw: string): number | undefined {
+  const value = raw.trim().toLowerCase().replace(/\s+/g, "");
+  if (!value) return undefined;
+
+  const clock = /^(\d+):(\d{1,2})$/.exec(value);
+  if (clock) {
+    const minutes = Number(clock[2]);
+    if (minutes > 59) return undefined;
+    return Number(clock[1]) + minutes / 60;
+  }
+
+  const hourMinute = /^(\d+(?:[.,]\d+)?)h(?:(\d{1,2})m?)?$/.exec(value);
+  if (hourMinute) {
+    const minutes = Number(hourMinute[2] ?? 0);
+    if (minutes > 59) return undefined;
+    return Number(hourMinute[1].replace(",", ".")) + minutes / 60;
+  }
+
+  const minutes = /^(\d+)(?:m|min)$/.exec(value);
+  if (minutes) return Number(minutes[1]) / 60;
+
+  const decimal = value.replace(",", ".");
+  if (!/^\d+(?:\.\d+)?$/.test(decimal)) return undefined;
+  const hours = Number(decimal);
+  return Number.isFinite(hours) && hours <= 10000 ? hours : undefined;
+}
+
 export async function fetchManualDemands(): Promise<ManualDemand[]> {
-  const run = async (withClient: boolean, withLane: boolean) =>
+  const run = async (
+    withClient: boolean,
+    withLane: boolean,
+    withKanbanStatus: boolean,
+  ) =>
     await (supabase as any)
       .from(TABLE)
       .select(
         `${demandColumns(withClient)},${ASSIGNEES_TABLE}(id,user_id,assignee_name,estimated_hours${
-          withLane ? ",lane_id,manually_positioned" : ""
-        })`,
+          withKanbanStatus ? ",kanban_status" : ""
+        }${withLane ? ",lane_id,manually_positioned" : ""})`,
       )
       .order("desired_date", { ascending: true });
 
   let withClient = clientNameSupported !== false;
   let withLane = assigneeLaneSupported !== false;
-  let { data, error } = await run(withClient, withLane);
+  let withKanbanStatus = assigneeKanbanStatusSupported !== false;
+  let { data, error } = await run(withClient, withLane, withKanbanStatus);
 
-  if (error && error.code === UNDEFINED_COLUMN && withLane) {
+  if (
+    error &&
+    (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") &&
+    withLane
+  ) {
     withLane = false;
-    ({ data, error } = await run(withClient, withLane));
+    ({ data, error } = await run(withClient, withLane, withKanbanStatus));
     if (!error) assigneeLaneSupported = false;
+  }
+  if (
+    error &&
+    (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") &&
+    withKanbanStatus
+  ) {
+    withKanbanStatus = false;
+    ({ data, error } = await run(withClient, withLane, withKanbanStatus));
+    if (!error) assigneeKanbanStatusSupported = false;
   }
   if (error && error.code === UNDEFINED_COLUMN && withClient) {
     withClient = false;
-    ({ data, error } = await run(withClient, withLane));
+    ({ data, error } = await run(withClient, withLane, withKanbanStatus));
     if (!error) clientNameSupported = false;
   }
   if (!error) {
     if (clientNameSupported === null) clientNameSupported = withClient;
     if (assigneeLaneSupported === null) assigneeLaneSupported = withLane;
+    if (assigneeKanbanStatusSupported === null) {
+      assigneeKanbanStatusSupported = withKanbanStatus;
+    }
   }
 
   if (error) throw error;
@@ -249,6 +311,7 @@ export async function fetchManualDemands(): Promise<ManualDemand[]> {
       user_id: a.user_id ?? null,
       assignee_name: a.assignee_name ?? null,
       estimated_hours: Number(a.estimated_hours) || 0,
+      kanban_status: normalizeStatus(a.kanban_status),
       lane_id: a.lane_id ?? null,
       manually_positioned: a.manually_positioned === true,
       checklist_items: itemsByAssigneeId.get(a.id) ?? [],
@@ -311,6 +374,58 @@ export async function updateDemandAssigneeChecklistSelections(
   }
   assigneeChecklistSelectionSupported = true;
   if (!data || data.length === 0) throw new Error("Responsável da demanda não encontrado.");
+}
+
+/** Atualiza a estimativa somente na linha deste responsável. */
+export async function updateDemandAssigneeEstimate(
+  assigneeRowId: string,
+  hours: number,
+): Promise<void> {
+  if (!Number.isFinite(hours) || hours <= 0) {
+    throw new Error("Informe uma estimativa maior que zero.");
+  }
+  const { data, error } = await (supabase as any)
+    .from(ASSIGNEES_TABLE)
+    .update({ estimated_hours: hours, updated_at: new Date().toISOString() })
+    .eq("id", assigneeRowId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Responsável da demanda não encontrado.");
+}
+
+/** Atualiza o status Kanban somente para este responsável. */
+export async function updateDemandAssigneeKanbanStatus(
+  assigneeRowId: string,
+  status: CardStatus,
+): Promise<void> {
+  if (assigneeKanbanStatusSupported === false) {
+    throw new Error(
+      "O status individual exige a coluna kanban_status em dashboard_manual_demand_assignees.",
+    );
+  }
+
+  const { data, error } = await (supabase as any)
+    .from(ASSIGNEES_TABLE)
+    .update({
+      kanban_status: normalizeStatus(status),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", assigneeRowId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === UNDEFINED_COLUMN || error.code === "PGRST204") {
+      assigneeKanbanStatusSupported = false;
+      throw new Error(
+        "O status individual exige a coluna kanban_status em dashboard_manual_demand_assignees.",
+      );
+    }
+    throw error;
+  }
+  if (!data) throw new Error("Responsável da demanda não encontrado.");
+  assigneeKanbanStatusSupported = true;
 }
 
 

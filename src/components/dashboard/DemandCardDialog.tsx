@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, Clock, Loader2, Pencil, Plus, Users, X } from "lucide-react";
+import { Building2, CalendarDays, Check, Clock, Loader2, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -16,12 +16,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
+import type { CardStatus } from "@/lib/dashboard";
+import { DemandStatusSelect } from "@/components/dashboard/DemandCardView";
 import {
   fetchManualDemands,
   formatHoursHHMM,
+  isDemandAssigneeKanbanStatusSupported,
   normalizeChecklistItems,
+  parseFlexibleHours,
   updateDemandAssigneeChecklistItems,
   updateDemandAssigneeChecklistSelections,
+  updateDemandAssigneeEstimate,
+  updateDemandAssigneeKanbanStatus,
 } from "@/lib/manual-demands";
 
 const itemKey = (value: string) => value.trim().toLocaleLowerCase("pt-BR");
@@ -71,13 +77,17 @@ export function DemandCardDialog({
     );
   }, [demand, assigneeRowId, assigneeName]);
 
-  const cardAssignee = assigneeName ?? "Sem responsável";
   const [items, setItems] = useState<string[]>([]);
   const [checked, setChecked] = useState<string[]>([]);
   const [newItem, setNewItem] = useState("");
   const [editingItem, setEditingItem] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingHours, setEditingHours] = useState(false);
+  const [hoursDraft, setHoursDraft] = useState("");
+  const [savingHours, setSavingHours] = useState(false);
+  const [localStatus, setLocalStatus] = useState<CardStatus>("a iniciar");
+  const [savingStatus, setSavingStatus] = useState(false);
 
   const sourceKey = JSON.stringify({
     key: card?.key ?? null,
@@ -94,6 +104,13 @@ export function DemandCardDialog({
     // Reidrata ao abrir o card e quando os dados persistidos mudam.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceKey]);
+
+  useEffect(() => {
+    if (!card) return;
+    setHoursDraft(formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours)));
+    setEditingHours(false);
+    setLocalStatus(assignee?.kanban_status ?? "a iniciar");
+  }, [card?.key, card?.ownHours, assignee?.estimated_hours, assignee?.kanban_status]);
 
   const pendingRef = useRef(0);
   const queueRef = useRef<Promise<void>>(Promise.resolve());
@@ -115,6 +132,48 @@ export function DemandCardDialog({
   };
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ["manual-demands"] });
+
+  const saveEstimate = async () => {
+    if (!assigneeRowId) return;
+    const hours = parseFlexibleHours(hoursDraft);
+    if (hours === undefined || hours <= 0) {
+      toast.error("Informe um tempo válido, como 02:00, 1h30 ou 45min.");
+      return;
+    }
+    setSavingHours(true);
+    try {
+      await updateDemandAssigneeEstimate(assigneeRowId, hours);
+      setEditingHours(false);
+      await Promise.all([
+        invalidate(),
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+      ]);
+      toast.success("Estimativa atualizada.");
+    } catch (e) {
+      toast.error(`Não foi possível salvar a estimativa: ${(e as Error).message}`);
+    } finally {
+      setSavingHours(false);
+    }
+  };
+
+  const handleStatusChange = async (status: CardStatus) => {
+    if (!assigneeRowId || !isDemandAssigneeKanbanStatusSupported()) return;
+    const previous = localStatus;
+    setLocalStatus(status);
+    setSavingStatus(true);
+    try {
+      await updateDemandAssigneeKanbanStatus(assigneeRowId, status);
+      await Promise.all([
+        invalidate(),
+        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
+      ]);
+    } catch (e) {
+      setLocalStatus(previous);
+      toast.error(`Não foi possível atualizar o status: ${(e as Error).message}`);
+    } finally {
+      setSavingStatus(false);
+    }
+  };
 
   const persistItems = (nextItems: string[]) => {
     if (!assigneeRowId) return;
@@ -203,36 +262,115 @@ export function DemandCardDialog({
     persistChecked(next);
   };
 
-  const others = demand
-    ? demand.assignees.map((a) => a.assignee_name ?? "").filter((n) => n && n !== cardAssignee)
-    : [];
-
   if (!card || !demand) return null;
 
   return (
     <Dialog open={!!card} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[440px] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="space-y-1">
-          <span className="w-fit rounded-full bg-teal-500/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-teal-700 dark:text-teal-200">
-            Demanda avulsa
-          </span>
           <DialogTitle className="text-base leading-snug">{demand.name}</DialogTitle>
-          <DialogDescription className="text-xs">
-            Marcações de <span className="font-medium text-foreground">{cardAssignee}</span>
-            {others.length > 0 ? ` · Também com: ${others.join(", ")}` : ""}
-          </DialogDescription>
+          {demand.client_name ? (
+            <DialogDescription className="flex items-center gap-1.5 text-xs">
+              <Building2 className="h-3 w-3 shrink-0" />
+              <span>{demand.client_name}</span>
+            </DialogDescription>
+          ) : null}
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="grid gap-1 rounded-md border border-border/60 bg-muted/20 p-2.5 text-xs">
+          <div className="grid gap-2 rounded-md border border-border/60 bg-muted/20 p-2.5 text-xs">
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <CalendarDays className="h-3 w-3 shrink-0" />
               <span>{formatDesiredDate(demand.desired_date)}</span>
             </div>
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <Clock className="h-3 w-3 shrink-0" />
-              <span>{formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours))}</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
+                <Clock className="h-3 w-3 shrink-0" />
+                {editingHours ? (
+                  <>
+                    <Input
+                      autoFocus
+                      value={hoursDraft}
+                      onChange={(event) => setHoursDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void saveEstimate();
+                        } else if (event.key === "Escape") {
+                          setEditingHours(false);
+                          setHoursDraft(
+                            formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours)),
+                          );
+                        }
+                      }}
+                      placeholder="02:00 ou 1h30"
+                      aria-label="Estimativa individual em horas"
+                      className="h-7 w-28 text-xs"
+                      disabled={savingHours}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => void saveEstimate()}
+                      disabled={savingHours || !hoursDraft.trim()}
+                      title="Salvar estimativa"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 shrink-0"
+                      onClick={() => {
+                        setEditingHours(false);
+                        setHoursDraft(
+                          formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours)),
+                        );
+                      }}
+                      disabled={savingHours}
+                      title="Cancelar edição"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-medium text-foreground">
+                      {formatHoursHHMM(Number(assignee?.estimated_hours ?? card.ownHours))}
+                    </span>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => setEditingHours(true)}
+                      disabled={!assigneeRowId}
+                      title="Editar estimativa"
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+              <DemandStatusSelect
+                status={localStatus}
+                onChange={(status) => void handleStatusChange(status)}
+                disabled={!assigneeRowId || !isDemandAssigneeKanbanStatusSupported()}
+                title={
+                  isDemandAssigneeKanbanStatusSupported()
+                    ? "Alterar status do card"
+                    : "Status individual depende de uma coluna adicional no banco"
+                }
+              />
             </div>
+            {assigneeRowId && !isDemandAssigneeKanbanStatusSupported() ? (
+              <p className="text-[10px] text-muted-foreground">
+                A edição do status individual aguarda uma coluna própria no banco.
+              </p>
+            ) : null}
             {demand.description ? (
               <p className="pt-1 text-muted-foreground/90 whitespace-pre-wrap break-words">
                 {demand.description}
@@ -242,7 +380,7 @@ export function DemandCardDialog({
 
           <div className="space-y-2 rounded-md border border-border/60 p-2.5">
             <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Checklist de {cardAssignee}</Label>
+              <Label className="text-xs">Checklist</Label>
               <span className="text-[10px] text-muted-foreground tabular-nums">
                 {items.length} {items.length === 1 ? "item" : "itens"}
               </span>
@@ -273,11 +411,6 @@ export function DemandCardDialog({
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
-
-            <p className="text-[10px] text-muted-foreground">
-              Marcações de <span className="font-medium text-foreground">{cardAssignee}</span> —
-              cada responsável mantém as suas.
-            </p>
 
             {items.length === 0 ? (
               <p className="py-2 text-center text-[11px] text-muted-foreground/70">
@@ -383,17 +516,14 @@ export function DemandCardDialog({
         </div>
 
         <DialogFooter className="items-center gap-2 sm:justify-between">
-          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            {saving ? (
-              <>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-muted-foreground">Demanda avulsa</span>
+            {saving || savingHours || savingStatus ? (
+              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Salvando…
-              </>
-            ) : (
-              <>
-                <Users className="h-3 w-3" /> Marcações individuais
-              </>
-            )}
-          </span>
+              </span>
+            ) : null}
+          </div>
           <Button variant="ghost" onClick={onClose}>
             Fechar
           </Button>
