@@ -644,7 +644,6 @@ export function DemandCardDialog({
 
         <DialogFooter className="items-center gap-2 sm:justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Demanda avulsa</span>
             {saving || savingHours || savingStatus ? (
               <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
                 <Loader2 className="h-3 w-3 animate-spin" /> Salvando…

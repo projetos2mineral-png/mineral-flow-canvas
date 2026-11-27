@@ -9,7 +9,6 @@ import {
   DIEF_MONTHS,
   checkedMonthsForClient,
   clientKey,
-  totalCheckedMonths,
 } from "@/lib/dief-checklist";
 
 export interface DiefMatrixChecklistProps {
@@ -42,8 +41,6 @@ export function DiefMatrixChecklist({
   const [editingClient, setEditingClient] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
-  const doneTotal = totalCheckedMonths(selections, clients);
-  const cellTotal = clients.length * DIEF_MONTHS.length;
 
   const startEdit = (name: string) => {
     if (disabled) return;
@@ -90,11 +87,6 @@ export function DiefMatrixChecklist({
 
   return (
     <div className="space-y-2 rounded-md border border-border/60 p-2.5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="text-[10px] text-muted-foreground tabular-nums">
-          Total: {doneTotal}/{cellTotal} meses cumpridos
-        </span>
-      </div>
 
       <div className="flex gap-1.5">
         <Input
