@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
 import type { CardStatus } from "@/lib/dashboard";
 import { DemandStatusSelect } from "@/components/dashboard/DemandCardView";
+import { DiefMonthlyChecklist } from "@/components/dashboard/DiefMonthlyChecklist";
+import { isDiefDemand, toggleMonth } from "@/lib/dief-checklist";
 import {
   fetchManualDemands,
   formatHoursHHMM,
@@ -228,6 +230,12 @@ export function DemandCardDialog({
       await updateDemandAssigneeChecklistSelections(assigneeRowId, nextChecked);
       await invalidate();
     });
+  };
+
+  const handleToggleMonth = (month: number, on: boolean) => {
+    const next = toggleMonth(checked, month, on);
+    setChecked(next);
+    persistChecked(next);
   };
 
   const handleAddItem = () => {
@@ -445,6 +453,14 @@ export function DemandCardDialog({
             </div>
           </div>
 
+          {isDiefDemand(demand.name) ? (
+            <DiefMonthlyChecklist
+              idPrefix={`checklist-${assigneeRowId ?? demand.id}`}
+              selections={checked}
+              disabled={!assigneeRowId}
+              onToggle={handleToggleMonth}
+            />
+          ) : (
           <div className="space-y-2 rounded-md border border-border/60 p-2.5">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-xs">Checklist</Label>
@@ -580,6 +596,7 @@ export function DemandCardDialog({
               </p>
             ) : null}
           </div>
+          )}
         </div>
 
         <DialogFooter className="items-center gap-2 sm:justify-between">
