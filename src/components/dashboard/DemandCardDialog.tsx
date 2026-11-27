@@ -18,8 +18,14 @@ import { Label } from "@/components/ui/label";
 import { formatDesiredDate, type DemandBoardCard } from "@/lib/dashboard-demands";
 import type { CardStatus } from "@/lib/dashboard";
 import { DemandStatusSelect } from "@/components/dashboard/DemandCardView";
-import { DiefMonthlyChecklist } from "@/components/dashboard/DiefMonthlyChecklist";
-import { isDiefDemand, toggleMonth } from "@/lib/dief-checklist";
+import { DiefMatrixChecklist } from "@/components/dashboard/DiefMatrixChecklist";
+import {
+  clientKey,
+  isDiefDemand,
+  removeClientFromSelections,
+  renameClientInSelections,
+  toggleClientMonth,
+} from "@/lib/dief-checklist";
 import {
   fetchManualDemands,
   formatHoursHHMM,
@@ -168,10 +174,7 @@ export function DemandCardDialog({
     try {
       await updateDemandAssigneeEstimate(assigneeRowId, hours);
       setEditingHours(false);
-      await Promise.all([
-        invalidate(),
-        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
-      ]);
+      await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ["dashboard", "cards"] })]);
       toast.success("Estimativa atualizada.");
     } catch (e) {
       toast.error(`Não foi possível salvar a estimativa: ${(e as Error).message}`);
@@ -187,10 +190,7 @@ export function DemandCardDialog({
     setSavingStatus(true);
     try {
       await updateDemandAssigneeKanbanStatus(assigneeRowId, status);
-      await Promise.all([
-        invalidate(),
-        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
-      ]);
+      await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ["dashboard", "cards"] })]);
     } catch (e) {
       setLocalStatus(previous);
       toast.error(`Não foi possível atualizar o status: ${(e as Error).message}`);
@@ -204,10 +204,7 @@ export function DemandCardDialog({
     setSavingClassifications(true);
     try {
       await updateDemandAssigneeClassifications(assigneeRowId, classifications);
-      await Promise.all([
-        invalidate(),
-        qc.invalidateQueries({ queryKey: ["dashboard", "cards"] }),
-      ]);
+      await Promise.all([invalidate(), qc.invalidateQueries({ queryKey: ["dashboard", "cards"] })]);
       toast.success("Classificações salvas.");
     } catch (e) {
       toast.error(`Não foi possível salvar as classificações: ${(e as Error).message}`);
@@ -232,10 +229,47 @@ export function DemandCardDialog({
     });
   };
 
-  const handleToggleMonth = (month: number, on: boolean) => {
-    const next = toggleMonth(checked, month, on);
+  const handleToggleClientMonth = (client: string, month: number, on: boolean) => {
+    const next = toggleClientMonth(checked, client, month, on);
     setChecked(next);
     persistChecked(next);
+  };
+
+  // A matriz DIEF usa os itens individuais como linhas e grava as marcações
+  // com chave composta `<cliente>::mes:XX` na linha deste responsável.
+  const persistDiefMatrix = (nextItems: string[], nextChecked: string[]) => {
+    setItems(nextItems);
+    setChecked(nextChecked);
+    enqueue(async () => {
+      if (assigneeRowId) {
+        await updateDemandAssigneeChecklistItems(assigneeRowId, nextItems);
+        await updateDemandAssigneeChecklistSelections(assigneeRowId, nextChecked);
+      }
+      await invalidate();
+    });
+  };
+
+  const handleAddClient = (name: string) => {
+    persistDiefMatrix(normalizeChecklistItems([...items, name]), checked);
+  };
+
+  const handleRenameClient = (from: string, to: string) => {
+    const fromKey = clientKey(from);
+    const nextItems = items.map((item) => (clientKey(item) === fromKey ? to : item));
+    const nextChecked = renameClientInSelections(checked, from, to).map((selection) =>
+      itemKey(selection) === fromKey ? to : selection,
+    );
+    persistDiefMatrix(nextItems, nextChecked);
+  };
+
+  const handleRemoveClient = (name: string) => {
+    const key = clientKey(name);
+    const nextItems = items.filter((item) => clientKey(item) !== key);
+    const nextChecked = removeClientFromSelections(checked, name).filter(
+      (selection) => itemKey(selection) !== key,
+    );
+    if (editingItem && clientKey(editingItem) === key) setEditingItem(null);
+    persistDiefMatrix(nextItems, nextChecked);
   };
 
   const handleAddItem = () => {
@@ -313,7 +347,7 @@ export function DemandCardDialog({
 
   return (
     <Dialog open={!!card} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[440px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader className="space-y-1">
           <DialogTitle className="text-base leading-snug">{demand.name}</DialogTitle>
           {demand.client_name ? (
@@ -416,16 +450,19 @@ export function DemandCardDialog({
             ) : null}
           </div>
 
-          <div className="space-y-3 rounded-md border border-border/60 p-2.5">
-            <h3 className="text-sm font-semibold">Classificações</h3>
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
+          <div className="rounded-md border border-border/60 p-2.5">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h3 className="shrink-0 text-sm font-semibold">Classificações</h3>
               {[
                 ["is_tec", "Técnico (TEC)"],
                 ["is_geo", "Geoprocessamento (GEO)"],
                 ["is_rev", "Revisão (REV)"],
                 ["is_campo", "Campo (CAM)"],
               ].map(([key, label]) => (
-                <label key={key} className="inline-flex items-center gap-2 text-sm">
+                <label
+                  key={key}
+                  className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs"
+                >
                   <Checkbox
                     checked={classifications[key as keyof typeof classifications]}
                     disabled={!assigneeRowId || savingClassifications}
@@ -435,16 +472,16 @@ export function DemandCardDialog({
                         [key]: checked === true,
                       }))
                     }
+                    className="h-3.5 w-3.5"
                   />
                   {label}
                 </label>
               ))}
-            </div>
-            <div className="flex justify-end">
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
+                className="ml-auto shrink-0"
                 onClick={() => void saveClassifications()}
                 disabled={!assigneeRowId || savingClassifications}
               >
@@ -454,148 +491,154 @@ export function DemandCardDialog({
           </div>
 
           {isDiefDemand(demand.name) ? (
-            <DiefMonthlyChecklist
+            <DiefMatrixChecklist
               idPrefix={`checklist-${assigneeRowId ?? demand.id}`}
+              clients={items}
               selections={checked}
-              disabled={!assigneeRowId}
-              onToggle={handleToggleMonth}
+              disabled={!assigneeRowId || saving}
+              ownerName={assignee?.assignee_name ?? null}
+              onToggle={handleToggleClientMonth}
+              onAddClient={handleAddClient}
+              onRenameClient={handleRenameClient}
+              onRemoveClient={handleRemoveClient}
             />
           ) : (
-          <div className="space-y-2 rounded-md border border-border/60 p-2.5">
-            <div className="flex items-center justify-between gap-2">
-              <Label className="text-xs">Checklist</Label>
-              <span className="text-[10px] text-muted-foreground tabular-nums">
-                {items.length} {items.length === 1 ? "item" : "itens"}
-              </span>
+            <div className="space-y-2 rounded-md border border-border/60 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs">Checklist</Label>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {items.length} {items.length === 1 ? "item" : "itens"}
+                </span>
+              </div>
+
+              <div className="flex gap-1.5">
+                <Input
+                  value={newItem}
+                  onChange={(e) => setNewItem(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddItem();
+                    }
+                  }}
+                  placeholder="Adicionar item…"
+                  className="h-7 text-xs"
+                />
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-7 w-7 shrink-0"
+                  onClick={handleAddItem}
+                  disabled={!newItem.trim()}
+                  title="Adicionar item"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              {items.length === 0 ? (
+                <p className="py-2 text-center text-[11px] text-muted-foreground/70">
+                  Nenhum item cadastrado.
+                </p>
+              ) : (
+                <ul className="max-h-44 space-y-0.5 overflow-y-auto pr-0.5">
+                  {items.map((name) => {
+                    const isEditing =
+                      editingItem !== null && itemKey(editingItem) === itemKey(name);
+                    const isChecked = checked.some((i) => itemKey(i) === itemKey(name));
+                    return (
+                      <li
+                        key={name}
+                        className="group flex items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50"
+                      >
+                        {isEditing ? (
+                          <>
+                            <Input
+                              autoFocus
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  commitEdit();
+                                } else if (e.key === "Escape") {
+                                  setEditingItem(null);
+                                }
+                              }}
+                              className="h-6 flex-1 px-1.5 text-xs"
+                              aria-label={`Editar item ${name}`}
+                            />
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 shrink-0"
+                              onClick={commitEdit}
+                              disabled={!editValue.trim()}
+                              title="Salvar item"
+                            >
+                              <Check className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 shrink-0"
+                              onClick={() => setEditingItem(null)}
+                              title="Cancelar"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Checkbox
+                              id={`checklist-${demand.id}-${name}`}
+                              checked={isChecked}
+                              onCheckedChange={(v) => handleToggle(name, v === true)}
+                              disabled={!assigneeRowId}
+                              className="h-3.5 w-3.5"
+                            />
+                            <label
+                              htmlFor={`checklist-${demand.id}-${name}`}
+                              className="min-w-0 flex-1 cursor-pointer truncate"
+                              title={name}
+                            >
+                              {name}
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => startEdit(name)}
+                              className="shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
+                              title={`Editar ${name}`}
+                              aria-label={`Editar ${name}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(name)}
+                              className="shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                              title={`Excluir ${name}`}
+                              aria-label={`Excluir ${name}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              {!assigneeRowId ? (
+                <p className="rounded bg-muted px-2 py-1 text-[10px] leading-snug text-muted-foreground">
+                  Este responsável ainda não possui uma linha própria para salvar marcações.
+                </p>
+              ) : null}
             </div>
-
-            <div className="flex gap-1.5">
-              <Input
-                value={newItem}
-                onChange={(e) => setNewItem(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleAddItem();
-                  }
-                }}
-                placeholder="Adicionar item…"
-                className="h-7 text-xs"
-              />
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                className="h-7 w-7 shrink-0"
-                onClick={handleAddItem}
-                disabled={!newItem.trim()}
-                title="Adicionar item"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {items.length === 0 ? (
-              <p className="py-2 text-center text-[11px] text-muted-foreground/70">
-                Nenhum item cadastrado.
-              </p>
-            ) : (
-              <ul className="max-h-44 space-y-0.5 overflow-y-auto pr-0.5">
-                {items.map((name) => {
-                  const isEditing = editingItem !== null && itemKey(editingItem) === itemKey(name);
-                  const isChecked = checked.some((i) => itemKey(i) === itemKey(name));
-                  return (
-                    <li
-                      key={name}
-                      className="group flex items-center gap-1.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50"
-                    >
-                      {isEditing ? (
-                        <>
-                          <Input
-                            autoFocus
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                commitEdit();
-                              } else if (e.key === "Escape") {
-                                setEditingItem(null);
-                              }
-                            }}
-                            className="h-6 flex-1 px-1.5 text-xs"
-                            aria-label={`Editar item ${name}`}
-                          />
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 shrink-0"
-                            onClick={commitEdit}
-                            disabled={!editValue.trim()}
-                            title="Salvar item"
-                          >
-                            <Check className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            className="h-6 w-6 shrink-0"
-                            onClick={() => setEditingItem(null)}
-                            title="Cancelar"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        </>
-                      ) : (
-                        <>
-                          <Checkbox
-                            id={`checklist-${demand.id}-${name}`}
-                            checked={isChecked}
-                            onCheckedChange={(v) => handleToggle(name, v === true)}
-                            disabled={!assigneeRowId}
-                            className="h-3.5 w-3.5"
-                          />
-                          <label
-                            htmlFor={`checklist-${demand.id}-${name}`}
-                            className="min-w-0 flex-1 cursor-pointer truncate"
-                            title={name}
-                          >
-                            {name}
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(name)}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover:opacity-100"
-                            title={`Editar ${name}`}
-                            aria-label={`Editar ${name}`}
-                          >
-                            <Pencil className="h-3 w-3" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(name)}
-                            className="shrink-0 rounded p-0.5 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                            title={`Excluir ${name}`}
-                            aria-label={`Excluir ${name}`}
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            {!assigneeRowId ? (
-              <p className="rounded bg-muted px-2 py-1 text-[10px] leading-snug text-muted-foreground">
-                Este responsável ainda não possui uma linha própria para salvar marcações.
-              </p>
-            ) : null}
-          </div>
           )}
         </div>
 
