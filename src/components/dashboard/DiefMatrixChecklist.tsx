@@ -90,8 +90,7 @@ export function DiefMatrixChecklist({
 
   return (
     <div className="space-y-2 rounded-md border border-border/60 p-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">Matriz DIEF (Clientes × Meses)</h3>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="text-[10px] text-muted-foreground tabular-nums">
           Total: {doneTotal}/{cellTotal} meses cumpridos
         </span>
